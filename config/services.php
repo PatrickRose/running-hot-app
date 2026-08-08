@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'discord' => [
+        // OAuth credentials from the Discord Developer Portal application.
+        'client_id' => env('DISCORD_CLIENT_ID'),
+        'client_secret' => env('DISCORD_CLIENT_SECRET'),
+        'redirect' => env('DISCORD_REDIRECT_URI', '/auth/discord/callback'),
+
+        // Fallback incoming webhook for phase announcements. A game may
+        // override this with its own webhook URL.
+        'webhook_url' => env('DISCORD_WEBHOOK_URL'),
+    ],
+
 ];
