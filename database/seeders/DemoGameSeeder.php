@@ -84,6 +84,6 @@ class DemoGameSeeder extends Seeder
             }
         }
 
-        $this->command?->info('Demo game seeded. Control login: control@example.com / password');
+        $this->command->info('Demo game seeded. Control login: control@example.com / password');
     }
 }

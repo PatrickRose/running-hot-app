@@ -21,9 +21,9 @@ class DiscordController extends Controller
 {
     public function redirect(): SymfonyRedirectResponse
     {
-        return Socialite::driver('discord')
-            ->scopes(['identify', 'email'])
-            ->redirect();
+        // The Discord provider already asks for "identify" and "email" by
+        // default, which is everything we need to create an account.
+        return Socialite::driver('discord')->redirect();
     }
 
     public function callback(): RedirectResponse

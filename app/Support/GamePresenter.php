@@ -105,7 +105,7 @@ class GamePresenter
                     'name' => $character->name,
                     'role' => $character->role->value,
                     'role_label' => $character->role->label(),
-                    'team' => $character->gang?->name ?? $character->corporation?->name,
+                    'team' => $character->gang->name ?? $character->corporation?->name,
                     'body' => $character->body,
                     'incapacitated' => $character->isIncapacitated(),
                     'values' => [

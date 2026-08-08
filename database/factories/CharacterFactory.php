@@ -39,7 +39,7 @@ class CharacterFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'role' => CharacterRole::Runner,
-            'gang_id' => $gang?->id ?? Gang::factory()->state(['game_id' => $attributes['game_id']]),
+            'gang_id' => $gang->id ?? Gang::factory()->state(['game_id' => $attributes['game_id']]),
         ]);
     }
 
@@ -47,7 +47,7 @@ class CharacterFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'role' => $role,
-            'corporation_id' => $corporation?->id ?? Corporation::factory()->state(['game_id' => $attributes['game_id']]),
+            'corporation_id' => $corporation->id ?? Corporation::factory()->state(['game_id' => $attributes['game_id']]),
         ]);
     }
 

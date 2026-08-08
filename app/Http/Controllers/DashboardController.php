@@ -32,7 +32,7 @@ class DashboardController extends Controller
                 'id' => $character->id,
                 'name' => $character->name,
                 'role_label' => $character->role->label(),
-                'team' => $character->gang?->name ?? $character->corporation?->name,
+                'team' => $character->gang->name ?? $character->corporation?->name,
                 'credits' => $character->credits,
                 'wounds' => $character->wounds,
                 'tags' => $character->tags,
