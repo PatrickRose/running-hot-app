@@ -13,8 +13,9 @@ return new class extends Migration
             $table->foreignId('game_id')->constrained()->cascadeOnDelete();
             $table->string('name');
 
-            // Public knowledge (rulebook 2.3.1).
-            $table->integer('stock_price')->default(0);
+            // Public knowledge (rulebook 2.3.1). Income is the abstraction of the
+            // corporation's stock price; the stock price itself is narrative
+            // colour and is never tracked as a number.
             $table->integer('income')->default(0);
             $table->integer('political_will')->default(0);
 

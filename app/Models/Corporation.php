@@ -15,14 +15,13 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $game_id
  * @property string $name
- * @property int $stock_price
  * @property int $income
  * @property int $political_will
  * @property int $credits
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['game_id', 'name', 'stock_price', 'income', 'political_will', 'credits'])]
+#[Fillable(['game_id', 'name', 'income', 'political_will', 'credits'])]
 class Corporation extends Model
 {
     /** @use HasFactory<CorporationFactory> */

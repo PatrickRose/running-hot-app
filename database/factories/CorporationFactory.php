@@ -19,7 +19,6 @@ class CorporationFactory extends Factory
         return [
             'game_id' => Game::factory(),
             'name' => fake()->unique()->company(),
-            'stock_price' => 100,
             'income' => 10,
             'political_will' => 5,
             'credits' => 0,

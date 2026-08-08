@@ -37,10 +37,10 @@ class DemoGameSeeder extends Seeder
         ]);
 
         $corporations = collect([
-            ['name' => 'Aldermarch Dynamics', 'stock_price' => 120, 'income' => 12, 'political_will' => 6],
-            ['name' => 'Bellweather Systems', 'stock_price' => 95, 'income' => 9, 'political_will' => 5],
-            ['name' => 'Corvid Biotics', 'stock_price' => 140, 'income' => 14, 'political_will' => 4],
-            ['name' => 'Duncastle Armour', 'stock_price' => 80, 'income' => 8, 'political_will' => 7],
+            ['name' => 'Aldermarch Dynamics', 'income' => 12, 'political_will' => 6],
+            ['name' => 'Bellweather Systems', 'income' => 9, 'political_will' => 5],
+            ['name' => 'Corvid Biotics', 'income' => 14, 'political_will' => 4],
+            ['name' => 'Duncastle Armour', 'income' => 8, 'political_will' => 7],
         ])->map(fn (array $attributes): Corporation => Corporation::create([
             'game_id' => $game->id,
             ...$attributes,

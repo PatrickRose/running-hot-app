@@ -16,9 +16,10 @@ use InvalidArgumentException;
  *
  * Deliberately not automated here:
  *
- * - Stock price to Income. The rulebook only says Income is "based in part on"
- *   stock price and never gives a formula, so Income stays a Control-set number
- *   and this action simply pays out whatever Control has recorded.
+ * - Setting Income itself. Income is the abstraction of a corporation's stock
+ *   price rather than something derived from it, so it moves for narrative
+ *   reasons only Control can judge. This action just pays out whatever Income
+ *   Control has recorded.
  * - Tag removal. It costs 3 Credits and is the player's choice, not automatic.
  * - Political Will, Notoriety, Stability and Civil Unrest, all of which move for
  *   narrative reasons that only Control can judge.

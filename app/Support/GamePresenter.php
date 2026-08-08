@@ -82,7 +82,6 @@ class GamePresenter
                 'subject_id' => $corporation->id,
                 'name' => $corporation->name,
                 'values' => [
-                    Tracker::StockPrice->value => $corporation->stock_price,
                     Tracker::Income->value => $corporation->income,
                     Tracker::PoliticalWill->value => $corporation->political_will,
                     Tracker::CorporationCredits->value => $corporation->credits,

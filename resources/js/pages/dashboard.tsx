@@ -28,7 +28,6 @@ type PlayerCharacter = {
     gang: { name: string; notoriety: number } | null;
     corporation: {
         name: string;
-        stock_price: number;
         income: number;
         political_will: number;
     } | null;
@@ -120,10 +119,8 @@ export default function Dashboard({ game, characters, isControl }: Props) {
                             {character.corporation && (
                                 <>
                                     <Stat
-                                        label="Stock price"
-                                        value={
-                                            character.corporation.stock_price
-                                        }
+                                        label="Income"
+                                        value={character.corporation.income}
                                     />
                                     <Stat
                                         label="Political will"

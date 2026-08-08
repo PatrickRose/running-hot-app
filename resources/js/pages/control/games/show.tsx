@@ -29,7 +29,6 @@ type Props = {
 };
 
 const CORPORATION_TRACKERS: Array<[string, string]> = [
-    ['stock_price', 'Stock'],
     ['income', 'Income'],
     ['political_will', 'Political Will'],
     ['corporation_credits', 'Credits'],
@@ -253,9 +252,9 @@ export default function ControlGameShow({
                     <CardHeader>
                         <CardTitle>Corporations</CardTitle>
                         <CardDescription>
-                            Income is paid into Credits when Team Time opens.
-                            The rulebook gives no stock-price formula, so Income
-                            is yours to set.
+                            Income is paid into Credits when Team Time opens. It
+                            is the abstraction of a corporation's stock price,
+                            so move it as the fiction demands.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

@@ -25,7 +25,7 @@ class DashboardController extends Controller
         $characters = $game === null ? [] : Character::query()
             ->where('game_id', $game->id)
             ->where('user_id', $request->user()?->id)
-            ->with('gang:id,name,notoriety', 'corporation:id,name,income,political_will,stock_price')
+            ->with('gang:id,name,notoriety', 'corporation:id,name,income,political_will')
             ->orderBy('name')
             ->get()
             ->map(fn (Character $character): array => [
@@ -46,7 +46,6 @@ class DashboardController extends Controller
                 ],
                 'corporation' => $character->corporation === null ? null : [
                     'name' => $character->corporation->name,
-                    'stock_price' => $character->corporation->stock_price,
                     'income' => $character->corporation->income,
                     'political_will' => $character->corporation->political_will,
                 ],

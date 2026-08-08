@@ -16,7 +16,6 @@ use App\Models\Gang;
  */
 enum Tracker: string
 {
-    case StockPrice = 'stock_price';
     case Income = 'income';
     case PoliticalWill = 'political_will';
     case CorporationCredits = 'corporation_credits';
@@ -33,7 +32,6 @@ enum Tracker: string
     public function label(): string
     {
         return match ($this) {
-            self::StockPrice => 'Stock Price',
             self::Income => 'Income',
             self::PoliticalWill => 'Political Will',
             self::CorporationCredits, self::CharacterCredits => 'Credits',
@@ -64,7 +62,7 @@ enum Tracker: string
     public function subjectClass(): string
     {
         return match ($this) {
-            self::StockPrice, self::Income, self::PoliticalWill, self::CorporationCredits => Corporation::class,
+            self::Income, self::PoliticalWill, self::CorporationCredits => Corporation::class,
             self::Notoriety => Gang::class,
             self::Wounds, self::Tags, self::CharacterCredits => Character::class,
             self::Stability, self::CivilUnrest => Game::class,
