@@ -202,3 +202,67 @@ Use Wayfinder to generate TypeScript functions for Laravel routes. Import from `
 - IMPORTANT: Activate `inertia-react-development` when working with Inertia React client-side patterns.
 
 </laravel-boost-guidelines>
+
+# Running Hot
+
+This application runs the mechanics and timing for **Running Hot**, a pre-cyberpunk megagame by Patrick Rose. The game is played live on Discord: this app owns the rules and the clock, Discord carries the conversation.
+
+The rulebook is the source of truth. When a rule and this codebase disagree, the rulebook wins.
+
+## The shape of a game
+
+A turn is three phases on a wall clock — **Setup (15m) → Action (15m) → Team Time (5m)** — and the game runs many turns back to back during a single live session. Control (the organisers) sit above the whole thing and can override anything.
+
+Players are either **Corporate** (CEO, Security, Research) grouped into Corporations, or **Runners** and **Freelancers** grouped into gangs.
+
+## Rules that the code must not break
+
+**Control always wins.** The rulebook defers to Control constantly ("if reasonable, Control will typically give you the opportunity"). Every computed value must stay editable by Control. Never build a mechanic the organisers cannot override mid-game.
+
+**Never invent a rule the rulebook does not state.** Where the rules are silent, expose a value for Control to set rather than deriving one. Two live examples:
+- Income is *not* calculated from anything. It is the abstraction of a corporation's stock price, so stock price is not modelled at all.
+- Removing a Tag costs 3 Credits and is the player's choice, so upkeep never does it automatically.
+
+**Never write a tracker directly.** All movement of Income, Political Will, Credits, Notoriety, Wounds, Tags, Stability and Civil Unrest goes through `TrackerService`, which writes a `tracker_adjustments` row recording before, after, delta, actor and reason. That ledger is how Control answers "why did that number change?" three turns later. `$model->update(['wounds' => ...])` bypasses it and is a bug.
+
+**The clock is server-authoritative.** A phase stores an absolute `ends_at` that extensions and pauses mutate directly; remaining time is always derived from it. The browser only counts down between polls and must never be able to make a phase run long.
+
+## Naming decisions
+
+- **Brawn**, not Brute. The rulebook uses both for the same runner skill (p.19 vs p.24 and p.26). See `App\Enums\Tracker`.
+- **Character** is a player's role in a game. **User** is the login. They are deliberately separate so Control can set up a game before anyone signs in.
+
+## Where things live
+
+| Concern | Location |
+|---|---|
+| Phase transitions, pause/resume/extend | `App\Services\TurnEngine` |
+| Tracker writes and the audit ledger | `App\Services\TrackerService` |
+| Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
+| Discord announcements | `App\Services\DiscordAnnouncer` |
+| Inertia payload shaping | `App\Support\GamePresenter` |
+| Auto-advance and its backstop | `App\Jobs\AdvancePhase`, `game:tick` |
+
+## Gotchas that have already cost time
+
+- **Delayed jobs do nothing useful on the `sync` queue driver** — it ignores `delay()` and runs immediately. `TurnEngine` therefore skips scheduling auto-advance under `sync`, and `AdvancePhase` returns rather than re-dispatching when it fires early. Re-dispatching there caused an infinite loop.
+- **Auto-advance needs a queue worker, and the backstop needs the scheduler.** In production run both `queue:work` and `schedule:work`. `composer run dev` starts a worker but not the scheduler.
+- **Wayfinder's generated modules are gitignored.** `resources/js/routes`, `resources/js/actions` and `resources/js/wayfinder` do not exist in a clean checkout, so `tsc` cannot resolve imports until `php artisan wayfinder:generate --with-form` (or `npm run build`) has run. Always pass `--with-form`: without it the `.form()` helpers vanish and starter-kit pages break.
+- **Feature tests need built frontend assets.** Rendering an Inertia page throws without a Vite manifest, so CI runs `composer setup` before the suite.
+- **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
+
+## Commands
+
+```shell
+composer run dev          # serve + queue worker + vite + logs
+composer ci:check         # everything CI runs: eslint, prettier, tsc, pint, phpstan, tests
+php artisan test --compact --filter=SomeTest
+php artisan migrate:fresh --seed --seeder=DemoGameSeeder   # demo game, control@example.com / password
+php artisan game:tick     # advance any phase whose clock has expired
+```
+
+PHP 8.5 is the minimum, and CI runs the same version.
+
+## Built so far
+
+The turn engine and the trackers. **Not yet built:** Runs, the Council, the Research equation game, and Facility defence. Runs are the obvious next piece — the dice, alerts and escalating challenge strength are where hand-resolution hurts most, and they depend on facility and protection-card state existing first.
