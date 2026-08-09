@@ -80,6 +80,9 @@ class DemoGameSeeder extends Seeder
                     'hack' => 5 - $index,
                     'body' => 3,
                     'credits' => 10,
+                    // A pre-filled roster entry: whoever signs in with this
+                    // Discord handle is bound to this character automatically.
+                    'discord_username' => sprintf('runner%d%d', $index + 1, $number),
                 ]);
             }
         }

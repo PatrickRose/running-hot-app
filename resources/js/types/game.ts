@@ -47,6 +47,8 @@ export type CharacterSubject = TrackerSubject & {
     role: string;
     role_label: string;
     team: string | null;
+    discord_username: string | null;
+    claimed_by: string | null;
     body: number;
     incapacitated: boolean;
 };

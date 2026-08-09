@@ -96,7 +96,7 @@ class GamePresenter
                 ],
             ])->all(),
             'characters' => $game->characters()
-                ->with('gang:id,name', 'corporation:id,name')
+                ->with('gang:id,name', 'corporation:id,name', 'user:id,name,discord_username')
                 ->orderBy('name')
                 ->get()
                 ->map(fn (Character $character): array => [
@@ -106,6 +106,8 @@ class GamePresenter
                     'role' => $character->role->value,
                     'role_label' => $character->role->label(),
                     'team' => $character->gang->name ?? $character->corporation?->name,
+                    'discord_username' => $character->discord_username,
+                    'claimed_by' => $character->user?->name,
                     'body' => $character->body,
                     'incapacitated' => $character->isIncapacitated(),
                     'values' => [
