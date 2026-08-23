@@ -52,6 +52,12 @@ return [
         // reports itself unconfigured rather than half working.
         'bot_token' => env('DISCORD_BOT_TOKEN'),
         'api_base' => env('DISCORD_API_BASE', 'https://discord.com/api/v10'),
+
+        // Where Discord sends Control back after they pick a server to add the
+        // bot to. Must be registered as a redirect in the Discord Developer
+        // Portal, alongside the login one. Left unset it falls back to this
+        // application's own route, which is right unless a proxy rewrites URLs.
+        'bot_redirect' => env('DISCORD_BOT_REDIRECT_URI'),
     ],
 
 ];

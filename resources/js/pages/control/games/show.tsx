@@ -19,6 +19,7 @@ import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import type {
     CharacterSubject,
+    DiscordBotGuilds,
     DiscordMemberSync,
     GameSummary,
     GameTrackers,
@@ -31,6 +32,7 @@ type Props = {
     trackers: GameTrackers;
     adjustments: TrackerAdjustment[];
     discordSyncs: DiscordMemberSync[];
+    discordGuilds?: DiscordBotGuilds;
 };
 
 const CORPORATION_TRACKERS: Array<[string, string]> = [
@@ -44,6 +46,7 @@ export default function ControlGameShow({
     trackers,
     adjustments,
     discordSyncs,
+    discordGuilds,
 }: Props) {
     // Control is not the only person moving these numbers, so keep the panel
     // fresh without anyone having to reload during a live game. Provisioning
@@ -278,6 +281,7 @@ export default function ControlGameShow({
                     gameId={game.id}
                     discordState={game.discord}
                     syncs={discordSyncs}
+                    botGuilds={discordGuilds}
                 />
 
                 <Card>

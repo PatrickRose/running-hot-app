@@ -38,9 +38,36 @@ class DiscordApi
     /** Permission overwrite targets. */
     public const OVERWRITE_ROLE = 0;
 
+    /**
+     * What the bot must be granted in a guild to provision it.
+     *
+     * Create Instant Invite is for the join link handed to players who have not
+     * joined yet; the rest are for building the server out. Deliberately no
+     * more than that: a bot that cannot kick, ban or read messages is an easier
+     * thing to invite to a server full of players.
+     */
+    public const BOT_PERMISSIONS = 1        // Create Instant Invite
+        | (1 << 4)                          // Manage Channels
+        | (1 << 28)                         // Manage Roles
+        | (1 << 29);                        // Manage Webhooks
+
     public function isConfigured(): bool
     {
         return filled(config('services.discord.bot_token'));
+    }
+
+    /**
+     * Every guild this bot is a member of.
+     *
+     * How Control picks a server without copying a snowflake: the bot can only
+     * see guilds it has been added to, so the list is exactly the set of valid
+     * choices.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function botGuilds(): array
+    {
+        return $this->get('/users/@me/guilds');
     }
 
     /**

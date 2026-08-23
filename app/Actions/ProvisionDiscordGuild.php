@@ -55,9 +55,7 @@ class ProvisionDiscordGuild
         $blueprint = new GuildBlueprint($game);
         $reason = sprintf('Running Hot: provisioning "%s" (game #%d)', $game->name, $game->id);
 
-        // Fails fast and clearly if the bot is not actually in the guild, which
-        // is by far the most common setup mistake.
-        $this->api->guild($guildId);
+        $this->assertBotIsInGuild($guildId);
 
         $tally = ['roles_created' => 0, 'roles_updated' => 0, 'channels_created' => 0, 'channels_updated' => 0];
 
@@ -69,6 +67,33 @@ class ProvisionDiscordGuild
         Log::info('Discord guild provisioned.', ['game_id' => $game->id, 'guild_id' => $guildId, ...$tally]);
 
         return $tally;
+    }
+
+    /**
+     * Fail fast, and in words Control can act on, if the bot is not in the guild.
+     *
+     * This is by far the most common setup mistake, and Discord's own answer —
+     * a bare "Unknown Guild" 404 — reads like the server does not exist. With a
+     * token that authenticates (an invalid one is a 401), a 404 here means only
+     * one thing: this bot is not a member. Saying so, and pointing at the
+     * invite, saves the guess.
+     */
+    private function assertBotIsInGuild(string $guildId): void
+    {
+        try {
+            $this->api->guild($guildId);
+        } catch (DiscordApiException $exception) {
+            if (! $exception->isNotFound()) {
+                throw $exception;
+            }
+
+            throw new DiscordApiException(
+                'The bot is not a member of this Discord server (Discord answered "Unknown Guild"). '
+                .'Use "Add the bot to a Discord server" above, which also picks up the right server ID.',
+                $exception->status,
+                $exception->discordCode,
+            );
+        }
     }
 
     /**

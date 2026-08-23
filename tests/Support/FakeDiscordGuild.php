@@ -31,6 +31,15 @@ class FakeDiscordGuild
     /** @var array<string, array<int, string>> member snowflake to role snowflakes */
     public array $members = [];
 
+    /**
+     * What GET /users/@me/guilds answers with — the servers the bot is in.
+     * Separate from this fake's own guild, so a test can describe a bot that is
+     * in several servers, or none.
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    public array $botGuilds = [];
+
     /** @var array<int, array{method: string, url: string}> */
     public array $calls = [];
 
@@ -134,6 +143,10 @@ class FakeDiscordGuild
         $this->calls[] = ['method' => $method, 'url' => $request->url()];
 
         // Guild member roles: PUT/DELETE /guilds/{g}/members/{u}/roles/{r}
+        if ($path === '/users/@me/guilds') {
+            return Http::response($this->botGuilds);
+        }
+
         if (preg_match('#^/guilds/(\d+)/members/(\d+)/roles/(\d+)$#', $path, $matches) === 1) {
             [, , $userId, $roleId] = $matches;
 

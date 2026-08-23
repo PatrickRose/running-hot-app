@@ -8,6 +8,7 @@ use App\Models\DiscordMemberSync;
 use App\Models\Game;
 use App\Models\Phase;
 use App\Services\Discord\DiscordApi;
+use Throwable;
 
 /**
  * Shapes game state for the Inertia front end.
@@ -54,10 +55,12 @@ class GamePresenter
      */
     public function discord(Game $game): array
     {
+        $api = app(DiscordApi::class);
+
         return [
             'guild_id' => $game->discord_guild_id,
             'invite_url' => $game->discord_invite_url,
-            'bot_configured' => app(DiscordApi::class)->isConfigured(),
+            'bot_configured' => $api->isConfigured(),
             'provision_status' => $game->discord_provision_status->value,
             'provision_status_label' => $game->discord_provision_status->label(),
             'provision_in_progress' => $game->discord_provision_status->isInProgress(),
@@ -68,6 +71,38 @@ class GamePresenter
                 ->groupBy('kind')
                 ->pluck('total', 'kind')
                 ->all(),
+        ];
+    }
+
+    /**
+     * The servers the bot has been added to, for Control to choose from.
+     *
+     * Saves copying a snowflake by hand. Failure is reported rather than
+     * thrown: a bot token that has been revoked should leave the panel usable,
+     * with the manual field still there.
+     *
+     * @return array<string, mixed>
+     */
+    public function botGuilds(): array
+    {
+        $api = app(DiscordApi::class);
+
+        if (! $api->isConfigured()) {
+            return ['guilds' => [], 'error' => 'No bot token is configured.'];
+        }
+
+        try {
+            $guilds = $api->botGuilds();
+        } catch (Throwable $exception) {
+            return ['guilds' => [], 'error' => $exception->getMessage()];
+        }
+
+        return [
+            'guilds' => array_map(fn (array $guild): array => [
+                'id' => (string) $guild['id'],
+                'name' => (string) ($guild['name'] ?? $guild['id']),
+            ], $guilds),
+            'error' => null,
         ];
     }
 

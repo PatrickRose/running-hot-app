@@ -32,6 +32,12 @@ export type GameDiscord = {
     resource_counts: Record<string, number>;
 };
 
+/** Loaded on demand: the servers the bot has been added to. */
+export type DiscordBotGuilds = {
+    guilds: Array<{ id: string; name: string }>;
+    error: string | null;
+};
+
 export type DiscordMemberSync = {
     id: number;
     user: string;

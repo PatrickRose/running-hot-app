@@ -12,6 +12,7 @@ use App\Models\DiscordResource;
 use App\Models\Game;
 use App\Models\Gang;
 use App\Models\User;
+use App\Services\Discord\DiscordApi;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\FakeDiscordGuild;
 use Tests\TestCase;
@@ -326,6 +327,229 @@ class DiscordGuildProvisioningTest extends TestCase
 
         $this->assertSame(DiscordResourceKind::TextChannel, $resource->kind);
         $this->assertSame(DiscordSyncStatus::NotAMember, $sync->status);
+    }
+
+    public function test_the_connect_button_sends_control_to_discords_server_picker(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        $game = Game::factory()->create();
+
+        $response = $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}/discord/connect");
+
+        $response->assertRedirectContains('https://discord.com/oauth2/authorize');
+
+        $query = [];
+        parse_str((string) parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->assertSame('app-123', $query['client_id']);
+        $this->assertSame('bot', $query['scope']);
+        // response_type plus a redirect_uri is what makes Discord hand back the
+        // chosen guild rather than just adding the bot and stopping.
+        $this->assertSame('code', $query['response_type']);
+        $this->assertStringEndsWith('/control/discord/callback', $query['redirect_uri']);
+        $this->assertSame((string) DiscordApi::BOT_PERMISSIONS, $query['permissions']);
+        $this->assertNotEmpty($query['state']);
+
+        // No server yet, so Discord must let them choose one.
+        $this->assertArrayNotHasKey('guild_id', $query);
+    }
+
+    public function test_re_adding_the_bot_preselects_the_games_existing_server(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        $game = Game::factory()->create(['discord_guild_id' => '900000000000000001']);
+
+        $response = $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}/discord/connect");
+
+        $query = [];
+        parse_str((string) parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->assertSame('900000000000000001', $query['guild_id']);
+        $this->assertSame('true', $query['disable_guild_select']);
+    }
+
+    public function test_connecting_needs_a_client_id(): void
+    {
+        config()->set('services.discord.client_id', null);
+
+        $game = Game::factory()->create();
+
+        $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}/discord/connect")
+            ->assertSessionHasErrors('discord_guild_id');
+    }
+
+    public function test_a_player_cannot_start_the_connect_flow(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->actingAs(User::factory()->create())
+            ->get("/control/games/{$game->id}/discord/connect")
+            ->assertForbidden();
+    }
+
+    public function test_discord_handing_back_a_server_attaches_it_and_provisions(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create();
+        Gang::factory()->for($game)->create(['name' => 'The Kestrels']);
+
+        $control = $this->control();
+
+        // Start the flow so the state lands in the session, exactly as Control
+        // clicking the button would.
+        $this->actingAs($control)->get("/control/games/{$game->id}/discord/connect");
+        $state = session('discord.bot_connect.state');
+
+        $this->actingAs($control)
+            ->get('/control/discord/callback?'.http_build_query([
+                'guild_id' => $guild->guildId,
+                'permissions' => (string) DiscordApi::BOT_PERMISSIONS,
+                'state' => $state,
+                'code' => 'ignored',
+            ]))
+            ->assertRedirect("/control/games/{$game->id}");
+
+        $game->refresh();
+
+        // The whole point: no snowflake was typed anywhere.
+        $this->assertSame($guild->guildId, $game->discord_guild_id);
+        $this->assertSame(DiscordProvisionStatus::Completed, $game->discord_provision_status);
+        $this->assertNotNull($guild->roleNamed('The Kestrels'));
+    }
+
+    public function test_a_callback_without_a_matching_state_is_refused(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create();
+
+        $this->actingAs($this->control())
+            ->get('/control/discord/callback?'.http_build_query([
+                'guild_id' => $guild->guildId,
+                'state' => 'not-the-state-we-issued',
+            ]))
+            ->assertSessionHasErrors('discord_guild_id');
+
+        $this->assertNull($game->fresh()->discord_guild_id);
+    }
+
+    public function test_a_callback_with_permissions_missing_attaches_but_does_not_provision(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create();
+        $control = $this->control();
+
+        $this->actingAs($control)->get("/control/games/{$game->id}/discord/connect");
+        $state = session('discord.bot_connect.state');
+
+        // Discord lets the person untick boxes on the way through. Here they
+        // dropped Manage Roles, which provisioning would only discover halfway.
+        $granted = DiscordApi::BOT_PERMISSIONS & ~(1 << 28);
+
+        $response = $this->actingAs($control)
+            ->get('/control/discord/callback?'.http_build_query([
+                'guild_id' => $guild->guildId,
+                'permissions' => (string) $granted,
+                'state' => $state,
+            ]));
+
+        $response->assertSessionHasErrors('discord_guild_id');
+        $this->assertStringContainsString(
+            'Manage Roles',
+            (string) session('errors')->first('discord_guild_id'),
+        );
+
+        $game->refresh();
+
+        $this->assertSame($guild->guildId, $game->discord_guild_id);
+        $this->assertSame(DiscordProvisionStatus::Idle, $game->discord_provision_status);
+        $this->assertSame(0, DiscordResource::query()->where('game_id', $game->id)->count());
+    }
+
+    public function test_a_callback_with_no_guild_explains_the_redirect_uri(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        $game = Game::factory()->create();
+        $control = $this->control();
+
+        $this->actingAs($control)->get("/control/games/{$game->id}/discord/connect");
+        $state = session('discord.bot_connect.state');
+
+        // What an unregistered redirect URI, or a cancelled authorisation,
+        // looks like from this side.
+        $response = $this->actingAs($control)
+            ->get('/control/discord/callback?'.http_build_query(['state' => $state]));
+
+        $response->assertSessionHasErrors('discord_guild_id');
+        $this->assertStringContainsString(
+            '/control/discord/callback',
+            (string) session('errors')->first('discord_guild_id'),
+        );
+    }
+
+    public function test_control_can_pick_from_the_servers_the_bot_is_in(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $guild->botGuilds = [
+            ['id' => $guild->guildId, 'name' => 'Running Hot Test'],
+            ['id' => '900000000000000009', 'name' => 'Some Other Server'],
+        ];
+
+        $game = Game::factory()->create();
+
+        // The list is an optional prop, so opening the panel must not call
+        // Discord; it arrives only when asked for.
+        $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->missing('discordGuilds')
+                ->reloadOnly('discordGuilds', fn ($reload) => $reload
+                    ->where('discordGuilds.guilds.0.name', 'Running Hot Test')
+                    ->where('discordGuilds.guilds.1.id', '900000000000000009')
+                    ->where('discordGuilds.error', null)));
+    }
+
+    public function test_a_revoked_bot_token_leaves_the_panel_usable(): void
+    {
+        $game = Game::factory()->create();
+
+        // No bind(), so no token: the list reports why rather than throwing and
+        // taking the whole Control page down with it.
+        $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->reloadOnly('discordGuilds', fn ($reload) => $reload
+                    ->where('discordGuilds.guilds', [])
+                    ->where('discordGuilds.error', 'No bot token is configured.')));
+    }
+
+    public function test_a_missing_bot_says_so_instead_of_repeating_discords_wording(): void
+    {
+        (new FakeDiscordGuild)->bind();
+
+        // A guild the bot is not in. With a token that authenticates, Discord's
+        // 404 means exactly one thing, and the message should say it.
+        $game = Game::factory()->create(['discord_guild_id' => '999999999999999999']);
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/discord/provision")
+            ->assertRedirect();
+
+        $message = (string) $game->fresh()->discord_provision_message;
+
+        $this->assertStringContainsString('not a member of this Discord server', $message);
+        $this->assertStringContainsString('Add the bot to a Discord server', $message);
     }
 
     public function test_moving_a_game_to_a_different_server_forgets_the_old_snowflakes(): void

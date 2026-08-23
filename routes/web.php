@@ -30,6 +30,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('games/{game}/webhook', [GameController::class, 'updateWebhook'])->name('games.webhook');
 
             Route::post('games/{game}/discord', [DiscordGuildController::class, 'update'])->name('games.discord');
+            Route::get('games/{game}/discord/connect', [DiscordGuildController::class, 'connect'])
+                ->name('games.discord.connect');
+            // Fixed URI, so it carries no game: the pending game is held in the
+            // session and matched against Discord's state parameter.
+            Route::get('discord/callback', [DiscordGuildController::class, 'callback'])
+                ->name('games.discord.callback');
             Route::post('games/{game}/discord/provision', [DiscordGuildController::class, 'provision'])
                 ->name('games.discord.provision');
             Route::post('games/{game}/discord/sync-roles', [DiscordGuildController::class, 'syncRoles'])
