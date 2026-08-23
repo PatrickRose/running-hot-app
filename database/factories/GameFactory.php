@@ -35,6 +35,15 @@ class GameFactory extends Factory
         ];
     }
 
+    /**
+     * A game set up before its Discord server exists, which is the state every
+     * game starts in now that provisioning creates the webhook.
+     */
+    public function withoutDiscordWebhook(): static
+    {
+        return $this->state(fn (): array => ['discord_webhook_url' => null]);
+    }
+
     public function running(): static
     {
         return $this->state(fn (): array => ['status' => GameStatus::Running]);

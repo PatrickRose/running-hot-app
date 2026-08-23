@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\SendDiscordAnnouncement;
 use App\Models\Game;
 use App\Models\Phase;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Announces game events to Discord, which is where the players actually live.
@@ -75,8 +76,19 @@ class DiscordAnnouncer
 
     public function send(Game $game, string $content): void
     {
-        // A game always has its own webhook, so there is nothing to fall back to
-        // and no silent no-op path.
+        // A game set up before its Discord server has nowhere to announce yet.
+        // There is deliberately no global webhook to fall back to, so skip:
+        // announcements must never be able to hold up the clock, and posting to
+        // a channel belonging to some other game would be worse than silence.
+        if (blank($game->discord_webhook_url)) {
+            Log::debug('Skipped a Discord announcement: the game has no webhook.', [
+                'game_id' => $game->id,
+                'content' => $content,
+            ]);
+
+            return;
+        }
+
         SendDiscordAnnouncement::dispatch($game->discord_webhook_url, $content);
     }
 }

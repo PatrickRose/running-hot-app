@@ -8,17 +8,16 @@ import { webhook } from '@/routes/control/games';
 /**
  * Repoints a game at a different Discord channel.
  *
- * The webhook is required when a game is created, so this exists so that a
- * mispaste does not mean recreating the game.
+ * Provisioning the game's server creates this webhook, so most of the time
+ * there is nothing to do here. It stays for the game whose server the
+ * application did not build, and for correcting a mispaste.
  */
 export function GameWebhook({
     gameId,
     url,
-    isPlaceholder,
 }: {
     gameId: number;
-    url: string;
-    isPlaceholder: boolean;
+    url: string | null;
 }) {
     return (
         <Form
@@ -32,10 +31,11 @@ export function GameWebhook({
                         Announcement webhook
                     </Label>
 
-                    {isPlaceholder && (
+                    {url === null && (
                         <p className="text-sm text-amber-600 dark:text-amber-500">
-                            This is the seeded placeholder — announcements will
-                            not arrive until you set the real webhook.
+                            No announcement channel yet, so phase changes are
+                            not being posted anywhere. Provisioning the game's
+                            Discord server below creates one.
                         </p>
                     )}
 
@@ -44,8 +44,8 @@ export function GameWebhook({
                             id="discord_webhook_url"
                             name="discord_webhook_url"
                             type="url"
-                            required
-                            defaultValue={url}
+                            defaultValue={url ?? ''}
+                            placeholder="https://discord.com/api/webhooks/…"
                             className="min-w-64 flex-1 font-mono text-xs"
                         />
                         <Button type="submit" disabled={processing}>
