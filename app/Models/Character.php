@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property CharacterRole $role
  * @property int $brawn
  * @property int $hack
+ * @property int $charisma
  * @property int $body
  * @property int $credits
  * @property int $wounds
@@ -34,7 +35,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'game_id', 'user_id', 'discord_username', 'corporation_id', 'gang_id',
-    'name', 'role', 'brawn', 'hack', 'body', 'credits', 'wounds', 'tags',
+    'name', 'role', 'brawn', 'hack', 'charisma', 'body', 'credits', 'wounds', 'tags',
 ])]
 class Character extends Model
 {

@@ -102,6 +102,25 @@ export default function ControlGamesIndex({
                                     <label className="flex items-start gap-2">
                                         <input
                                             type="checkbox"
+                                            name="skip_default_roster"
+                                            value="1"
+                                            className="mt-1"
+                                        />
+                                        <span className="grid gap-1">
+                                            <span className="text-sm font-medium">
+                                                Start empty
+                                            </span>
+                                            <span className="text-sm text-muted-foreground">
+                                                Leave this unchecked to set up
+                                                the five Corporations, four
+                                                gangs and every character seat.
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    <label className="flex items-start gap-2">
+                                        <input
+                                            type="checkbox"
                                             name="connect_discord"
                                             value="1"
                                             defaultChecked={botConfigured}

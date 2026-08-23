@@ -45,6 +45,7 @@ class StoreGameRequest extends FormRequest
             'action_seconds' => ['sometimes', 'integer', 'min:30', 'max:7200'],
             'team_time_seconds' => ['sometimes', 'integer', 'min:30', 'max:7200'],
             'auto_advance' => ['sometimes', 'boolean'],
+            'skip_default_roster' => ['sometimes', 'boolean'],
             'discord_webhook_url' => self::webhookRules(),
             // Not a column: whether to go straight on to adding a Discord server.
             'connect_discord' => ['sometimes', 'boolean'],
@@ -62,7 +63,7 @@ class StoreGameRequest extends FormRequest
      */
     public function gameAttributes(): array
     {
-        return $this->safe()->except('connect_discord');
+        return $this->safe()->except(['connect_discord', 'skip_default_roster']);
     }
 
     /**
@@ -71,5 +72,17 @@ class StoreGameRequest extends FormRequest
     public function shouldConnectDiscord(): bool
     {
         return $this->boolean('connect_discord');
+    }
+
+    /**
+     * Whether to populate the new game with the roster of the real game.
+     *
+     * On by default, because a game of Running Hot is that roster. Control can
+     * still ask for an empty game — for a one-off scenario, or to build the
+     * teams by hand.
+     */
+    public function shouldCreateDefaultRoster(): bool
+    {
+        return ! $this->boolean('skip_default_roster');
     }
 }
