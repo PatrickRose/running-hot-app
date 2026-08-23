@@ -34,6 +34,9 @@ class DemoGameSeeder extends Seeder
             'name' => 'Running Hot — Procatorion',
             'stability' => 6,
             'civil_unrest' => 0,
+            // Deliberately not a real endpoint. Set the game's own webhook from
+            // the Control panel; seeding must never post to a live channel.
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/000000000000000000/replace-me',
         ]);
 
         $corporations = collect([
@@ -80,10 +83,14 @@ class DemoGameSeeder extends Seeder
                     'hack' => 5 - $index,
                     'body' => 3,
                     'credits' => 10,
+                    // A pre-filled roster entry: whoever signs in with this
+                    // Discord handle is bound to this character automatically.
+                    'discord_username' => sprintf('runner%d%d', $index + 1, $number),
                 ]);
             }
         }
 
         $this->command->info('Demo game seeded. Control login: control@example.com / password');
+        $this->command->warn('Set the game\'s Discord webhook in the Control panel before announcements will land.');
     }
 }

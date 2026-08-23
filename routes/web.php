@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\DiscordController;
+use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\GameController;
 use App\Http\Controllers\Control\PhaseController;
 use App\Http\Controllers\Control\TrackerController;
@@ -25,6 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('games', [GameController::class, 'store'])->name('games.store');
             Route::get('games/{game}', [GameController::class, 'show'])->name('games.show');
             Route::post('games/{game}/finish', [GameController::class, 'finish'])->name('games.finish');
+            Route::post('games/{game}/webhook', [GameController::class, 'updateWebhook'])->name('games.webhook');
 
             Route::post('games/{game}/phase/start', [PhaseController::class, 'start'])->name('phase.start');
             Route::post('games/{game}/phase/advance', [PhaseController::class, 'advance'])->name('phase.advance');
@@ -35,6 +37,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('games/{game}/trackers', [TrackerController::class, 'store'])->name('trackers.store');
             Route::post('games/{game}/characters/{character}/remove-tag', [TrackerController::class, 'removeTag'])
                 ->name('characters.remove-tag');
+
+            Route::post('games/{game}/characters/{character}/discord', [CharacterController::class, 'updateDiscord'])
+                ->name('characters.discord');
+            Route::post('games/{game}/characters/{character}/release', [CharacterController::class, 'release'])
+                ->name('characters.release');
         });
 });
 

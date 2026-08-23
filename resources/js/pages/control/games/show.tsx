@@ -1,4 +1,6 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { DiscordHandle } from '@/components/discord-handle';
+import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
 import { TrackerValue } from '@/components/tracker-value';
@@ -86,9 +88,8 @@ export default function ControlGameShow({
                     <CardHeader>
                         <CardTitle>Turn clock</CardTitle>
                         <CardDescription>
-                            {game.has_discord_webhook
-                                ? 'Phase changes are announced in Discord.'
-                                : 'No Discord webhook configured — nothing will be announced.'}
+                            Phase changes are announced in this game's Discord
+                            channel.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-wrap items-end justify-between gap-6">
@@ -250,6 +251,23 @@ export default function ControlGameShow({
 
                 <Card>
                     <CardHeader>
+                        <CardTitle>Discord</CardTitle>
+                        <CardDescription>
+                            Each game announces to its own channel, so there is
+                            no global default to post to by mistake.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <GameWebhook
+                            gameId={game.id}
+                            url={game.discord_webhook_url}
+                            isPlaceholder={game.discord_webhook_is_placeholder}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
                         <CardTitle>Corporations</CardTitle>
                         <CardDescription>
                             Income is paid into Credits when Team Time opens. It
@@ -271,6 +289,11 @@ export default function ControlGameShow({
                     <CardHeader>
                         <CardTitle>Characters</CardTitle>
                         <CardDescription>
+                            Put a player's Discord handle against their
+                            character and they will be signed in to it
+                            automatically. Once claimed, the link survives a
+                            Discord rename.
+                            <br />
                             Runners and Freelancers heal one Wound automatically
                             each Team Time. Tags cost 3 Credits to buy off.
                         </CardDescription>
@@ -287,6 +310,9 @@ export default function ControlGameShow({
                                     </th>
                                     <th className="py-2 pr-4 font-medium">
                                         Team
+                                    </th>
+                                    <th className="py-2 pr-4 font-medium">
+                                        Player
                                     </th>
                                     <th className="py-2 pr-4 text-right font-medium">
                                         Wounds
@@ -323,6 +349,23 @@ export default function ControlGameShow({
                                             </td>
                                             <td className="py-2 pr-4 text-muted-foreground">
                                                 {character.team ?? '—'}
+                                            </td>
+                                            <td className="py-2 pr-4">
+                                                <DiscordHandle
+                                                    gameId={game.id}
+                                                    characterId={
+                                                        character.subject_id
+                                                    }
+                                                    characterName={
+                                                        character.name
+                                                    }
+                                                    handle={
+                                                        character.discord_username
+                                                    }
+                                                    claimedBy={
+                                                        character.claimed_by
+                                                    }
+                                                />
                                             </td>
                                             <td className="py-2 pr-4">
                                                 <TrackerValue
@@ -413,7 +456,7 @@ export default function ControlGameShow({
                                 {trackers.characters.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={7}
+                                            colSpan={8}
                                             className="py-4 text-muted-foreground"
                                         >
                                             No characters yet.

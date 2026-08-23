@@ -95,12 +95,18 @@ export default function ControlGamesIndex({ games }: { games: GameSummary[] }) {
 
                                     <div className="grid gap-2">
                                         <Label htmlFor="discord_webhook_url">
-                                            Discord webhook URL (optional)
+                                            Discord webhook URL
                                         </Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Where this game announces its phase
+                                            changes. Channel settings →
+                                            Integrations → Webhooks.
+                                        </p>
                                         <Input
                                             id="discord_webhook_url"
                                             name="discord_webhook_url"
                                             type="url"
+                                            required
                                             placeholder="https://discord.com/api/webhooks/…"
                                         />
                                         <InputError

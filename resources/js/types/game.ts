@@ -23,7 +23,8 @@ export type GameSummary = {
     stability: number;
     civil_unrest: number;
     auto_advance: boolean;
-    has_discord_webhook: boolean;
+    discord_webhook_url: string;
+    discord_webhook_is_placeholder: boolean;
     durations: {
         setup_seconds: number;
         action_seconds: number;
@@ -47,6 +48,8 @@ export type CharacterSubject = TrackerSubject & {
     role: string;
     role_label: string;
     team: string | null;
+    discord_username: string | null;
+    claimed_by: string | null;
     body: number;
     incapacitated: boolean;
 };

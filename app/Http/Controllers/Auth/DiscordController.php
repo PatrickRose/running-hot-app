@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Actions\ClaimCharactersForUser;
 use App\Http\Controllers\Controller;
+use App\Models\Character;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +21,8 @@ use Throwable;
  */
 class DiscordController extends Controller
 {
+    public function __construct(private readonly ClaimCharactersForUser $claimCharacters) {}
+
     public function redirect(): SymfonyRedirectResponse
     {
         // The Discord provider already asks for "identify" and "email" by
@@ -60,9 +64,20 @@ class DiscordController extends Controller
             'discord_avatar' => $discordUser->getAvatar(),
         ])->save();
 
+        // Bind the player to whatever Control reserved for their handle. Doing
+        // this on every sign in, not just the first, means a handle added to the
+        // roster after someone has already logged in still reaches them.
+        $claimed = $this->claimCharacters->handle($user);
+
         Auth::login($user, remember: true);
 
         request()->session()->regenerate();
+
+        if ($claimed !== []) {
+            $names = implode(', ', array_map(fn (Character $character): string => $character->name, $claimed));
+
+            return to_route('dashboard')->with('status', 'You are playing '.$names.'.');
+        }
 
         return to_route('dashboard');
     }

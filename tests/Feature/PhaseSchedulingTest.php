@@ -10,7 +10,9 @@ use App\Jobs\SendDiscordAnnouncement;
 use App\Models\Game;
 use App\Services\TurnEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -169,15 +171,34 @@ class PhaseSchedulingTest extends TestCase
         Queue::assertPushed(SendDiscordAnnouncement::class, fn (SendDiscordAnnouncement $job): bool => str_contains($job->content, 'Setup phase has begun'));
     }
 
-    public function test_nothing_is_announced_without_a_webhook(): void
+    public function test_the_announcement_is_posted_to_the_games_own_webhook(): void
     {
-        Queue::fake();
-        config(['services.discord.webhook_url' => null]);
+        Http::fake();
 
-        $game = Game::factory()->create(['discord_webhook_url' => null]);
+        $game = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/1/abc',
+        ]);
 
         app(TurnEngine::class)->start($game);
 
-        Queue::assertNotPushed(SendDiscordAnnouncement::class);
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://discord.com/api/webhooks/1/abc'
+            && str_contains((string) $request['content'], 'Setup phase has begun'));
+    }
+
+    public function test_each_game_announces_to_its_own_channel(): void
+    {
+        Http::fake();
+
+        $first = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/111/aaa',
+        ]);
+        $second = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/222/bbb',
+        ]);
+
+        app(TurnEngine::class)->start($first);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://discord.com/api/webhooks/111/aaa');
+        Http::assertNotSent(fn (Request $request): bool => $request->url() === $second->discord_webhook_url);
     }
 }

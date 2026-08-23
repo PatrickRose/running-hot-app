@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Control;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\StoreGameRequest;
+use App\Http\Requests\Control\UpdateGameWebhookRequest;
 use App\Models\Game;
 use App\Services\TurnEngine;
 use App\Support\GamePresenter;
@@ -41,6 +42,16 @@ class GameController extends Controller
             'trackers' => $presenter->trackers($game),
             'adjustments' => $presenter->recentAdjustments($game),
         ]);
+    }
+
+    /**
+     * Point a game at a different Discord channel.
+     */
+    public function updateWebhook(Game $game, UpdateGameWebhookRequest $request): RedirectResponse
+    {
+        $game->update($request->validated());
+
+        return back()->with('status', 'Discord webhook updated.');
     }
 
     public function finish(Game $game, TurnEngine $engine): RedirectResponse

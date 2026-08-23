@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $game_id
  * @property int|null $user_id
+ * @property string|null $discord_username
  * @property int|null $corporation_id
  * @property int|null $gang_id
  * @property string $name
@@ -32,7 +33,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'game_id', 'user_id', 'corporation_id', 'gang_id',
+    'game_id', 'user_id', 'discord_username', 'corporation_id', 'gang_id',
     'name', 'role', 'brawn', 'hack', 'body', 'credits', 'wounds', 'tags',
 ])]
 class Character extends Model
@@ -87,5 +88,35 @@ class Character extends Model
     public function isIncapacitated(): bool
     {
         return $this->wounds >= $this->body;
+    }
+
+    public function isClaimed(): bool
+    {
+        return $this->user_id !== null;
+    }
+
+    /**
+     * Reduce a Discord handle to the form claims are matched on.
+     *
+     * Control types these off a sign-up sheet, so they arrive with stray
+     * whitespace, a leading "@", and inconsistent case. Modern Discord handles
+     * are lowercase, but the legacy "Name#1234" form is preserved as typed
+     * beyond the case fold, since the discriminator is part of the handle.
+     */
+    public static function normaliseDiscordUsername(?string $handle): ?string
+    {
+        $handle = mb_strtolower(trim((string) $handle));
+        $handle = ltrim($handle, '@');
+
+        return $handle === '' ? null : $handle;
+    }
+
+    /**
+     * Keep stored handles in the shape claims are matched on, wherever they are
+     * written from: Control, a seeder or a factory.
+     */
+    protected function setDiscordUsernameAttribute(?string $value): void
+    {
+        $this->attributes['discord_username'] = self::normaliseDiscordUsername($value);
     }
 }

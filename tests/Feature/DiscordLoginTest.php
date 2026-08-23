@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Character;
+use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Socialite\Contracts\Factory as SocialiteFactory;
@@ -107,5 +109,38 @@ class DiscordLoginTest extends TestCase
     public function test_the_login_page_renders(): void
     {
         $this->get('/login')->assertOk();
+    }
+
+    public function test_signing_in_claims_the_character_reserved_for_that_handle(): void
+    {
+        $game = Game::factory()->create();
+        $character = Character::factory()->for($game)->create([
+            'discord_username' => 'nightshift_jax',
+        ]);
+
+        $this->fakeDiscordUser('123456789', 'jax@example.com', 'Nightshift_Jax');
+
+        $this->get('/auth/discord/callback')->assertRedirect('/dashboard');
+
+        $this->assertSame(
+            User::query()->where('discord_id', '123456789')->value('id'),
+            $character->fresh()->user_id,
+        );
+    }
+
+    public function test_the_claimed_character_appears_on_the_players_dashboard(): void
+    {
+        $game = Game::factory()->running()->create();
+        Character::factory()->for($game)->create([
+            'name' => 'Kestrel Ade',
+            'discord_username' => 'ade',
+        ]);
+
+        $this->fakeDiscordUser('42', 'ade@example.com', 'ade');
+        $this->get('/auth/discord/callback');
+
+        $this->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Kestrel Ade');
     }
 }

@@ -10,6 +10,7 @@ use App\Models\Game;
 use App\Models\User;
 use App\Services\TurnEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class ControlPanelTest extends TestCase
@@ -225,12 +226,93 @@ class ControlPanelTest extends TestCase
             ->post('/control/games', [
                 'name' => 'Running Hot — Sheffield',
                 'setup_seconds' => 600,
+                'discord_webhook_url' => 'https://discord.com/api/webhooks/123456789/abcdef-ghij',
             ])
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('games', [
             'name' => 'Running Hot — Sheffield',
             'setup_seconds' => 600,
         ]);
+    }
+
+    public function test_a_game_cannot_be_created_without_a_webhook(): void
+    {
+        $this->actingAs($this->control())
+            ->post('/control/games', ['name' => 'No Channel'])
+            ->assertSessionHasErrors('discord_webhook_url');
+
+        $this->assertDatabaseMissing('games', ['name' => 'No Channel']);
+    }
+
+    /**
+     * A channel link or invite pasted by mistake would otherwise only surface as
+     * a failed announcement mid-game.
+     */
+    #[DataProvider('rejectedWebhooks')]
+    public function test_a_url_that_is_not_a_discord_webhook_is_rejected(string $url): void
+    {
+        $this->actingAs($this->control())
+            ->post('/control/games', [
+                'name' => 'Bad Webhook',
+                'discord_webhook_url' => $url,
+            ])
+            ->assertSessionHasErrors('discord_webhook_url');
+
+        $this->assertDatabaseMissing('games', ['name' => 'Bad Webhook']);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function rejectedWebhooks(): array
+    {
+        return [
+            'a channel link' => ['https://discord.com/channels/123/456'],
+            'an invite' => ['https://discord.gg/abcdef'],
+            'another host' => ['https://example.com/api/webhooks/123/abc'],
+            'not a url' => ['webhooks/123/abc'],
+        ];
+    }
+
+    public function test_control_can_repoint_a_game_at_a_different_channel(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/webhook", [
+                'discord_webhook_url' => 'https://discord.com/api/webhooks/999888777/new-token',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            'https://discord.com/api/webhooks/999888777/new-token',
+            $game->fresh()->discord_webhook_url,
+        );
+    }
+
+    public function test_a_webhook_cannot_be_cleared(): void
+    {
+        $game = Game::factory()->create();
+        $original = $game->discord_webhook_url;
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/webhook", ['discord_webhook_url' => ''])
+            ->assertSessionHasErrors('discord_webhook_url');
+
+        $this->assertSame($original, $game->fresh()->discord_webhook_url);
+    }
+
+    public function test_a_player_cannot_repoint_the_webhook(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->actingAs(User::factory()->create())
+            ->post("/control/games/{$game->id}/webhook", [
+                'discord_webhook_url' => 'https://discord.com/api/webhooks/1/hijack',
+            ])
+            ->assertForbidden();
     }
 }
