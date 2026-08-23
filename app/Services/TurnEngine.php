@@ -28,6 +28,7 @@ class TurnEngine
     public function __construct(
         private readonly DiscordAnnouncer $announcer,
         private readonly ApplyTeamTimeUpkeep $upkeep,
+        private readonly FacilityDefenceService $facilityDefence,
     ) {}
 
     /**
@@ -67,6 +68,12 @@ class TurnEngine
             ])->save();
 
             $this->announcer->phaseEnded($phase);
+
+            // Any security budget Security did not spend goes back to the
+            // Corporation at the end of the Action phase (rulebook 3.3.5).
+            if ($phase->type === PhaseType::Action) {
+                $this->facilityDefence->returnUnspentBudgets($phase->turn, $actor);
+            }
 
             $next = $phase->type->next();
 

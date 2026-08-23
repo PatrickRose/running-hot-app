@@ -111,3 +111,92 @@ export type TrackerAdjustment = {
     actor: string | null;
     at: string | null;
 };
+
+export type ProtectionKind = 'physical' | 'cyber';
+
+export type ProtectionCardAvailability =
+    'available' | 'rumoured' | 'research_only';
+
+/** An entry in the game's Facility type catalogue (rulebook 3.3.1). */
+export type FacilityTypeSummary = {
+    id: number;
+    key: string;
+    name: string;
+    description: string | null;
+    /** Physical and cyber slots each Facility of this type adds. */
+    protection_slots_granted: number;
+    /** Technology storage each Facility of this type adds. */
+    technology_capacity_granted: number;
+    facility_count: number;
+    in_use: boolean;
+};
+
+/** An entry in the game's Protection Card catalogue (rulebook 3.3.2). */
+export type ProtectionCardSummary = {
+    id: number;
+    name: string;
+    kind: ProtectionKind;
+    kind_label: string;
+    cost: number;
+    challenge_skill: 'brawn' | 'hack';
+    challenge_skill_label: string;
+    challenge_strength: number;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+    availability: ProtectionCardAvailability;
+    availability_label: string;
+    notes: string | null;
+    installed_count: number;
+};
+
+export type InstalledProtectionCard = {
+    id: number;
+    /** 1 is the card Runners meet first. */
+    position: number;
+    card_type_id: number;
+    name: string;
+    challenge: string;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+};
+
+export type ProtectionStack = {
+    kind: ProtectionKind;
+    kind_label: string;
+    slots: number;
+    cards: InstalledProtectionCard[];
+};
+
+export type FacilitySecurityState = {
+    directed: boolean;
+    budget: number;
+    budget_spent: number;
+    budget_returned: boolean;
+    cards_removed: number;
+};
+
+export type FacilitySummary = {
+    id: number;
+    name: string;
+    corporation_id: number;
+    facility_type_id: number;
+    facility_type: string;
+    available_from_turn: number;
+    /** False while the Facility is still being built. */
+    available: boolean;
+    notes: string | null;
+    slots_per_kind: number;
+    stacks: ProtectionStack[];
+    security: FacilitySecurityState;
+};
+
+export type CorporationFacilities = {
+    id: number;
+    name: string;
+    credits: number;
+    slots_per_kind: number;
+    technology_capacity_per_facility: number;
+    facilities: FacilitySummary[];
+};

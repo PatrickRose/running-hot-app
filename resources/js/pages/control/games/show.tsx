@@ -15,6 +15,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { removeTag } from '@/routes/control/characters';
+import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import type {
@@ -75,12 +76,24 @@ export default function ControlGameShow({
                                 : 'Manual phase advance'
                         }`}
                     />
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.get(index().url)}
-                    >
-                        All games
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(
+                                    facilitiesIndex.url({ game: game.id }),
+                                )
+                            }
+                        >
+                            Facility Defence
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            onClick={() => router.get(index().url)}
+                        >
+                            All games
+                        </Button>
+                    </div>
                 </div>
 
                 {props.errors?.phase && (

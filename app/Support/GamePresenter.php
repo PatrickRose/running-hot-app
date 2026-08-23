@@ -2,12 +2,18 @@
 
 namespace App\Support;
 
+use App\Enums\ProtectionKind;
 use App\Enums\Tracker;
 use App\Models\Character;
 use App\Models\DiscordMemberSync;
+use App\Models\Facility;
+use App\Models\FacilityProtectionCard;
+use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\Phase;
+use App\Models\ProtectionCardType;
 use App\Services\Discord\DiscordApi;
+use App\Services\FacilityDefenceService;
 use Throwable;
 
 /**
@@ -207,6 +213,159 @@ class GamePresenter
                         Tracker::CharacterCredits->value => $character->credits,
                     ],
                 ])->all(),
+        ];
+    }
+
+    /**
+     * The game's Facility type catalogue (rulebook 3.3.1).
+     *
+     * in_use tells Control whether a type can still be deleted, which saves
+     * them finding out by being refused.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function facilityTypes(Game $game): array
+    {
+        return $game->facilityTypes()
+            ->withCount('facilities')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (FacilityType $type): array => [
+                'id' => $type->id,
+                'key' => $type->key,
+                'name' => $type->name,
+                'description' => $type->description,
+                'protection_slots_granted' => $type->protection_slots_granted,
+                'technology_capacity_granted' => $type->technology_capacity_granted,
+                'facility_count' => (int) $type->getAttribute('facilities_count'),
+                'in_use' => (int) $type->getAttribute('facilities_count') > 0,
+            ])->all();
+    }
+
+    /**
+     * The game's Protection Card catalogue (rulebook 3.3.2).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function protectionCardTypes(Game $game): array
+    {
+        return $game->protectionCardTypes()
+            ->withCount('installations')
+            ->orderBy('kind')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (ProtectionCardType $card): array => [
+                'id' => $card->id,
+                'name' => $card->name,
+                'kind' => $card->kind->value,
+                'kind_label' => $card->kind->label(),
+                'cost' => $card->cost,
+                'challenge_skill' => $card->challenge_skill->value,
+                'challenge_skill_label' => $card->challenge_skill->label(),
+                'challenge_strength' => $card->challenge_strength,
+                'consequence' => $card->consequence,
+                'charge_cost' => $card->charge_cost,
+                'charge_consequence' => $card->charge_consequence,
+                'availability' => $card->availability->value,
+                'availability_label' => $card->availability->label(),
+                'notes' => $card->notes,
+                'installed_count' => (int) $card->getAttribute('installations_count'),
+            ])->all();
+    }
+
+    /**
+     * Every Facility in the game, grouped by Corporation.
+     *
+     * Slot limits and technology capacity are derived here rather than stored,
+     * because both move the moment a Security or Corporate Facility opens.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function facilities(Game $game): array
+    {
+        $defence = app(FacilityDefenceService::class);
+        $turn = $game->currentTurn();
+        $turnNumber = $turn?->number;
+
+        return $game->corporations()
+            ->with([
+                'facilities' => fn ($query) => $query->orderBy('name'),
+                'facilities.facilityType',
+                'facilities.protectionCards.cardType',
+                'facilities.turnStates' => fn ($query) => $query->where('turn_id', $turn?->id),
+            ])
+            ->orderBy('name')
+            ->get()
+            ->map(function ($corporation) use ($defence, $turnNumber): array {
+                // Derived once per Corporation: both numbers depend on the
+                // whole Facility list, not on the Facility being described.
+                $slots = $defence->slotsPerKind($corporation);
+
+                return [
+                    'id' => $corporation->id,
+                    'name' => $corporation->name,
+                    'credits' => $corporation->credits,
+                    'slots_per_kind' => $slots,
+                    'technology_capacity_per_facility' => $defence->technologyCapacityPerFacility($corporation),
+                    'facilities' => $corporation->facilities
+                        ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $slots))
+                        ->all(),
+                ];
+            })->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function facility(Facility $facility, ?int $turnNumber, int $slots): array
+    {
+        $state = $facility->turnStates->first();
+
+        return [
+            'id' => $facility->id,
+            'name' => $facility->name,
+            'corporation_id' => $facility->corporation_id,
+            'facility_type_id' => $facility->facility_type_id,
+            'facility_type' => $facility->facilityType->name,
+            'available_from_turn' => $facility->available_from_turn,
+            'available' => $facility->isAvailableOnTurn($turnNumber),
+            'notes' => $facility->notes,
+            'slots_per_kind' => $slots,
+            'stacks' => array_map(
+                fn (ProtectionKind $kind): array => [
+                    'kind' => $kind->value,
+                    'kind_label' => $kind->label(),
+                    'slots' => $slots,
+                    'cards' => $facility->protectionCards
+                        ->where('kind', $kind)
+                        ->sortBy('position')
+                        ->values()
+                        ->map(fn (FacilityProtectionCard $card): array => [
+                            'id' => $card->id,
+                            'position' => $card->position,
+                            'card_type_id' => $card->protection_card_type_id,
+                            'name' => $card->cardType->name,
+                            'challenge' => sprintf(
+                                '%s %d',
+                                $card->cardType->challenge_skill->label(),
+                                $card->cardType->challenge_strength,
+                            ),
+                            'consequence' => $card->cardType->consequence,
+                            'charge_cost' => $card->cardType->charge_cost,
+                            'charge_consequence' => $card->cardType->charge_consequence,
+                        ])->all(),
+                ],
+                ProtectionKind::encounterOrder(),
+            ),
+            // A Facility nobody has touched this turn has no state row, which
+            // reads the same as an untouched one: no meeple, no budget.
+            'security' => [
+                'directed' => $state !== null && $state->security_directed,
+                'budget' => $state === null ? 0 : $state->security_budget,
+                'budget_spent' => $state === null ? 0 : $state->security_budget_spent,
+                'budget_returned' => $state !== null && $state->budget_returned_at !== null,
+                'cards_removed' => $state === null ? 0 : $state->cards_removed,
+            ],
         ];
     }
 

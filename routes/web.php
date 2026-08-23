@@ -3,8 +3,11 @@
 use App\Http\Controllers\Auth\DiscordController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\DiscordGuildController;
+use App\Http\Controllers\Control\FacilityController;
+use App\Http\Controllers\Control\FacilityTypeController;
 use App\Http\Controllers\Control\GameController;
 use App\Http\Controllers\Control\PhaseController;
+use App\Http\Controllers\Control\ProtectionCardTypeController;
 use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +53,41 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('games/{game}/trackers', [TrackerController::class, 'store'])->name('trackers.store');
             Route::post('games/{game}/characters/{character}/remove-tag', [TrackerController::class, 'removeTag'])
                 ->name('characters.remove-tag');
+
+            // Facility Defence (rulebook 3.3). Facilities and their Protection
+            // Card stacks, plus the catalogues both are built from.
+            Route::get('games/{game}/facilities', [FacilityController::class, 'index'])
+                ->name('facilities.index');
+            Route::post('games/{game}/facilities', [FacilityController::class, 'store'])
+                ->name('facilities.store');
+            Route::patch('games/{game}/facilities/{facility}', [FacilityController::class, 'update'])
+                ->name('facilities.update');
+            Route::delete('games/{game}/facilities/{facility}', [FacilityController::class, 'destroy'])
+                ->name('facilities.destroy');
+
+            Route::post('games/{game}/facilities/{facility}/cards', [FacilityController::class, 'installCard'])
+                ->name('facilities.cards.install');
+            Route::post('games/{game}/facilities/{facility}/cards/order', [FacilityController::class, 'reorderCards'])
+                ->name('facilities.cards.reorder');
+            Route::delete('games/{game}/facilities/{facility}/cards/{card}', [FacilityController::class, 'removeCard'])
+                ->name('facilities.cards.remove');
+
+            Route::post('games/{game}/facilities/{facility}/security', [FacilityController::class, 'updateSecurity'])
+                ->name('facilities.security');
+
+            Route::post('games/{game}/facility-types', [FacilityTypeController::class, 'store'])
+                ->name('facility-types.store');
+            Route::patch('games/{game}/facility-types/{facilityType}', [FacilityTypeController::class, 'update'])
+                ->name('facility-types.update');
+            Route::delete('games/{game}/facility-types/{facilityType}', [FacilityTypeController::class, 'destroy'])
+                ->name('facility-types.destroy');
+
+            Route::post('games/{game}/protection-cards', [ProtectionCardTypeController::class, 'store'])
+                ->name('protection-cards.store');
+            Route::patch('games/{game}/protection-cards/{cardType}', [ProtectionCardTypeController::class, 'update'])
+                ->name('protection-cards.update');
+            Route::delete('games/{game}/protection-cards/{cardType}', [ProtectionCardTypeController::class, 'destroy'])
+                ->name('protection-cards.destroy');
 
             Route::post('games/{game}/characters/{character}/discord', [CharacterController::class, 'updateDiscord'])
                 ->name('characters.discord');

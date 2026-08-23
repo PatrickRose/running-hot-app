@@ -221,9 +221,10 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 
 **Control always wins.** The rulebook defers to Control constantly ("if reasonable, Control will typically give you the opportunity"). Every computed value must stay editable by Control. Never build a mechanic the organisers cannot override mid-game.
 
-**Never invent a rule the rulebook does not state.** Where the rules are silent, expose a value for Control to set rather than deriving one. Two live examples:
+**Never invent a rule the rulebook does not state.** Where the rules are silent, expose a value for Control to set rather than deriving one. Three live examples:
 - Income is *not* calculated from anything. It is the abstraction of a corporation's stock price, so stock price is not modelled at all.
 - Removing a Tag costs 3 Credits and is the player's choice, so upkeep never does it automatically.
+- A Facility build cost is passed in, not derived. The rulebook says the CEO provides "the required Credits" without saying what they are, and more Corporate Facilities is a *reason* for Control to raise Income rather than a formula that raises it.
 
 **Never write a tracker directly.** All movement of Income, Political Will, Credits, Notoriety, Wounds, Tags, Stability and Civil Unrest goes through `TrackerService`, which writes a `tracker_adjustments` row recording before, after, delta, actor and reason. That ledger is how Control answers "why did that number change?" three turns later. `$model->update(['wounds' => ...])` bypasses it and is a bug.
 
@@ -240,6 +241,9 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 |---|---|
 | Phase transitions, pause/resume/extend | `App\Services\TurnEngine` |
 | Tracker writes and the audit ledger | `App\Services\TrackerService` |
+| Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
+| Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
+| A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -291,8 +295,26 @@ The roster has to exist first, since team channels are permissioned from it. A b
 
 **Never let a test reach Discord.** `TestCase` calls `Http::preventStrayRequests()` and `phpunit.xml` blanks `DISCORD_WEBHOOK_URL`, because the sync queue driver runs the announcement job inline: without both, a real webhook in `.env` gets posted to for real. `SendDiscordAnnouncement` deliberately rethrows `StrayRequestException` so this fails loudly rather than being swallowed by its fail-soft catch.
 
+## Facility Defence
+
+**A Facility type is a row, not an enum case.** The rulebook's footnote to 3.3.1 says more Facility types may be researched during the game, so Control adds one mid-game. What a type *does* travels on the row as well: `protection_slots_granted` (Security grants 1) and `technology_capacity_granted` (Corporate grants 2), each meaning "per Facility of this type, added to every Facility the Corporation owns". That is where "2 x the number of Corporate Facilities" comes from — it scales with the count of Corporate Facilities, not with the type of the Facility doing the storing. A type Control invents can therefore be mechanical rather than decorative, without new code.
+
+**Slots and storage are derived, never stored.** Both move the moment a Security or Corporate Facility opens. Facilities still building do not count: they are not yours until they open.
+
+**A Facility stores the turn it opens**, not a "building" flag. A requisition raised during turn N's Setup opens during turn N+1's, so the clock moving is all it takes, and Control brings one forward by editing the number.
+
+**Position 1 is the card Runners meet first.** Installing puts the new card there and pushes the rest back, which is what "outermost" means in 3.3.4. The physical and cyber stacks are numbered independently and `FacilityDefenceService` keeps each dense at 1..n; nothing else may write a position.
+
+**Reordering costs 1 Credit per card that has to move**, which is the cards left over once the longest run keeping its relative order stays put. The rulebook's worked example (A,B,C → B,C,A costs 1; → C,B,A costs 2) is encoded in `tests/Unit/ProtectionCardMoveCostTest.php`.
+
+**A security budget is escrowed.** Placing one takes the Credits off the Corporation immediately, because that is what putting Credits on the Facility does at the table and it stops the same Credits being promised twice. `TurnEngine` hands back whatever is unspent when the Action phase ends.
+
+**Directing Security is not secret.** The rulebook has Security committing simultaneously with Runners choosing targets, but that has since changed: Security decides what to protect after the attacks land, so there is deliberately no commit-then-reveal machinery here.
+
+**Not modelled:** owning copies of cards. Buying from the Corporation shop, auctions, research grants and trading copies between Security players all happen at the table, and installing is free in the rulebook, so a card's `cost` is catalogue data. Installing reads the catalogue directly rather than consuming an inventory.
+
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, and Discord server provisioning with role assignment.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, and Facility Defence — Facilities, the Protection Card catalogue, the ordered stacks, and Directing Security.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. The provisioned `#facility-list` channel is deliberately empty until Facilities exist.
