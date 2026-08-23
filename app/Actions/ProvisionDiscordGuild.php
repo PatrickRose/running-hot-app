@@ -60,6 +60,7 @@ class ProvisionDiscordGuild
         $tally = ['roles_created' => 0, 'roles_updated' => 0, 'channels_created' => 0, 'channels_updated' => 0];
 
         $roleIds = $this->reconcileRoles($game, $guildId, $blueprint, $reason, $tally);
+        $this->giveBotTheControlRole($guildId, $roleIds, $reason);
         $this->reconcileChannels($game, $guildId, $blueprint, $roleIds, $reason, $tally);
         $this->ensureAnnouncementWebhook($game, $reason);
         $this->ensureInvite($game, $reason);
@@ -139,6 +140,48 @@ class ProvisionDiscordGuild
     }
 
     /**
+     * Put the bot in the Control role before it starts making channels.
+     *
+     * Discord drops every permission in a channel its caller cannot view, and a
+     * private channel denies View Channel to @everyone — which is the only way
+     * the bot has it. So locking a category to one team locks the bot out of it
+     * too, and it cannot then create the channels that belong inside it.
+     *
+     * Every private channel here already grants Control, so holding that role
+     * is all the access the bot needs, and it repairs a guild provisioned
+     * before this existed rather than needing anything deleted.
+     *
+     * @param  array<string, string>  $roleIds
+     */
+    private function giveBotTheControlRole(string $guildId, array $roleIds, string $reason): void
+    {
+        $controlRoleId = $roleIds[GuildBlueprint::ROLE_CONTROL] ?? null;
+
+        if ($controlRoleId === null) {
+            return;
+        }
+
+        $botUserId = (string) $this->api->currentUser()['id'];
+
+        try {
+            // Idempotent: Discord answers 204 whether or not it already had it.
+            $this->api->addRoleToMember($guildId, $botUserId, $controlRoleId, $reason);
+        } catch (DiscordApiException $exception) {
+            if (! $exception->isForbidden()) {
+                throw $exception;
+            }
+
+            throw new DiscordApiException(
+                'The bot could not give itself the Control role, which it needs in order to manage the '
+                .'game\'s private channels. Discord refuses this when the role sits above the bot\'s own '
+                .'in the server\'s role list — drag the bot\'s role above Control and provision again.',
+                $exception->status,
+                $exception->discordCode,
+            );
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $existing
      */
     private function roleHasDrifted(array $existing, PlannedRole $planned): bool
@@ -175,7 +218,10 @@ class ProvisionDiscordGuild
             $payload = $this->channelPayload($planned, $guildId, $roleIds, $channelIds);
 
             if ($existing === null) {
-                $created = $this->api->createChannel($guildId, $payload, $reason);
+                $created = $this->lockoutAware(
+                    $planned,
+                    fn (): array => $this->api->createChannel($guildId, $payload, $reason),
+                );
                 $this->record($game, $planned->kind, $planned->key, (string) $created['id'], $planned->name);
                 $channelIds[$planned->key] = (string) $created['id'];
                 $tally['channels_created']++;
@@ -189,7 +235,10 @@ class ProvisionDiscordGuild
             // A team's channel silently losing its lock is far worse than one
             // extra PATCH, and a wrong overwrite is invisible until a player
             // reads something they should not have.
-            $this->api->updateChannel($resource->discord_id, $payload, $reason);
+            $this->lockoutAware(
+                $planned,
+                fn (): array => $this->api->updateChannel($resource->discord_id, $payload, $reason),
+            );
 
             if ($resource->name !== $planned->name) {
                 $resource->update(['name' => $planned->name]);
@@ -321,6 +370,41 @@ class ProvisionDiscordGuild
 
         if (filled($invite['code'] ?? null)) {
             $game->update(['discord_invite_url' => 'https://discord.gg/'.$invite['code']]);
+        }
+    }
+
+    /**
+     * Explain a 403 on a channel rather than repeating Discord's two words.
+     *
+     * The bot holds the Control role by this point, so it can see every channel
+     * this application creates. A refusal therefore means somebody has taken
+     * Control's access away from that channel by hand, or the bot has lost
+     * Manage Channels in the guild.
+     *
+     * @template T of array<mixed>
+     *
+     * @param  callable(): T  $call
+     * @return T
+     */
+    private function lockoutAware(PlannedChannel $planned, callable $call): array
+    {
+        try {
+            return $call();
+        } catch (DiscordApiException $exception) {
+            if (! $exception->isForbidden()) {
+                throw $exception;
+            }
+
+            throw new DiscordApiException(
+                sprintf(
+                    'Discord refused to manage "%s" (Missing Permissions). Check that the Control role can '
+                    .'still see that channel and its category, and that the bot still has Manage Channels '
+                    .'and Manage Roles in the server.',
+                    $planned->name,
+                ),
+                $exception->status,
+                $exception->discordCode,
+            );
         }
     }
 

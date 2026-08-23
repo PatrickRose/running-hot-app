@@ -57,6 +57,17 @@ class DiscordApi
     }
 
     /**
+     * The bot's own account, whose snowflake is needed to give it a permission
+     * overwrite on the channels it locks down.
+     *
+     * @return array<string, mixed>
+     */
+    public function currentUser(): array
+    {
+        return $this->get('/users/@me');
+    }
+
+    /**
      * Every guild this bot is a member of.
      *
      * How Control picks a server without copying a snowflake: the bot can only

@@ -106,6 +106,93 @@ class DiscordGuildProvisioningTest extends TestCase
         }
     }
 
+    public function test_the_bot_gives_itself_the_control_role_before_making_channels(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = $this->gameWithRoster($guild);
+
+        app(ProvisionDiscordGuild::class)->handle($game);
+
+        $controlRoleId = DiscordResource::query()
+            ->where('game_id', $game->id)
+            ->where('key', 'role:control')
+            ->value('discord_id');
+
+        // Without this the bot is locked out of every channel it locks down:
+        // Discord drops all permissions in a channel its caller cannot view,
+        // and @everyone is the bot's only source of View Channel.
+        $this->assertContains($controlRoleId, $guild->members[$guild->botUserId]);
+    }
+
+    public function test_the_control_role_is_held_before_the_first_channel_is_made(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = $this->gameWithRoster($guild);
+
+        app(ProvisionDiscordGuild::class)->handle($game);
+
+        $roleGrant = null;
+        $firstChannel = null;
+
+        foreach ($guild->calls as $index => $call) {
+            if ($roleGrant === null && $call['method'] === 'PUT'
+                && str_contains($call['url'], '/members/'.$guild->botUserId.'/roles/')) {
+                $roleGrant = $index;
+            }
+
+            if ($firstChannel === null && $call['method'] === 'POST'
+                && str_ends_with($call['url'], '/channels')) {
+                $firstChannel = $index;
+            }
+        }
+
+        $this->assertNotNull($roleGrant, 'The bot never took the Control role.');
+        $this->assertNotNull($firstChannel);
+        $this->assertLessThan(
+            $firstChannel,
+            $roleGrant,
+            'The Control role must be held before any channel is created, or the first private category shuts the bot out.',
+        );
+    }
+
+    public function test_a_guild_locked_down_before_the_fix_repairs_itself(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = $this->gameWithRoster($guild);
+
+        app(ProvisionDiscordGuild::class)->handle($game);
+
+        // Somebody took the role off the bot in Discord. The next run must put
+        // it back rather than failing on the first private channel.
+        $guild->members[$guild->botUserId] = [];
+
+        app(ProvisionDiscordGuild::class)->handle($game->fresh());
+
+        $controlRoleId = DiscordResource::query()
+            ->where('game_id', $game->id)
+            ->where('key', 'role:control')
+            ->value('discord_id');
+
+        $this->assertContains($controlRoleId, $guild->members[$guild->botUserId]);
+    }
+
+    public function test_a_control_role_above_the_bots_own_is_explained(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $guild->refuseRoleGrants = true;
+
+        $game = Game::factory()->create(['discord_guild_id' => $guild->guildId]);
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/discord/provision")
+            ->assertRedirect();
+
+        $message = (string) $game->fresh()->discord_provision_message;
+
+        $this->assertStringContainsString('could not give itself the Control role', $message);
+        $this->assertStringContainsString('above the bot', $message);
+    }
+
     public function test_provisioning_creates_a_private_category_per_team(): void
     {
         $guild = (new FakeDiscordGuild)->bind();

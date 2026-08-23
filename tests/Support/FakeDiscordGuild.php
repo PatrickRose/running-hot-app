@@ -45,8 +45,19 @@ class FakeDiscordGuild
 
     private int $nextId = 1000000000000000000;
 
+    /** The snowflake GET /users/@me answers with — the bot's own account. */
+    public string $botUserId = '800000000000000001';
+
+    /**
+     * Make role assignment fail with 403, as Discord does when the role sits
+     * above the assigner's own in the guild's hierarchy.
+     */
+    public bool $refuseRoleGrants = false;
+
     public function __construct(public readonly string $guildId = '900000000000000001')
     {
+        $this->members[$this->botUserId] = [];
+
         // Every guild has a default role sharing the guild's own snowflake.
         $this->roles[$this->guildId] = [
             'id' => $this->guildId,
@@ -143,6 +154,10 @@ class FakeDiscordGuild
         $this->calls[] = ['method' => $method, 'url' => $request->url()];
 
         // Guild member roles: PUT/DELETE /guilds/{g}/members/{u}/roles/{r}
+        if ($path === '/users/@me') {
+            return Http::response(['id' => $this->botUserId, 'username' => 'running-hot-bot', 'bot' => true]);
+        }
+
         if ($path === '/users/@me/guilds') {
             return Http::response($this->botGuilds);
         }
@@ -151,6 +166,10 @@ class FakeDiscordGuild
             [, , $userId, $roleId] = $matches;
 
             if ($method === 'PUT') {
+                if ($this->refuseRoleGrants) {
+                    return Http::response(['message' => 'Missing Permissions', 'code' => 50013], 403);
+                }
+
                 $this->members[$userId] = array_values(array_unique([...($this->members[$userId] ?? []), $roleId]));
             } else {
                 $this->members[$userId] = array_values(array_diff($this->members[$userId] ?? [], [$roleId]));
