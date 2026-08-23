@@ -41,9 +41,8 @@ return [
         'client_secret' => env('DISCORD_CLIENT_SECRET'),
         'redirect' => env('DISCORD_REDIRECT_URI', '/auth/discord/callback'),
 
-        // Fallback incoming webhook for phase announcements. A game may
-        // override this with its own webhook URL.
-        'webhook_url' => env('DISCORD_WEBHOOK_URL'),
+        // Note: there is deliberately no global announcement webhook. Each game
+        // carries its own, so a game can never post to a channel by accident.
     ],
 
 ];

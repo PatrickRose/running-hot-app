@@ -171,18 +171,6 @@ class PhaseSchedulingTest extends TestCase
         Queue::assertPushed(SendDiscordAnnouncement::class, fn (SendDiscordAnnouncement $job): bool => str_contains($job->content, 'Setup phase has begun'));
     }
 
-    public function test_nothing_is_announced_without_a_webhook(): void
-    {
-        Queue::fake();
-        config(['services.discord.webhook_url' => null]);
-
-        $game = Game::factory()->create(['discord_webhook_url' => null]);
-
-        app(TurnEngine::class)->start($game);
-
-        Queue::assertNotPushed(SendDiscordAnnouncement::class);
-    }
-
     public function test_the_announcement_is_posted_to_the_games_own_webhook(): void
     {
         Http::fake();
@@ -197,30 +185,20 @@ class PhaseSchedulingTest extends TestCase
             && str_contains((string) $request['content'], 'Setup phase has begun'));
     }
 
-    public function test_a_games_own_webhook_overrides_the_configured_default(): void
+    public function test_each_game_announces_to_its_own_channel(): void
     {
         Http::fake();
-        config(['services.discord.webhook_url' => 'https://discord.com/api/webhooks/default/xyz']);
 
-        $game = Game::factory()->create([
-            'discord_webhook_url' => 'https://discord.com/api/webhooks/2/def',
+        $first = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/111/aaa',
+        ]);
+        $second = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/222/bbb',
         ]);
 
-        app(TurnEngine::class)->start($game);
+        app(TurnEngine::class)->start($first);
 
-        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://discord.com/api/webhooks/2/def');
-        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'default'));
-    }
-
-    public function test_no_request_is_made_when_no_webhook_is_configured(): void
-    {
-        Http::fake();
-        config(['services.discord.webhook_url' => null]);
-
-        $game = Game::factory()->create(['discord_webhook_url' => null]);
-
-        app(TurnEngine::class)->start($game);
-
-        Http::assertNothingSent();
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://discord.com/api/webhooks/111/aaa');
+        Http::assertNotSent(fn (Request $request): bool => $request->url() === $second->discord_webhook_url);
     }
 }

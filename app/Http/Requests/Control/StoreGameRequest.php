@@ -12,6 +12,24 @@ class StoreGameRequest extends FormRequest
     }
 
     /**
+     * Every game announces to its own channel, so the webhook is required.
+     *
+     * The pattern catches the common mispaste of a channel or invite link,
+     * which would otherwise only surface as a failed announcement mid-game.
+     *
+     * @return array<int, mixed>
+     */
+    public static function webhookRules(): array
+    {
+        return [
+            'required',
+            'url',
+            'max:2048',
+            'regex:#^https://(?:canary\\.|ptb\\.)?discord(?:app)?\\.com/api/(?:v\\d+/)?webhooks/\\d+/[\\w-]+$#',
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array
@@ -24,7 +42,7 @@ class StoreGameRequest extends FormRequest
             'action_seconds' => ['sometimes', 'integer', 'min:30', 'max:7200'],
             'team_time_seconds' => ['sometimes', 'integer', 'min:30', 'max:7200'],
             'auto_advance' => ['sometimes', 'boolean'],
-            'discord_webhook_url' => ['nullable', 'url', 'max:2048'],
+            'discord_webhook_url' => self::webhookRules(),
         ];
     }
 }

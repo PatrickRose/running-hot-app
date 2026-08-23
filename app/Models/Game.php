@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  * @property int $action_seconds
  * @property int $team_time_seconds
  * @property bool $auto_advance
- * @property string|null $discord_webhook_url
+ * @property string $discord_webhook_url
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */

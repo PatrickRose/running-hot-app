@@ -25,7 +25,13 @@ class GameFactory extends Factory
             'action_seconds' => 900,
             'team_time_seconds' => 300,
             'auto_advance' => true,
-            'discord_webhook_url' => null,
+            // A game cannot exist without somewhere to announce to. Kept
+            // fake: tests fake the HTTP client, so nothing is ever sent.
+            'discord_webhook_url' => sprintf(
+                'https://discord.com/api/webhooks/%d/%s',
+                fake()->unique()->numberBetween(100000000000000000, 999999999999999999),
+                fake()->regexify('[A-Za-z0-9_-]{24}'),
+            ),
         ];
     }
 

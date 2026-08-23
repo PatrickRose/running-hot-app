@@ -1,5 +1,6 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
 import { DiscordHandle } from '@/components/discord-handle';
+import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
 import { TrackerValue } from '@/components/tracker-value';
@@ -87,9 +88,8 @@ export default function ControlGameShow({
                     <CardHeader>
                         <CardTitle>Turn clock</CardTitle>
                         <CardDescription>
-                            {game.has_discord_webhook
-                                ? 'Phase changes are announced in Discord.'
-                                : 'No Discord webhook configured — nothing will be announced.'}
+                            Phase changes are announced in this game's Discord
+                            channel.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-wrap items-end justify-between gap-6">
@@ -248,6 +248,23 @@ export default function ControlGameShow({
                         </CardContent>
                     </Card>
                 </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Discord</CardTitle>
+                        <CardDescription>
+                            Each game announces to its own channel, so there is
+                            no global default to post to by mistake.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <GameWebhook
+                            gameId={game.id}
+                            url={game.discord_webhook_url}
+                            isPlaceholder={game.discord_webhook_is_placeholder}
+                        />
+                    </CardContent>
+                </Card>
 
                 <Card>
                     <CardHeader>

@@ -31,7 +31,8 @@ class GamePresenter
             'stability' => $game->stability,
             'civil_unrest' => $game->civil_unrest,
             'auto_advance' => $game->auto_advance,
-            'has_discord_webhook' => filled($game->discord_webhook_url ?: config('services.discord.webhook_url')),
+            'discord_webhook_url' => $game->discord_webhook_url,
+            'discord_webhook_is_placeholder' => str_contains($game->discord_webhook_url, 'replace-me'),
             'durations' => [
                 'setup_seconds' => $game->setup_seconds,
                 'action_seconds' => $game->action_seconds,

@@ -32,8 +32,6 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
-        <!-- Never announce to a real Discord channel from the test suite. -->
-        <env name="DISCORD_WEBHOOK_URL" value=""/>
         <env name="DISCORD_CLIENT_ID" value="testing"/>
         <env name="DISCORD_CLIENT_SECRET" value="testing"/>
     </php>

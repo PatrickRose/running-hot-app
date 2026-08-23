@@ -75,12 +75,8 @@ class DiscordAnnouncer
 
     public function send(Game $game, string $content): void
     {
-        $webhook = $game->discord_webhook_url ?: config('services.discord.webhook_url');
-
-        if (blank($webhook)) {
-            return;
-        }
-
-        SendDiscordAnnouncement::dispatch($webhook, $content);
+        // A game always has its own webhook, so there is nothing to fall back to
+        // and no silent no-op path.
+        SendDiscordAnnouncement::dispatch($game->discord_webhook_url, $content);
     }
 }
