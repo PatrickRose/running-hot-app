@@ -242,6 +242,10 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Tracker writes and the audit ledger | `App\Services\TrackerService` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
+| What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
+| Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
+| Handing a player their Discord roles | `App\Actions\SyncDiscordRolesForUser` |
+| Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
 | Inertia payload shaping | `App\Support\GamePresenter` |
 | Auto-advance and its backstop | `App\Jobs\AdvancePhase`, `game:tick` |
 
@@ -267,17 +271,24 @@ PHP 8.5 is the minimum, and CI runs the same version.
 
 ## Discord integration
 
-Two independent mechanisms, and it is worth keeping them straight:
+Three independent mechanisms, and it is worth keeping them straight:
 
 - **OAuth**, for identity. Players sign in with Discord; `identify` and `email` scopes only. Login matches the immutable snowflake, never the handle, because handles can be changed. A character's `discord_username` is only a claim ticket, resolved once to a `user_id`.
-- **An incoming webhook**, for announcements. Posts as itself, needs no bot token, and is fail-soft so an outage cannot stall the clock. Configurable globally or per game.
+- **An incoming webhook**, for announcements. Posts as itself, needs no bot token, and is fail-soft so an outage cannot stall the clock. Set per game — there is deliberately no global default to post to by mistake.
+- **A bot**, for provisioning. `DISCORD_BOT_TOKEN` lets the application build a game's server out: the roles, the channels, the per-team permissions, its own announcement webhook and a join invite. Needs Manage Roles, Manage Channels, Manage Webhooks and Create Instant Invite in the guild. Keep it as a third integration rather than an extension of the two above; leave the token unset and provisioning and role assignment report themselves unconfigured while sign in and announcements carry on working.
 
-Neither needs a bot today. **Planned:** having the application set up the Discord server itself — creating the channels, roles and per-team permissions for a game, and provisioning its own webhooks. That does need a bot, with Manage Channels and Manage Roles, added to the guild. Treat it as a distinct integration from the two above rather than an extension of them, and expect it to need the roster to exist first so team channels can be permissioned from it.
+**The application never creates the guild.** Discord's Create Guild endpoint only works for bots in fewer than ten guilds and hands back a server nobody is a member of, so Control makes the server by hand, invites the bot, and pastes the snowflake onto the game. Snowflakes are stored as strings — a bare one is a numeric string that PHP will silently coerce to an integer array key, which is why `ProvisionDiscordGuild` indexes them behind an `id:` prefix.
+
+**Provisioning reconciles; it never resets.** Every object the application creates is recorded in `discord_resources` against a stable key (`role:control`, `channel:gang:7:text`), so a re-run renames what drifted, rebuilds what someone deleted by hand, and adds whatever the roster has grown. It is safe mid-game, and it never deletes: a gang leaving the game does not take its channel history with it. The old Discord bot's `reset` command did delete and rebuild — do not go back to that. Anything in the guild the application did not create belongs to Control and is left alone.
+
+The roster has to exist first, since team channels are permissioned from it. A blueprint for a game with no corporations and no gangs is just Control plus the common channels, which is correct rather than an error.
+
+**Roles are handed out on every sign in**, not just the first — same reasoning as character claiming. Assigning a role needs the player to already be a guild member: Discord answers 404 otherwise, and the only way round it is the `guilds.join` scope, which would widen login beyond the `identify`/`email` it deliberately asks for. So a non-member is recorded as `not_a_member` in `discord_member_syncs`, the dashboard shows them the invite, and the next sign in tries again. A sync only ever adds or removes this game's own recorded roles, so a role Control granted by hand survives it.
 
 **Never let a test reach Discord.** `TestCase` calls `Http::preventStrayRequests()` and `phpunit.xml` blanks `DISCORD_WEBHOOK_URL`, because the sync queue driver runs the announcement job inline: without both, a real webhook in `.env` gets posted to for real. `SendDiscordAnnouncement` deliberately rethrows `StrayRequestException` so this fails loudly rather than being swallowed by its fail-soft catch.
 
 ## Built so far
 
-The turn engine, the trackers, and Discord-handle character claiming.
+The turn engine, the trackers, Discord-handle character claiming, and Discord server provisioning with role assignment.
 
-**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel.
+**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. The provisioned `#facility-list` channel is deliberately empty until Facilities exist.

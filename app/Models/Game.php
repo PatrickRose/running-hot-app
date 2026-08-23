@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DiscordProvisionStatus;
 use App\Enums\GameStatus;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,6 +22,11 @@ use Illuminate\Support\Carbon;
  * @property int $team_time_seconds
  * @property bool $auto_advance
  * @property string $discord_webhook_url
+ * @property string|null $discord_guild_id
+ * @property string|null $discord_invite_url
+ * @property DiscordProvisionStatus $discord_provision_status
+ * @property string|null $discord_provision_message
+ * @property Carbon|null $discord_provisioned_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -28,6 +34,8 @@ use Illuminate\Support\Carbon;
     'name', 'status', 'stability', 'civil_unrest',
     'setup_seconds', 'action_seconds', 'team_time_seconds',
     'auto_advance', 'discord_webhook_url',
+    'discord_guild_id', 'discord_invite_url',
+    'discord_provision_status', 'discord_provision_message', 'discord_provisioned_at',
 ])]
 class Game extends Model
 {
@@ -42,6 +50,8 @@ class Game extends Model
         return [
             'status' => GameStatus::class,
             'auto_advance' => 'boolean',
+            'discord_provision_status' => DiscordProvisionStatus::class,
+            'discord_provisioned_at' => 'datetime',
         ];
     }
 
@@ -73,6 +83,26 @@ class Game extends Model
     public function trackerAdjustments(): HasMany
     {
         return $this->hasMany(TrackerAdjustment::class);
+    }
+
+    /** @return HasMany<DiscordResource, $this> */
+    public function discordResources(): HasMany
+    {
+        return $this->hasMany(DiscordResource::class);
+    }
+
+    /** @return HasMany<DiscordMemberSync, $this> */
+    public function discordMemberSyncs(): HasMany
+    {
+        return $this->hasMany(DiscordMemberSync::class);
+    }
+
+    /**
+     * Whether this game has a Discord server the application can work on.
+     */
+    public function hasDiscordGuild(): bool
+    {
+        return filled($this->discord_guild_id);
     }
 
     public function currentTurn(): ?Turn

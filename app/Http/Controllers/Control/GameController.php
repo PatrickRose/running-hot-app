@@ -41,6 +41,7 @@ class GameController extends Controller
             'game' => $presenter->summary($game),
             'trackers' => $presenter->trackers($game),
             'adjustments' => $presenter->recentAdjustments($game),
+            'discordSyncs' => $presenter->discordMemberSyncs($game),
         ]);
     }
 
