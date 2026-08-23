@@ -4,8 +4,11 @@ namespace App\Support;
 
 use App\Enums\Tracker;
 use App\Models\Character;
+use App\Models\DiscordMemberSync;
 use App\Models\Game;
 use App\Models\Phase;
+use App\Services\Discord\DiscordApi;
+use Throwable;
 
 /**
  * Shapes game state for the Inertia front end.
@@ -39,8 +42,96 @@ class GamePresenter
                 'team_time_seconds' => $game->team_time_seconds,
             ],
             'phase' => $phase === null ? null : $this->phase($phase),
+            'discord' => $this->discord($game),
             'server_time' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * The state of the game's Discord server: where it is, whether the
+     * application has provisioned it, and what it made.
+     *
+     * @return array<string, mixed>
+     */
+    public function discord(Game $game): array
+    {
+        $api = app(DiscordApi::class);
+
+        return [
+            'guild_id' => $game->discord_guild_id,
+            'invite_url' => $game->discord_invite_url,
+            'bot_configured' => $api->isConfigured(),
+            'provision_status' => $game->discord_provision_status->value,
+            'provision_status_label' => $game->discord_provision_status->label(),
+            'provision_in_progress' => $game->discord_provision_status->isInProgress(),
+            'provision_message' => $game->discord_provision_message,
+            'provisioned_at' => $game->discord_provisioned_at?->toIso8601String(),
+            'resource_counts' => $game->discordResources()
+                ->selectRaw('kind, count(*) as total')
+                ->groupBy('kind')
+                ->pluck('total', 'kind')
+                ->all(),
+        ];
+    }
+
+    /**
+     * The servers the bot has been added to, for Control to choose from.
+     *
+     * Saves copying a snowflake by hand. Failure is reported rather than
+     * thrown: a bot token that has been revoked should leave the panel usable,
+     * with the manual field still there.
+     *
+     * @return array<string, mixed>
+     */
+    public function botGuilds(): array
+    {
+        $api = app(DiscordApi::class);
+
+        if (! $api->isConfigured()) {
+            return ['guilds' => [], 'error' => 'No bot token is configured.'];
+        }
+
+        try {
+            $guilds = $api->botGuilds();
+        } catch (Throwable $exception) {
+            return ['guilds' => [], 'error' => $exception->getMessage()];
+        }
+
+        return [
+            'guilds' => array_map(fn (array $guild): array => [
+                'id' => (string) $guild['id'],
+                'name' => (string) ($guild['name'] ?? $guild['id']),
+            ], $guilds),
+            'error' => null,
+        ];
+    }
+
+    /**
+     * Who the application has and has not managed to give roles to.
+     *
+     * The rows that matter to Control are the players who have signed in but
+     * never joined the Discord server: without a nudge they sit in the game
+     * unable to see any of their team's channels.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function discordMemberSyncs(Game $game): array
+    {
+        return $game->discordMemberSyncs()
+            ->with('user:id,name,discord_username')
+            ->get()
+            ->sortBy(fn (DiscordMemberSync $sync): string => $sync->user->name)
+            ->values()
+            ->map(fn (DiscordMemberSync $sync): array => [
+                'id' => $sync->id,
+                'user' => $sync->user->name,
+                'discord_username' => $sync->user->discord_username,
+                'status' => $sync->status->value,
+                'status_label' => $sync->status->label(),
+                'message' => $sync->message,
+                'role_count' => count($sync->role_ids ?? []),
+                'synced_at' => $sync->synced_at?->toIso8601String(),
+            ])->all();
     }
 
     /**

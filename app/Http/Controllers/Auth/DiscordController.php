@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Actions\ClaimCharactersForUser;
 use App\Http\Controllers\Controller;
+use App\Jobs\SyncDiscordRoles;
 use App\Models\Character;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -68,6 +69,13 @@ class DiscordController extends Controller
         // this on every sign in, not just the first, means a handle added to the
         // roster after someone has already logged in still reaches them.
         $claimed = $this->claimCharacters->handle($user);
+
+        // Hand out this player's Discord roles for every game they are in.
+        // Queued rather than inline: signing in must not wait on Discord, and
+        // must not fail if Discord is having a bad day. Like the claim above
+        // this runs on every sign in, so a roster change made after someone has
+        // already logged in still reaches them the next time they do.
+        SyncDiscordRoles::dispatch($user->id);
 
         Auth::login($user, remember: true);
 

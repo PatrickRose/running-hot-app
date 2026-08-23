@@ -43,6 +43,21 @@ return [
 
         // Note: there is deliberately no global announcement webhook. Each game
         // carries its own, so a game can never post to a channel by accident.
+
+        // Bot credentials, for provisioning a game's guild and assigning roles.
+        // This is a separate integration from OAuth and from the announcement
+        // webhook: it is the only one that needs a bot in the guild, with
+        // Manage Roles, Manage Channels, Manage Webhooks and Create Instant
+        // Invite. Leave the token unset and every bot-backed feature simply
+        // reports itself unconfigured rather than half working.
+        'bot_token' => env('DISCORD_BOT_TOKEN'),
+        'api_base' => env('DISCORD_API_BASE', 'https://discord.com/api/v10'),
+
+        // Where Discord sends Control back after they pick a server to add the
+        // bot to. Must be registered as a redirect in the Discord Developer
+        // Portal, alongside the login one. Left unset it falls back to this
+        // application's own route, which is right unless a proxy rewrites URLs.
+        'bot_redirect' => env('DISCORD_BOT_REDIRECT_URI'),
     ],
 
 ];

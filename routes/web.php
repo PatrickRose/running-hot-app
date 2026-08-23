@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\DiscordController;
 use App\Http\Controllers\Control\CharacterController;
+use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\GameController;
 use App\Http\Controllers\Control\PhaseController;
 use App\Http\Controllers\Control\TrackerController;
@@ -27,6 +28,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('games/{game}', [GameController::class, 'show'])->name('games.show');
             Route::post('games/{game}/finish', [GameController::class, 'finish'])->name('games.finish');
             Route::post('games/{game}/webhook', [GameController::class, 'updateWebhook'])->name('games.webhook');
+
+            Route::post('games/{game}/discord', [DiscordGuildController::class, 'update'])->name('games.discord');
+            Route::get('games/{game}/discord/connect', [DiscordGuildController::class, 'connect'])
+                ->name('games.discord.connect');
+            // Fixed URI, so it carries no game: the pending game is held in the
+            // session and matched against Discord's state parameter.
+            Route::get('discord/callback', [DiscordGuildController::class, 'callback'])
+                ->name('games.discord.callback');
+            Route::post('games/{game}/discord/provision', [DiscordGuildController::class, 'provision'])
+                ->name('games.discord.provision');
+            Route::post('games/{game}/discord/sync-roles', [DiscordGuildController::class, 'syncRoles'])
+                ->name('games.discord.sync-roles');
 
             Route::post('games/{game}/phase/start', [PhaseController::class, 'start'])->name('phase.start');
             Route::post('games/{game}/phase/advance', [PhaseController::class, 'advance'])->name('phase.advance');

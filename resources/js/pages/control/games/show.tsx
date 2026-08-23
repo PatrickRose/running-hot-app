@@ -1,5 +1,6 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
 import { DiscordHandle } from '@/components/discord-handle';
+import { GameDiscordPanel } from '@/components/game-discord';
 import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
@@ -18,6 +19,8 @@ import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import type {
     CharacterSubject,
+    DiscordBotGuilds,
+    DiscordMemberSync,
     GameSummary,
     GameTrackers,
     NamedSubject,
@@ -28,6 +31,8 @@ type Props = {
     game: GameSummary;
     trackers: GameTrackers;
     adjustments: TrackerAdjustment[];
+    discordSyncs: DiscordMemberSync[];
+    discordGuilds?: DiscordBotGuilds;
 };
 
 const CORPORATION_TRACKERS: Array<[string, string]> = [
@@ -40,10 +45,15 @@ export default function ControlGameShow({
     game,
     trackers,
     adjustments,
+    discordSyncs,
+    discordGuilds,
 }: Props) {
     // Control is not the only person moving these numbers, so keep the panel
-    // fresh without anyone having to reload during a live game.
-    usePoll(5000, { only: ['game', 'trackers', 'adjustments'] });
+    // fresh without anyone having to reload during a live game. Provisioning
+    // runs on the queue, so this poll is also how its progress arrives.
+    usePoll(5000, {
+        only: ['game', 'trackers', 'adjustments', 'discordSyncs'],
+    });
 
     const { props } = usePage<{ errors: Record<string, string> }>();
     const phase = game.phase;
@@ -251,10 +261,11 @@ export default function ControlGameShow({
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Discord</CardTitle>
+                        <CardTitle>Announcements</CardTitle>
                         <CardDescription>
                             Each game announces to its own channel, so there is
                             no global default to post to by mistake.
+                            Provisioning the server below fills this in.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -265,6 +276,13 @@ export default function ControlGameShow({
                         />
                     </CardContent>
                 </Card>
+
+                <GameDiscordPanel
+                    gameId={game.id}
+                    discordState={game.discord}
+                    syncs={discordSyncs}
+                    botGuilds={discordGuilds}
+                />
 
                 <Card>
                     <CardHeader>

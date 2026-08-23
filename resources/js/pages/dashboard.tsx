@@ -33,13 +33,24 @@ type PlayerCharacter = {
     } | null;
 };
 
+type DiscordJoin = {
+    invite_url: string | null;
+    game_name: string;
+};
+
 type Props = {
     game: GameSummary | null;
     characters: PlayerCharacter[];
     isControl: boolean;
+    discordJoin: DiscordJoin | null;
 };
 
-export default function Dashboard({ game, characters, isControl }: Props) {
+export default function Dashboard({
+    game,
+    characters,
+    isControl,
+    discordJoin,
+}: Props) {
     usePoll(5000, { only: ['game', 'characters'] });
 
     return (
@@ -63,6 +74,38 @@ export default function Dashboard({ game, characters, isControl }: Props) {
                     >
                         Open the Control panel →
                     </Link>
+                )}
+
+                {discordJoin && (
+                    <Card className="border-amber-500/50">
+                        <CardHeader>
+                            <CardTitle>Join the Discord server</CardTitle>
+                            <CardDescription>
+                                The game is played in Discord, and you are not
+                                in the server for {discordJoin.game_name} yet.
+                                Until you join you will not see any of your
+                                team's channels.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {discordJoin.invite_url ? (
+                                <a
+                                    href={discordJoin.invite_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sm text-primary underline-offset-4 hover:underline"
+                                >
+                                    Open the invite →
+                                </a>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    Ask Control for an invite link. Your roles
+                                    are handed out automatically the next time
+                                    you sign in after joining.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
                 )}
 
                 {game?.phase && (

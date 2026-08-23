@@ -15,6 +15,40 @@ export type PhaseSummary = {
     upkeep_applied: boolean;
 };
 
+export type DiscordProvisionStatus =
+    'idle' | 'queued' | 'running' | 'completed' | 'failed';
+
+export type GameDiscord = {
+    guild_id: string | null;
+    invite_url: string | null;
+    /** False when DISCORD_BOT_TOKEN is unset, which disables provisioning. */
+    bot_configured: boolean;
+    provision_status: DiscordProvisionStatus;
+    provision_status_label: string;
+    provision_in_progress: boolean;
+    provision_message: string | null;
+    provisioned_at: string | null;
+    /** Counts of what the application has created, keyed by resource kind. */
+    resource_counts: Record<string, number>;
+};
+
+/** Loaded on demand: the servers the bot has been added to. */
+export type DiscordBotGuilds = {
+    guilds: Array<{ id: string; name: string }>;
+    error: string | null;
+};
+
+export type DiscordMemberSync = {
+    id: number;
+    user: string;
+    discord_username: string | null;
+    status: 'synced' | 'not_a_member' | 'failed';
+    status_label: string;
+    message: string | null;
+    role_count: number;
+    synced_at: string | null;
+};
+
 export type GameSummary = {
     id: number;
     name: string;
@@ -31,6 +65,7 @@ export type GameSummary = {
         team_time_seconds: number;
     };
     phase: PhaseSummary | null;
+    discord: GameDiscord;
     server_time: string;
 };
 

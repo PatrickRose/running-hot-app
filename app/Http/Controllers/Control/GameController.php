@@ -41,6 +41,11 @@ class GameController extends Controller
             'game' => $presenter->summary($game),
             'trackers' => $presenter->trackers($game),
             'adjustments' => $presenter->recentAdjustments($game),
+            'discordSyncs' => $presenter->discordMemberSyncs($game),
+            // Optional, so opening the panel never calls Discord. Control asks
+            // for it with a partial reload when they want to pick a server the
+            // bot is already in.
+            'discordGuilds' => Inertia::optional(fn (): array => $presenter->botGuilds()),
         ]);
     }
 
