@@ -263,6 +263,17 @@ php artisan game:tick     # advance any phase whose clock has expired
 
 PHP 8.5 is the minimum, and CI runs the same version.
 
+## Discord integration
+
+Two independent mechanisms, and it is worth keeping them straight:
+
+- **OAuth**, for identity. Players sign in with Discord; `identify` and `email` scopes only. Login matches the immutable snowflake, never the handle, because handles can be changed. A character's `discord_username` is only a claim ticket, resolved once to a `user_id`.
+- **An incoming webhook**, for announcements. Posts as itself, needs no bot token, and is fail-soft so an outage cannot stall the clock. Configurable globally or per game.
+
+Neither needs a bot today. **Planned:** having the application set up the Discord server itself — creating the channels, roles and per-team permissions for a game, and provisioning its own webhooks. That does need a bot, with Manage Channels and Manage Roles, added to the guild. Treat it as a distinct integration from the two above rather than an extension of them, and expect it to need the roster to exist first so team channels can be permissioned from it.
+
+**Never let a test reach Discord.** `TestCase` calls `Http::preventStrayRequests()` and `phpunit.xml` blanks `DISCORD_WEBHOOK_URL`, because the sync queue driver runs the announcement job inline: without both, a real webhook in `.env` gets posted to for real. `SendDiscordAnnouncement` deliberately rethrows `StrayRequestException` so this fails loudly rather than being swallowed by its fail-soft catch.
+
 ## Built so far
 
-The turn engine and the trackers. **Not yet built:** Runs, the Council, the Research equation game, and Facility defence. Runs are the obvious next piece — the dice, alerts and escalating challenge strength are where hand-resolution hurts most, and they depend on facility and protection-card state existing first.
+The turn engine, the trackers, and Discord-handle character claiming. **Not yet built:** Runs, the Council, the Research equation game, and Facility defence. Runs are the obvious next piece — the dice, alerts and escalating challenge strength are where hand-resolution hurts most, and they depend on facility and protection-card state existing first.

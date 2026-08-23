@@ -10,7 +10,9 @@ use App\Jobs\SendDiscordAnnouncement;
 use App\Models\Game;
 use App\Services\TurnEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -179,5 +181,46 @@ class PhaseSchedulingTest extends TestCase
         app(TurnEngine::class)->start($game);
 
         Queue::assertNotPushed(SendDiscordAnnouncement::class);
+    }
+
+    public function test_the_announcement_is_posted_to_the_games_own_webhook(): void
+    {
+        Http::fake();
+
+        $game = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/1/abc',
+        ]);
+
+        app(TurnEngine::class)->start($game);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://discord.com/api/webhooks/1/abc'
+            && str_contains((string) $request['content'], 'Setup phase has begun'));
+    }
+
+    public function test_a_games_own_webhook_overrides_the_configured_default(): void
+    {
+        Http::fake();
+        config(['services.discord.webhook_url' => 'https://discord.com/api/webhooks/default/xyz']);
+
+        $game = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/2/def',
+        ]);
+
+        app(TurnEngine::class)->start($game);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://discord.com/api/webhooks/2/def');
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'default'));
+    }
+
+    public function test_no_request_is_made_when_no_webhook_is_configured(): void
+    {
+        Http::fake();
+        config(['services.discord.webhook_url' => null]);
+
+        $game = Game::factory()->create(['discord_webhook_url' => null]);
+
+        app(TurnEngine::class)->start($game);
+
+        Http::assertNothingSent();
     }
 }

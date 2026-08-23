@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\StrayRequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -42,6 +43,11 @@ class SendDiscordAnnouncement implements ShouldQueue
                 ->retry(2, 250, throw: false)
                 ->post($this->webhookUrl, $payload)
                 ->throw();
+        } catch (StrayRequestException $exception) {
+            // Only reachable under Http::preventStrayRequests(), i.e. in tests.
+            // Swallowing it there would let a test quietly believe it had
+            // exercised Discord, so this one is deliberately loud.
+            throw $exception;
         } catch (Throwable $exception) {
             Log::warning('Discord announcement failed.', [
                 'message' => $exception->getMessage(),

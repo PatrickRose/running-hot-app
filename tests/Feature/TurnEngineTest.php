@@ -23,6 +23,8 @@ class TurnEngineTest extends TestCase
 
     public function test_starting_a_game_opens_turn_one_setup(): void
     {
+        $this->freezeTime();
+
         $game = Game::factory()->create(['setup_seconds' => 900]);
 
         $phase = $this->engine()->start($game);
@@ -69,6 +71,8 @@ class TurnEngineTest extends TestCase
 
     public function test_each_phase_uses_its_own_configured_duration(): void
     {
+        $this->freezeTime();
+
         $game = Game::factory()->create([
             'setup_seconds' => 600,
             'action_seconds' => 1200,
