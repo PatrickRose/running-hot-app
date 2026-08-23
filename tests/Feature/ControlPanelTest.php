@@ -10,6 +10,7 @@ use App\Models\Game;
 use App\Models\User;
 use App\Services\TurnEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -237,13 +238,59 @@ class ControlPanelTest extends TestCase
         ]);
     }
 
-    public function test_a_game_cannot_be_created_without_a_webhook(): void
+    /**
+     * Provisioning a game's Discord server creates the webhook, so requiring
+     * one at creation asked Control for the thing about to be made for them.
+     */
+    public function test_a_game_can_be_created_without_a_webhook(): void
     {
         $this->actingAs($this->control())
-            ->post('/control/games', ['name' => 'No Channel'])
-            ->assertSessionHasErrors('discord_webhook_url');
+            ->post('/control/games', ['name' => 'No Channel Yet'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
 
-        $this->assertDatabaseMissing('games', ['name' => 'No Channel']);
+        $this->assertDatabaseHas('games', [
+            'name' => 'No Channel Yet',
+            'discord_webhook_url' => null,
+        ]);
+    }
+
+    public function test_creating_a_game_can_go_straight_on_to_its_discord_server(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        // Setting the server up is the rest of creating a game, so creation
+        // hands over to the bot-add flow rather than stopping at a made game.
+        $this->actingAs($this->control())
+            ->post('/control/games', ['name' => 'Straight To Discord', 'connect_discord' => '1'])
+            ->assertSessionHasNoErrors()
+            ->assertRedirectContains('/discord/connect');
+
+        $game = Game::query()->where('name', 'Straight To Discord')->sole();
+
+        $this->assertNull($game->discord_webhook_url, 'Provisioning is what creates the webhook.');
+    }
+
+    public function test_creating_a_game_without_the_flag_lands_on_the_game(): void
+    {
+        $response = $this->actingAs($this->control())
+            ->post('/control/games', ['name' => 'No Discord Yet']);
+
+        $game = Game::query()->where('name', 'No Discord Yet')->sole();
+
+        $response->assertRedirect("/control/games/{$game->id}");
+    }
+
+    public function test_a_game_without_a_webhook_announces_nowhere_instead_of_failing(): void
+    {
+        $game = Game::factory()->withoutDiscordWebhook()->create();
+
+        // The clock must run whether or not Discord is set up yet, and there is
+        // no global webhook to fall back to.
+        app(TurnEngine::class)->start($game);
+
+        $this->assertNotNull($game->fresh()->currentPhase());
+        Http::assertNothingSent();
     }
 
     /**
@@ -293,16 +340,20 @@ class ControlPanelTest extends TestCase
         );
     }
 
-    public function test_a_webhook_cannot_be_cleared(): void
+    /**
+     * A dead webhook that looks configured is worse than none: every
+     * announcement fails and nothing on the panel says why.
+     */
+    public function test_a_webhook_can_be_cleared(): void
     {
         $game = Game::factory()->create();
-        $original = $game->discord_webhook_url;
 
         $this->actingAs($this->control())
             ->post("/control/games/{$game->id}/webhook", ['discord_webhook_url' => ''])
-            ->assertSessionHasErrors('discord_webhook_url');
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame($original, $game->fresh()->discord_webhook_url);
+        $this->assertNull($game->fresh()->discord_webhook_url);
     }
 
     public function test_a_player_cannot_repoint_the_webhook(): void

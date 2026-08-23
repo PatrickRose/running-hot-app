@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\StoreGameRequest;
 use App\Http\Requests\Control\UpdateGameWebhookRequest;
 use App\Models\Game;
+use App\Services\Discord\DiscordApi;
 use App\Services\TurnEngine;
 use App\Support\GamePresenter;
 use Illuminate\Http\RedirectResponse;
@@ -24,12 +25,21 @@ class GameController extends Controller
 
         return Inertia::render('control/games/index', [
             'games' => $games,
+            // Whether creating a game can offer to build its Discord server.
+            'botConfigured' => app(DiscordApi::class)->isConfigured(),
         ]);
     }
 
     public function store(StoreGameRequest $request): RedirectResponse
     {
-        $game = Game::create($request->validated());
+        $game = Game::create($request->gameAttributes());
+
+        // Setting the Discord server up is the rest of creating a game, so go
+        // straight on to it: the bot-add flow ends by provisioning, which is
+        // what produces the announcement webhook.
+        if ($request->shouldConnectDiscord()) {
+            return to_route('control.games.discord.connect', $game);
+        }
 
         return to_route('control.games.show', $game)
             ->with('status', 'Game created.');

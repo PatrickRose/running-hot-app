@@ -272,7 +272,6 @@ export default function ControlGameShow({
                         <GameWebhook
                             gameId={game.id}
                             url={game.discord_webhook_url}
-                            isPlaceholder={game.discord_webhook_is_placeholder}
                         />
                     </CardContent>
                 </Card>

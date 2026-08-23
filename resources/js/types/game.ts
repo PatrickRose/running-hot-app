@@ -57,8 +57,8 @@ export type GameSummary = {
     stability: number;
     civil_unrest: number;
     auto_advance: boolean;
-    discord_webhook_url: string;
-    discord_webhook_is_placeholder: boolean;
+    /** Null until the game's Discord server is provisioned. */
+    discord_webhook_url: string | null;
     durations: {
         setup_seconds: number;
         action_seconds: number;

@@ -15,7 +15,13 @@ import { Label } from '@/components/ui/label';
 import { index, show, store } from '@/routes/control/games';
 import type { GameSummary } from '@/types/game';
 
-export default function ControlGamesIndex({ games }: { games: GameSummary[] }) {
+export default function ControlGamesIndex({
+    games,
+    botConfigured,
+}: {
+    games: GameSummary[];
+    botConfigured: boolean;
+}) {
     return (
         <>
             <Head title="Control — Games" />
@@ -31,7 +37,7 @@ export default function ControlGamesIndex({ games }: { games: GameSummary[] }) {
                         <CardTitle>New game</CardTitle>
                         <CardDescription>
                             Phase lengths default to the rulebook's 15 / 15 / 5
-                            minutes.
+                            minutes. Everything here can be changed afterwards.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -93,26 +99,52 @@ export default function ControlGamesIndex({ games }: { games: GameSummary[] }) {
                                         ))}
                                     </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="discord_webhook_url">
-                                            Discord webhook URL
-                                        </Label>
-                                        <p className="text-sm text-muted-foreground">
-                                            Where this game announces its phase
-                                            changes. Channel settings →
-                                            Integrations → Webhooks.
-                                        </p>
-                                        <Input
-                                            id="discord_webhook_url"
-                                            name="discord_webhook_url"
-                                            type="url"
-                                            required
-                                            placeholder="https://discord.com/api/webhooks/…"
+                                    <label className="flex items-start gap-2">
+                                        <input
+                                            type="checkbox"
+                                            name="connect_discord"
+                                            value="1"
+                                            defaultChecked={botConfigured}
+                                            disabled={!botConfigured}
+                                            className="mt-1"
                                         />
-                                        <InputError
-                                            message={errors.discord_webhook_url}
-                                        />
-                                    </div>
+                                        <span className="grid gap-1">
+                                            <span className="text-sm font-medium">
+                                                Set up its Discord server next
+                                            </span>
+                                            <span className="text-sm text-muted-foreground">
+                                                {botConfigured
+                                                    ? 'Takes you to Discord to pick a server, then builds the roles and channels and creates the announcement webhook.'
+                                                    : 'Needs DISCORD_BOT_TOKEN. Without it you can paste a webhook below instead.'}
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    <details className="text-sm">
+                                        <summary className="cursor-pointer text-muted-foreground">
+                                            Announcement webhook (optional)
+                                        </summary>
+                                        <div className="grid gap-2 pt-3">
+                                            <p className="text-muted-foreground">
+                                                Only needed if the application
+                                                is not building this game's
+                                                Discord server. Provisioning
+                                                creates one otherwise.
+                                            </p>
+                                            <Input
+                                                id="discord_webhook_url"
+                                                name="discord_webhook_url"
+                                                type="url"
+                                                placeholder="https://discord.com/api/webhooks/…"
+                                                className="font-mono text-xs"
+                                            />
+                                            <InputError
+                                                message={
+                                                    errors.discord_webhook_url
+                                                }
+                                            />
+                                        </div>
+                                    </details>
 
                                     <Button
                                         type="submit"
