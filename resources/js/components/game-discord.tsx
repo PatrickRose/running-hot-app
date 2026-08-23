@@ -67,6 +67,10 @@ export function GameDiscordPanel({
         .map(([kind, total]) => `${total} ${RESOURCE_LABELS[kind] ?? kind}`)
         .join(', ');
 
+    const connectLabel = discordState.guild_id
+        ? 'Re-add the bot'
+        : 'Add the bot to a Discord server';
+
     const loadServers = () => {
         setPickingServer(true);
         router.reload({ only: ['discordGuilds'] });
@@ -93,16 +97,20 @@ export function GameDiscordPanel({
 
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                            onClick={() =>
-                                router.visit(connect.url({ game: gameId }))
-                            }
-                            disabled={!discordState.bot_configured}
-                        >
-                            {discordState.guild_id
-                                ? 'Re-add the bot'
-                                : 'Add the bot to a Discord server'}
-                        </Button>
+                        {/* A real anchor, not an Inertia visit: this leaves the
+                            application for discord.com, and an XHR cannot follow
+                            a redirect to another origin. Rendered as a plain
+                            disabled button when there is no bot token, since an
+                            <a> ignores the disabled attribute entirely. */}
+                        {discordState.bot_configured ? (
+                            <Button asChild>
+                                <a href={connect.url({ game: gameId })}>
+                                    {connectLabel}
+                                </a>
+                            </Button>
+                        ) : (
+                            <Button disabled>{connectLabel}</Button>
+                        )}
 
                         {discordState.guild_id ? (
                             <span className="font-mono text-xs text-muted-foreground">

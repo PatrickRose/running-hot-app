@@ -14,7 +14,8 @@ use App\Services\Discord\DiscordApi;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * Control's half of the bot integration: which server a game lives in, and the
@@ -37,7 +38,7 @@ class DiscordGuildController extends Controller
      * own server picker, and on the way back it tells us which one was chosen,
      * so nobody has to turn on Developer Mode and copy a snowflake.
      */
-    public function connect(Game $game, Request $request): SymfonyRedirectResponse|RedirectResponse
+    public function connect(Game $game, Request $request): SymfonyResponse
     {
         $clientId = config('services.discord.client_id');
 
@@ -54,9 +55,15 @@ class DiscordGuildController extends Controller
             'game_id' => $game->id,
         ]);
 
+        // Inertia::location rather than a plain redirect: an XHR cannot follow a
+        // 302 to another origin, so Discord would answer the preflight with no
+        // CORS headers and the visit would die as a network error. This answers
+        // an Inertia request with a 409 telling the client to navigate properly,
+        // and a normal request with an ordinary redirect.
+        //
         // response_type=code with a redirect_uri is what makes Discord hand the
         // chosen guild back; scope=bot alone would just add the bot and stop.
-        return redirect()->away('https://discord.com/oauth2/authorize?'.http_build_query([
+        return Inertia::location('https://discord.com/oauth2/authorize?'.http_build_query([
             'client_id' => $clientId,
             'permissions' => (string) DiscordApi::BOT_PERMISSIONS,
             'scope' => 'bot',

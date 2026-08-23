@@ -6,6 +6,7 @@ use App\Actions\ProvisionDiscordGuild;
 use App\Enums\DiscordProvisionStatus;
 use App\Enums\DiscordResourceKind;
 use App\Enums\DiscordSyncStatus;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Corporation;
 use App\Models\DiscordMemberSync;
 use App\Models\DiscordResource;
@@ -14,6 +15,7 @@ use App\Models\Gang;
 use App\Models\User;
 use App\Services\Discord\DiscordApi;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\Support\FakeDiscordGuild;
 use Tests\TestCase;
 
@@ -354,6 +356,36 @@ class DiscordGuildProvisioningTest extends TestCase
 
         // No server yet, so Discord must let them choose one.
         $this->assertArrayNotHasKey('guild_id', $query);
+    }
+
+    public function test_connecting_from_an_inertia_visit_tells_the_client_to_navigate(): void
+    {
+        config()->set('services.discord.client_id', 'app-123');
+
+        $game = Game::factory()->create();
+
+        // An XHR cannot follow a 302 to another origin: the browser preflights
+        // discord.com, gets no CORS headers, and the visit dies as a network
+        // error. Inertia's answer is a 409 naming where to go, which the client
+        // turns into a real navigation.
+        $response = $this->actingAs($this->control())
+            ->withHeaders([
+                'X-Inertia' => 'true',
+                // Without the matching version, Inertia answers with its own
+                // asset-mismatch 409 and the assertion below would pass for
+                // entirely the wrong reason. The middleware derives it from the
+                // Vite manifest, so ask it rather than guessing.
+                'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)
+                    ->version(Request::create('/')),
+            ])
+            ->get("/control/games/{$game->id}/discord/connect");
+
+        $response->assertStatus(409);
+
+        $this->assertStringStartsWith(
+            'https://discord.com/oauth2/authorize',
+            (string) $response->headers->get('X-Inertia-Location'),
+        );
     }
 
     public function test_re_adding_the_bot_preselects_the_games_existing_server(): void
