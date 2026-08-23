@@ -209,6 +209,8 @@ This application runs the mechanics and timing for **Running Hot**, a pre-cyberp
 
 The rulebook is the source of truth. When a rule and this codebase disagree, the rulebook wins.
 
+It lives at `docs/running-hot-rulebook.pdf`, with a grepped-friendly extraction beside it at `docs/running-hot-rulebook.txt` — reach for the text first, since reading the PDF costs thirty pages. The text is derived and regenerable; the PDF is authoritative, and the research suit icons do not survive extraction.
+
 ## The shape of a game
 
 A turn is three phases on a wall clock — **Setup (15m) → Action (15m) → Team Time (5m)** — and the game runs many turns back to back during a single live session. Control (the organisers) sit above the whole thing and can override anything.
@@ -276,4 +278,6 @@ Neither needs a bot today. **Planned:** having the application set up the Discor
 
 ## Built so far
 
-The turn engine, the trackers, and Discord-handle character claiming. **Not yet built:** Runs, the Council, the Research equation game, and Facility defence. Runs are the obvious next piece — the dice, alerts and escalating challenge strength are where hand-resolution hurts most, and they depend on facility and protection-card state existing first.
+The turn engine, the trackers, and Discord-handle character claiming.
+
+**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel.
