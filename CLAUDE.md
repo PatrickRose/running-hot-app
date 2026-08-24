@@ -224,7 +224,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 **Never invent a rule the rulebook does not state.** Where the rules are silent, expose a value for Control to set rather than deriving one. Three live examples:
 - Income is *not* calculated from anything. It is the abstraction of a corporation's stock price, so stock price is not modelled at all.
 - Removing a Tag costs 3 Credits and is the player's choice, so upkeep never does it automatically.
-- A Facility build cost is passed in, not derived. The rulebook says the CEO provides "the required Credits" without saying what they are, and more Corporate Facilities is a *reason* for Control to raise Income rather than a formula that raises it.
+- A Facility build cost comes from its type's own price on the type sheet, and Control can name another — MCM's Construction Leader technology is a discount on exactly this. What is *not* derived is Income: more Corporate Facilities is a *reason* for Control to raise it, never a formula that raises it.
 
 **Never write a tracker directly.** All movement of Income, Political Will, Credits, Notoriety, Wounds, Tags, Stability and Civil Unrest goes through `TrackerService`, which writes a `tracker_adjustments` row recording before, after, delta, actor and reason. That ledger is how Control answers "why did that number change?" three turns later. `$model->update(['wounds' => ...])` bypasses it and is a bug.
 
@@ -298,7 +298,22 @@ The roster has to exist first, since team channels are permissioned from it. A b
 
 ## Facility Defence
 
-**A Facility type is a row, not an enum case.** The rulebook's footnote to 3.3.1 says more Facility types may be researched during the game, so Control adds one mid-game. What a type *does* travels on the row as well: `protection_slots_granted` (Security grants 1) and `technology_capacity_granted` (Corporate grants 2), each meaning "per Facility of this type, added to every Facility the Corporation owns". That is where "2 x the number of Corporate Facilities" comes from — it scales with the count of Corporate Facilities, not with the type of the Facility doing the storing. A type Control invents can therefore be mechanical rather than decorative, without new code.
+**A Facility type is a row, not an enum case.** The rulebook's footnote to 3.3.1 says more Facility types may be researched during the game, so Control adds one mid-game. `App\Support\FacilityTypeBlueprint` holds the game's own type sheet — all eleven, with their build costs and both effect columns.
+
+What a type *does* travels on the row as well, so a type Control invents is mechanical rather than decorative without new code:
+
+| Column | Meaning | Who grants it |
+|---|---|---|
+| `physical_slots_granted` | physical card slots added to every Facility the Corporation owns | Security: 1 |
+| `cyber_slots_granted` | cyber card slots, same reading | Security: 2 |
+| `technology_capacity_granted` | technology storage, same reading | Corporate: 2 |
+| `card_move_discount` | Credits off reordering a stack | Factory: 2, Mini-factory: 1 |
+
+Two traps in there. **Physical and cyber slots are asymmetric** — the type sheet gives a Security Facility 1 physical and 2 cyber, and rulebook 3.3.4's "1 more of each type" is the older number. And **technology capacity scales with the count of Corporate Facilities**, not with the type of the Facility doing the storing, which is where "2 x the number of Corporate Facilities" comes from.
+
+**Effects scale two different ways**, held on the row as `grant_scaling`. Security and Corporate are flat: each Facility adds its effect again. Research, AI School, Factory, Mini-factory and Arms *step* — the type sheet gives them their effect once and then "an additional ... at 2, 3, 5, 8 etc Facilities", so a fourth Factory is worth nothing and a fifth is worth one more. `App\Enums\FacilityGrantScaling` owns the arithmetic. Its thresholds beyond 8 continue the Fibonacci run the sheet's "etc" implies and are a reading rather than something written down.
+
+**Most of a type's effect is text, not code.** Research hand size, the strength bonuses Directing Security gets from AI School and Arms, how many cyber cards a Power Facility activates, what an Equipment Facility produces, and every access effect are stored as words for Control to read. They belong to sub-games this application has not built, and none of those numbers move on their own.
 
 **Slots and storage are derived, never stored.** Both move the moment a Security or Corporate Facility opens. Facilities still building do not count: they are not yours until they open.
 
@@ -314,7 +329,11 @@ The roster has to exist first, since team channels are permissioned from it. A b
 
 **A new game opens with Facilities already standing.** `CreateDefaultFacilities` runs after `CreateDefaultRoster`, because Facilities belong to Corporations, and both are governed by the same "start empty" choice on the create form. It writes a starting position rather than a change, so the Facilities are built free and the basic cards installed free — nothing goes through `TrackerService`, because there is no before state. Re-running is a no-op: a second Armoury would silently widen every stack in the game.
 
-**The starting Facility list and the card catalogue in `config/running_hot.php` are placeholders**, unlike the roster beside them, which came from the briefing documents. The rulebook gives the three Facility types and what each does, but not how many a Corporation opens with, and the Protection Card titles, costs, challenge strengths and consequences are all invented. Replace them with the real lists; emptying either is safe.
+**Starting Facilities are per Corporation and the differences are mechanical**, not decorative. They live beside each Corporation in `config/running_hot.php`, from the briefing documents: DTC's second Security Facility widens every one of its stacks, Gordon's three Corporate Facilities make it the only Corporation storing six technologies per Facility, and Genetic Equity's three Research Facilities are its whole strategy. A Corporation the config says nothing about opens with none rather than a guessed set.
+
+**The Protection Card catalogue in `config/running_hot.php` is still a placeholder.** The real cards are known by title — Security Team, Keypad, Security Shutter, Orc, Roboscorpion, Angel, and ANT's Icelandic-named equivalents — but not by kind, cost, challenge or consequence, and a card with no kind cannot be installed because installation is per stack. The invented titles stay until the real attributes land; emptying the list is safe.
+
+**Owning copies of cards is coming.** The briefings give each Corporation counts ("4 copies of Security Team"), which is the inventory this application does not yet model. It arrives with the real card list.
 
 **Not modelled:** owning copies of cards. Buying from the Corporation shop, auctions, research grants and trading copies between Security players all happen at the table, and installing is free in the rulebook, so a card's `cost` is catalogue data. Installing reads the catalogue directly rather than consuming an inventory.
 

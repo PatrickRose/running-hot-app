@@ -64,11 +64,18 @@ class FacilityController extends Controller
             ]);
         }
 
+        // The type sheet's price unless Control names another: MCM's
+        // Construction Leader technology is a discount on exactly this, and a
+        // game giving a Facility away sets zero.
+        $cost = $request->has('cost')
+            ? (int) $request->integer('cost')
+            : $type->build_cost;
+
         $facility = $this->requisition->handle(
             $corporation,
             $type,
             $name,
-            (int) $request->integer('cost'),
+            $cost,
             $request->user(),
             immediate: $request->string('mode')->toString() === 'immediate',
         );

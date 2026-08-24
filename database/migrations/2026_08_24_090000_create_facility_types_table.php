@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FacilityGrantScaling;
 use App\Support\FacilityTypeBlueprint;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -19,13 +20,29 @@ return new class extends Migration
 
             $table->string('key');
             $table->string('name');
-            $table->text('description')->nullable();
 
-            // The mechanical effects, as data so a type Control invents can
-            // carry them. Both are "per Facility of this type, added to every
-            // Facility the Corporation owns".
-            $table->unsignedInteger('protection_slots_granted')->default(0);
+            // The type sheet's Effect and Access effect columns, held as words
+            // because most of what they describe belongs to a sub-game this
+            // application has not built. Control reads them; nothing computes
+            // them.
+            $table->text('description')->nullable();
+            $table->text('access_effect')->nullable();
+
+            $table->unsignedInteger('build_cost')->default(0);
+
+            // The effects the application does compute. Each is "per Facility
+            // of this type, added to every Facility the Corporation owns".
+            //
+            // Physical and cyber are separate because Security grants 1 and 2
+            // respectively: rulebook 3.3.4 says "1 more of each type" and the
+            // game's own type sheet supersedes it.
+            $table->unsignedInteger('physical_slots_granted')->default(0);
+            $table->unsignedInteger('cyber_slots_granted')->default(0);
             $table->unsignedInteger('technology_capacity_granted')->default(0);
+            $table->unsignedInteger('card_move_discount')->default(0);
+
+            // Whether those effects add up per Facility, or step at 2, 3, 5, 8.
+            $table->string('grant_scaling')->default(FacilityGrantScaling::PerFacility->value);
 
             $table->timestamps();
 
@@ -41,6 +58,7 @@ return new class extends Migration
             DB::table('facility_types')->insert(array_map(
                 fn (array $type): array => [
                     ...$type,
+                    'grant_scaling' => $type['grant_scaling']->value,
                     'game_id' => $gameId,
                     'created_at' => $now,
                     'updated_at' => $now,

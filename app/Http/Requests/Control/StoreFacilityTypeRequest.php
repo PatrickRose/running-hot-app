@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Control;
 
+use App\Enums\FacilityGrantScaling;
 use App\Models\FacilityType;
 use App\Models\Game;
 use Illuminate\Foundation\Http\FormRequest;
@@ -37,11 +38,16 @@ class StoreFacilityTypeRequest extends FormRequest
                     ->ignore($type?->id),
             ],
             'description' => ['nullable', 'string', 'max:2000'],
+            'access_effect' => ['nullable', 'string', 'max:2000'],
+            'build_cost' => ['sometimes', 'integer', 'min:0', 'max:1000'],
 
             // Left to Control rather than inferred from the name: a type they
-            // invent has to be able to grant slots or storage too.
-            'protection_slots_granted' => ['sometimes', 'integer', 'min:0', 'max:10'],
+            // invent has to be able to grant slots, storage or a discount too.
+            'physical_slots_granted' => ['sometimes', 'integer', 'min:0', 'max:10'],
+            'cyber_slots_granted' => ['sometimes', 'integer', 'min:0', 'max:10'],
             'technology_capacity_granted' => ['sometimes', 'integer', 'min:0', 'max:20'],
+            'card_move_discount' => ['sometimes', 'integer', 'min:0', 'max:20'],
+            'grant_scaling' => ['sometimes', Rule::enum(FacilityGrantScaling::class)],
         ];
     }
 

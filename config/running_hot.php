@@ -28,35 +28,71 @@ return [
     |
     | Each corporation fields the three corporate roles of rulebook 1.3.
     |
+    | 'facilities' is what the corporation opens with, from the same briefings:
+    | a count per Facility type key. These are not uniform, and the difference
+    | is mechanical rather than decorative - DTC's second Security Facility
+    | widens every one of its stacks, Gordon's three Corporate Facilities make
+    | it the only corporation that can store six technologies per Facility, and
+    | Genetic Equity's three Research Facilities are its whole strategy.
+    | Applied by App\Actions\CreateDefaultFacilities.
+    |
     */
 
     'corporations' => [
         [
             'name' => 'Augmented Nucleotech',
+            'facilities' => [
+                FacilityTypeBlueprint::RESEARCH => 1,
+                FacilityTypeBlueprint::CORPORATE => 1,
+                FacilityTypeBlueprint::SECURITY => 1,
+                FacilityTypeBlueprint::POWER => 1,
+            ],
             'income' => 5,
             'political_will' => 5,
             'credits' => 40,
         ],
         [
             'name' => 'Digital Tactical Control',
+            'facilities' => [
+                FacilityTypeBlueprint::RESEARCH => 1,
+                FacilityTypeBlueprint::CORPORATE => 1,
+                FacilityTypeBlueprint::SECURITY => 2,
+                FacilityTypeBlueprint::ARMS => 1,
+            ],
             'income' => 13,
             'political_will' => 7,
             'credits' => 27,
         ],
         [
             'name' => 'Genetic Equity',
+            'facilities' => [
+                FacilityTypeBlueprint::RESEARCH => 3,
+                FacilityTypeBlueprint::CORPORATE => 1,
+                FacilityTypeBlueprint::SECURITY => 1,
+            ],
             'income' => 10,
             'political_will' => 10,
             'credits' => 10,
         ],
         [
             'name' => 'Gordon',
+            'facilities' => [
+                FacilityTypeBlueprint::RESEARCH => 1,
+                FacilityTypeBlueprint::CORPORATE => 3,
+                FacilityTypeBlueprint::SECURITY => 1,
+            ],
             'income' => 13,
             'political_will' => 7,
             'credits' => 22,
         ],
         [
             'name' => 'McCullough Calibrated Mechanical',
+            'facilities' => [
+                FacilityTypeBlueprint::RESEARCH => 2,
+                FacilityTypeBlueprint::CORPORATE => 1,
+                FacilityTypeBlueprint::SECURITY => 1,
+                FacilityTypeBlueprint::FACTORY => 1,
+            ],
             'income' => 12,
             'political_will' => 9,
             'credits' => 20,
@@ -142,39 +178,6 @@ return [
         ['name' => 'Business Times', 'role' => CharacterRole::Press],
         ['name' => 'Th3 Undergr0und', 'role' => CharacterRole::Press],
         ['name' => 'HM Government', 'role' => CharacterRole::Other],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Starting Facilities
-    |--------------------------------------------------------------------------
-    |
-    | "Each Corporation will begin with a number of Facilities and some basic
-    | Protection Cards" (rulebook 3.3). Every Corporation gets this same set,
-    | named after itself, so the game opens symmetrically and Control builds
-    | the asymmetry from there.
-    |
-    | The type is a Facility type key from App\Support\FacilityTypeBlueprint.
-    | One of each starting type is deliberate rather than incidental: the
-    | Security Facility is what gives every Facility its fourth card slot of
-    | each kind, and the Corporate one is what makes technology storable at
-    | all. Adding a second Security Facility here would widen every stack in
-    | the game.
-    |
-    | Building is free at the start, because these Facilities are the position
-    | the game opens from rather than something a CEO signed off.
-    |
-    | PLACEHOLDER. Unlike the roster above, this does not come from the
-    | briefing documents: the count and the names are a stand-in until the real
-    | starting Facilities are to hand. The rulebook gives the three types and
-    | what they do, but not how many of each a Corporation opens with.
-    |
-    */
-
-    'facilities' => [
-        ['type' => FacilityTypeBlueprint::CORPORATE, 'suffix' => 'Headquarters'],
-        ['type' => FacilityTypeBlueprint::RESEARCH, 'suffix' => 'Laboratories'],
-        ['type' => FacilityTypeBlueprint::SECURITY, 'suffix' => 'Armoury'],
     ],
 
     /*

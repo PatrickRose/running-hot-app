@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\FacilityGrantScaling;
 use App\Models\FacilityType;
 use App\Models\Game;
 use App\Support\FacilityTypeBlueprint;
@@ -25,8 +26,13 @@ class FacilityTypeFactory extends Factory
             'key' => Str::slug($name),
             'name' => Str::title($name),
             'description' => null,
-            'protection_slots_granted' => 0,
+            'access_effect' => null,
+            'build_cost' => fake()->numberBetween(5, 20),
+            'physical_slots_granted' => 0,
+            'cyber_slots_granted' => 0,
             'technology_capacity_granted' => 0,
+            'card_move_discount' => 0,
+            'grant_scaling' => FacilityGrantScaling::PerFacility,
         ];
     }
 

@@ -117,16 +117,30 @@ export type ProtectionKind = 'physical' | 'cyber';
 export type ProtectionCardAvailability =
     'available' | 'rumoured' | 'research_only';
 
+/**
+ * How a type's effect grows with the number a Corporation owns: flat per
+ * Facility, or stepping at 2, 3, 5, 8.
+ */
+export type FacilityGrantScaling = 'per_facility' | 'thresholds';
+
 /** An entry in the game's Facility type catalogue (rulebook 3.3.1). */
 export type FacilityTypeSummary = {
     id: number;
     key: string;
     name: string;
     description: string | null;
-    /** Physical and cyber slots each Facility of this type adds. */
-    protection_slots_granted: number;
+    access_effect: string | null;
+    build_cost: number;
+    /** Physical slots each Facility of this type adds. Security grants 1. */
+    physical_slots_granted: number;
+    /** Cyber slots each Facility of this type adds. Security grants 2. */
+    cyber_slots_granted: number;
     /** Technology storage each Facility of this type adds. */
     technology_capacity_granted: number;
+    /** Credits off reordering a stack. Factory grants 2. */
+    card_move_discount: number;
+    grant_scaling: FacilityGrantScaling;
+    grant_scaling_label: string;
     facility_count: number;
     in_use: boolean;
 };
@@ -187,7 +201,6 @@ export type FacilitySummary = {
     /** False while the Facility is still being built. */
     available: boolean;
     notes: string | null;
-    slots_per_kind: number;
     stacks: ProtectionStack[];
     security: FacilitySecurityState;
 };
@@ -196,7 +209,10 @@ export type CorporationFacilities = {
     id: number;
     name: string;
     credits: number;
-    slots_per_kind: number;
+    /** Physical and cyber move independently, so they are reported apart. */
+    physical_slots: number;
+    cyber_slots: number;
     technology_capacity_per_facility: number;
+    card_move_discount: number;
     facilities: FacilitySummary[];
 };

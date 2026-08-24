@@ -35,19 +35,109 @@ class DefaultFacilitiesTest extends TestCase
         return $game;
     }
 
-    public function test_every_corporation_gets_the_configured_facilities(): void
+    public function test_every_corporation_gets_the_facilities_from_its_briefing(): void
     {
         $game = $this->setUpGame();
 
         app(CreateDefaultFacilities::class)->handle($game);
 
-        $expected = count(config('running_hot.facilities'));
+        /** @var array<int, array<string, mixed>> $configured */
+        $configured = config('running_hot.corporations');
 
-        $this->assertGreaterThan(0, $expected);
+        $this->assertNotEmpty($configured);
 
-        foreach ($game->corporations as $corporation) {
-            $this->assertSame($expected, $corporation->facilities()->count());
+        foreach ($configured as $entry) {
+            $corporation = $game->corporations()->where('name', $entry['name'])->sole();
+
+            $this->assertSame(
+                array_sum($entry['facilities']),
+                $corporation->facilities()->count(),
+                $entry['name'].' should open with the Facilities from its briefing.',
+            );
         }
+    }
+
+    /**
+     * The counts differ per Corporation, and the difference is mechanical.
+     */
+    public function test_the_starting_facilities_are_not_uniform(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $counts = $game->corporations()
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($corporation): int => $corporation->facilities()->count())
+            ->unique();
+
+        $this->assertGreaterThan(1, $counts->count());
+    }
+
+    public function test_a_second_security_facility_widens_that_corporations_stacks(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $defence = app(FacilityDefenceService::class);
+
+        // DTC opens with two Security Facilities; everyone else has one.
+        $dtc = $game->corporations()->where('name', 'Digital Tactical Control')->sole();
+        $gordon = $game->corporations()->where('name', 'Gordon')->sole();
+
+        $this->assertSame(5, $defence->slotsPerKind($dtc, ProtectionKind::Physical));
+        $this->assertSame(7, $defence->slotsPerKind($dtc, ProtectionKind::Cyber));
+
+        $this->assertSame(4, $defence->slotsPerKind($gordon, ProtectionKind::Physical));
+        $this->assertSame(5, $defence->slotsPerKind($gordon, ProtectionKind::Cyber));
+    }
+
+    public function test_gordons_three_corporate_facilities_triple_its_storage(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $gordon = $game->corporations()->where('name', 'Gordon')->sole();
+        $geneq = $game->corporations()->where('name', 'Genetic Equity')->sole();
+
+        $defence = app(FacilityDefenceService::class);
+
+        $this->assertSame(6, $defence->technologyCapacityPerFacility($gordon));
+        $this->assertSame(2, $defence->technologyCapacityPerFacility($geneq));
+    }
+
+    public function test_mccullough_opens_with_its_factory_discount(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $defence = app(FacilityDefenceService::class);
+
+        $mcm = $game->corporations()->where('name', 'McCullough Calibrated Mechanical')->sole();
+        $gordon = $game->corporations()->where('name', 'Gordon')->sole();
+
+        $this->assertSame(2, $defence->cardMoveDiscount($mcm));
+        $this->assertSame(0, $defence->cardMoveDiscount($gordon));
+    }
+
+    public function test_repeated_facilities_are_numbered(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $gordon = $game->corporations()->where('name', 'Gordon')->sole();
+        $names = $gordon->facilities()->orderBy('name')->pluck('name')->all();
+
+        $this->assertContains('Gordon Corporate 1', $names);
+        $this->assertContains('Gordon Corporate 3', $names);
+
+        // Only one Security Facility, so it is not numbered.
+        $this->assertContains('Gordon Security', $names);
     }
 
     public function test_the_starting_facilities_are_open_straight_away(): void
@@ -86,40 +176,25 @@ class DefaultFacilitiesTest extends TestCase
 
         app(CreateDefaultFacilities::class)->handle($game);
 
+        $this->assertGreaterThan(0, $corporation->facilities()->count());
+
         foreach ($corporation->facilities as $facility) {
             $this->assertStringStartsWith('McCullough ', $facility->name);
         }
     }
 
-    public function test_the_security_facility_widens_every_stack(): void
+    /**
+     * A Corporation the briefings say nothing about opens with none, rather
+     * than with a guessed set.
+     */
+    public function test_an_unconfigured_corporation_gets_no_facilities(): void
     {
-        $game = $this->setUpGame();
+        $game = Game::factory()->create();
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Sheffield Forgemasters']);
 
         app(CreateDefaultFacilities::class)->handle($game);
 
-        $corporation = $game->corporations()->orderBy('name')->first();
-        $this->assertNotNull($corporation);
-
-        // Three by default, plus one for the starting Security Facility.
-        $this->assertSame(
-            FacilityDefenceService::BASE_SLOTS_PER_KIND + 1,
-            app(FacilityDefenceService::class)->slotsPerKind($corporation),
-        );
-    }
-
-    public function test_the_corporate_facility_makes_technology_storable(): void
-    {
-        $game = $this->setUpGame();
-
-        app(CreateDefaultFacilities::class)->handle($game);
-
-        $corporation = $game->corporations()->orderBy('name')->first();
-        $this->assertNotNull($corporation);
-
-        $this->assertSame(
-            2,
-            app(FacilityDefenceService::class)->technologyCapacityPerFacility($corporation),
-        );
+        $this->assertSame(0, $corporation->facilities()->count());
     }
 
     public function test_the_card_catalogue_is_written(): void
@@ -206,10 +281,10 @@ class DefaultFacilitiesTest extends TestCase
         $this->assertGreaterThan(0, $result['card_types']);
     }
 
-    public function test_a_renamed_facility_type_is_skipped_rather_than_invented(): void
+    public function test_a_missing_facility_type_is_skipped_rather_than_invented(): void
     {
         $game = Game::factory()->create();
-        Corporation::factory()->for($game)->create();
+        Corporation::factory()->for($game)->create(['name' => 'Gordon']);
 
         $game->facilityTypes()
             ->where('key', FacilityTypeBlueprint::SECURITY)
@@ -217,7 +292,8 @@ class DefaultFacilitiesTest extends TestCase
 
         $result = app(CreateDefaultFacilities::class)->handle($game);
 
-        $this->assertSame(count(config('running_hot.facilities')) - 1, $result['facilities']);
+        // Gordon's briefing is one Research, three Corporate and one Security.
+        $this->assertSame(4, $result['facilities']);
     }
 
     public function test_creating_a_game_builds_the_facilities(): void

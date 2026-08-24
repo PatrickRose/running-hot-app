@@ -49,8 +49,12 @@ export function FacilityPanel({
                         </span>
                     </p>
                     <p className="text-sm text-muted-foreground">
-                        {facility.slots_per_kind} physical and{' '}
-                        {facility.slots_per_kind} cyber slots
+                        {facility.stacks
+                            .map(
+                                (stack) =>
+                                    `${stack.cards.length}/${stack.slots} ${stack.kind}`,
+                            )
+                            .join(' · ')}
                     </p>
                 </div>
 

@@ -66,6 +66,9 @@ class CreateDefaultRoster
         $created = 0;
 
         foreach ($this->corporations() as $attributes) {
+            // Read by CreateDefaultFacilities rather than by the model.
+            unset($attributes['facilities']);
+
             $corporation = Corporation::create([
                 'game_id' => $game->id,
                 ...$attributes,

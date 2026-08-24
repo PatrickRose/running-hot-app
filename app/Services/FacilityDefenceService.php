@@ -8,6 +8,7 @@ use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\FacilityTurnState;
+use App\Models\FacilityType;
 use App\Models\ProtectionCardType;
 use App\Models\Turn;
 use App\Models\User;
@@ -38,16 +39,59 @@ class FacilityDefenceService
     public function __construct(private readonly TrackerService $trackers) {}
 
     /**
-     * How many cards of each kind this Corporation may install in any one of
-     * its Facilities.
+     * How many cards of one kind this Corporation may install in any one of its
+     * Facilities.
+     *
+     * Physical and cyber are asked for separately because they do not move
+     * together: a Security Facility grants 1 physical slot and 2 cyber ones.
      *
      * Facilities still being built do not count: they are not yours until they
      * open, so a Security Facility requisitioned this turn widens your stacks
      * next turn.
      */
-    public function slotsPerKind(Corporation $corporation): int
+    public function slotsPerKind(Corporation $corporation, ProtectionKind $kind): int
     {
-        return self::BASE_SLOTS_PER_KIND + $this->grantTotal($corporation, 'protection_slots_granted');
+        return self::BASE_SLOTS_PER_KIND + $this->grantTotal($corporation, match ($kind) {
+            ProtectionKind::Physical => 'physical_slots_granted',
+            ProtectionKind::Cyber => 'cyber_slots_granted',
+        });
+    }
+
+    /**
+     * Everything a Corporation's Facilities are worth, in one pass.
+     *
+     * Asked for as a set because the caller showing one of these numbers
+     * usually shows all of them, and every one of them is read off the same
+     * count of open Facilities per type.
+     *
+     * @return array{physical_slots: int, cyber_slots: int, technology_capacity: int, card_move_discount: int}
+     */
+    public function derivedTotals(Corporation $corporation): array
+    {
+        $grants = $this->grantTotals($corporation, [
+            'physical_slots_granted',
+            'cyber_slots_granted',
+            'technology_capacity_granted',
+            'card_move_discount',
+        ]);
+
+        return [
+            'physical_slots' => self::BASE_SLOTS_PER_KIND + $grants['physical_slots_granted'],
+            'cyber_slots' => self::BASE_SLOTS_PER_KIND + $grants['cyber_slots_granted'],
+            'technology_capacity' => $grants['technology_capacity_granted'],
+            'card_move_discount' => $grants['card_move_discount'],
+        ];
+    }
+
+    /**
+     * Credits off reordering a stack, from this Corporation's Factories.
+     *
+     * The discount applies to the reorder rather than to each card moved, so a
+     * Corporation with a Factory reorders up to two cards for nothing.
+     */
+    public function cardMoveDiscount(Corporation $corporation): int
+    {
+        return $this->grantTotal($corporation, 'card_move_discount');
     }
 
     /**
@@ -80,7 +124,7 @@ class FacilityDefenceService
         return DB::transaction(function () use ($facility, $cardType): FacilityProtectionCard {
             $installed = $this->stack($facility, $cardType->kind);
 
-            $slots = $this->slotsPerKind($facility->corporation);
+            $slots = $this->slotsPerKind($facility->corporation, $cardType->kind);
 
             if ($installed->count() >= $slots) {
                 throw ValidationException::withMessages([
@@ -154,15 +198,17 @@ class FacilityDefenceService
                 ]);
             }
 
-            $cost = $this->moveCost($current, $requested);
+            $moved = $this->moveCost($current, $requested);
+            $discount = min($moved, $this->cardMoveDiscount($facility->corporation));
+            $cost = $moved - $discount;
 
             if ($cost > 0) {
                 $this->charge(
                     $facility,
                     $cost,
                     sprintf(
-                        'Reordered %d %s card(s) in %s',
-                        $cost,
+                        'Moved %d %s card(s) in %s',
+                        $moved,
                         $kind->label(),
                         $facility->name,
                     ),
@@ -439,13 +485,57 @@ class FacilityDefenceService
      */
     protected function grantTotal(Corporation $corporation, string $column): int
     {
+        return $this->grantTotals($corporation, [$column])[$column];
+    }
+
+    /**
+     * Totals of several grant columns from one read of the Facility list.
+     *
+     * Counted per type rather than summed in SQL, because a type that steps at
+     * 2, 3, 5, 8 is not worth its base effect times the number you own.
+     *
+     * @param  array<int, string>  $columns
+     * @return array<string, int>
+     */
+    protected function grantTotals(Corporation $corporation, array $columns): array
+    {
+        $totals = array_fill_keys($columns, 0);
+        $counts = $this->openTypeCounts($corporation);
+
+        if ($counts === []) {
+            return $totals;
+        }
+
+        $types = FacilityType::query()->whereKey(array_keys($counts))->get();
+
+        foreach ($types as $type) {
+            foreach ($columns as $column) {
+                $totals[$column] += $type->grantTotal($column, $counts[$type->id] ?? 0);
+            }
+        }
+
+        return $totals;
+    }
+
+    /**
+     * How many open Facilities of each type this Corporation owns.
+     *
+     * @return array<int, int> counts keyed by facility type id
+     */
+    protected function openTypeCounts(Corporation $corporation): array
+    {
         $turn = $corporation->game->currentTurn();
         $turnNumber = $turn === null ? Facility::FIRST_TURN : $turn->number;
 
-        return (int) $corporation->facilities()
+        /** @var array<int, int> $counts */
+        $counts = $corporation->facilities()
             ->availableOnTurn($turnNumber)
-            ->join('facility_types', 'facility_types.id', '=', 'facilities.facility_type_id')
-            ->sum('facility_types.'.$column);
+            ->selectRaw('facility_type_id, count(*) as total')
+            ->groupBy('facility_type_id')
+            ->pluck('total', 'facility_type_id')
+            ->all();
+
+        return $counts;
     }
 
     /**

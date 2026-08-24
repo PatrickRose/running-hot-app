@@ -65,6 +65,11 @@ class ProtectionCardStackTest extends TestCase
         return app(FacilityDefenceService::class);
     }
 
+    protected function slots(ProtectionKind $kind): int
+    {
+        return $this->defence()->slotsPerKind($this->corporation->fresh(), $kind);
+    }
+
     /**
      * @return array<int, string>
      */
@@ -78,16 +83,24 @@ class ProtectionCardStackTest extends TestCase
 
     public function test_a_facility_has_three_slots_of_each_kind_by_default(): void
     {
-        $this->assertSame(3, $this->defence()->slotsPerKind($this->corporation));
+        $this->assertSame(3, $this->slots(ProtectionKind::Physical));
+        $this->assertSame(3, $this->slots(ProtectionKind::Cyber));
     }
 
-    public function test_each_security_facility_grants_one_more_slot_of_each_kind(): void
+    /**
+     * The type sheet's Security Facility is asymmetric: 1 more physical and 2
+     * more cyber card per Facility owned. Rulebook 3.3.4 says "1 more of each
+     * type" and the type sheet supersedes it.
+     */
+    public function test_each_security_facility_grants_one_physical_and_two_cyber_slots(): void
     {
         $this->facilityOfType(FacilityTypeBlueprint::SECURITY, 'Tinsley Gate');
-        $this->assertSame(4, $this->defence()->slotsPerKind($this->corporation->fresh()));
+        $this->assertSame(4, $this->slots(ProtectionKind::Physical));
+        $this->assertSame(5, $this->slots(ProtectionKind::Cyber));
 
         $this->facilityOfType(FacilityTypeBlueprint::SECURITY, 'Wicker Post');
-        $this->assertSame(5, $this->defence()->slotsPerKind($this->corporation->fresh()));
+        $this->assertSame(5, $this->slots(ProtectionKind::Physical));
+        $this->assertSame(7, $this->slots(ProtectionKind::Cyber));
     }
 
     public function test_a_security_facility_still_building_does_not_widen_the_stacks(): void
@@ -103,7 +116,75 @@ class ProtectionCardStackTest extends TestCase
             ->buildingUntilTurn(2)
             ->create(['name' => 'Tinsley Gate']);
 
-        $this->assertSame(3, $this->defence()->slotsPerKind($this->corporation->fresh()));
+        $this->assertSame(3, $this->slots(ProtectionKind::Physical));
+        $this->assertSame(3, $this->slots(ProtectionKind::Cyber));
+    }
+
+    public function test_a_factory_takes_two_credits_off_a_reorder(): void
+    {
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Templeborough Works');
+        $ids = $this->installAlphaBravoCharlie();
+
+        // Reversing three cards moves two of them, and the Factory's discount
+        // covers both.
+        $cost = $this->defence()->reorder($this->facility->fresh(), ProtectionKind::Physical, [
+            $ids['Charlie'], $ids['Bravo'], $ids['Alpha'],
+        ]);
+
+        $this->assertSame(0, $cost);
+        $this->assertSame(['Charlie', 'Bravo', 'Alpha'], $this->stackNames());
+        $this->assertSame(50, $this->corporation->fresh()->credits);
+    }
+
+    public function test_a_discount_never_pays_a_corporation_to_reorder(): void
+    {
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Templeborough Works');
+        $ids = $this->installAlphaBravoCharlie();
+
+        // One card moves, against a discount of two.
+        $cost = $this->defence()->reorder($this->facility->fresh(), ProtectionKind::Physical, [
+            $ids['Bravo'], $ids['Charlie'], $ids['Alpha'],
+        ]);
+
+        $this->assertSame(0, $cost);
+        $this->assertSame(50, $this->corporation->fresh()->credits);
+    }
+
+    public function test_a_mini_factory_takes_one_credit_off_a_reorder(): void
+    {
+        $this->facilityOfType(FacilityTypeBlueprint::MINI_FACTORY, 'Neepsend Shop');
+        $ids = $this->installAlphaBravoCharlie();
+
+        $cost = $this->defence()->reorder($this->facility->fresh(), ProtectionKind::Physical, [
+            $ids['Charlie'], $ids['Bravo'], $ids['Alpha'],
+        ]);
+
+        $this->assertSame(1, $cost);
+        $this->assertSame(49, $this->corporation->fresh()->credits);
+    }
+
+    /**
+     * A stepping type is not worth its effect times the number you own: the
+     * type sheet gives a Factory 2 Credits and "an additional 1 Credit discount
+     * at 2, 3, 5, 8 etc Factories".
+     */
+    public function test_a_second_factory_is_worth_one_more_credit_not_two(): void
+    {
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Templeborough Works');
+        $this->assertSame(2, $this->defence()->cardMoveDiscount($this->corporation->fresh()));
+
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Brightside Works');
+        $this->assertSame(3, $this->defence()->cardMoveDiscount($this->corporation->fresh()));
+
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Carbrook Works');
+        $this->assertSame(4, $this->defence()->cardMoveDiscount($this->corporation->fresh()));
+
+        // The fourth crosses no threshold, so it is worth nothing.
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Darnall Works');
+        $this->assertSame(4, $this->defence()->cardMoveDiscount($this->corporation->fresh()));
+
+        $this->facilityOfType(FacilityTypeBlueprint::FACTORY, 'Attercliffe Works');
+        $this->assertSame(5, $this->defence()->cardMoveDiscount($this->corporation->fresh()));
     }
 
     public function test_technology_capacity_scales_with_the_corporate_facility_count(): void
@@ -162,6 +243,7 @@ class ProtectionCardStackTest extends TestCase
         }
 
         $this->facilityOfType(FacilityTypeBlueprint::SECURITY, 'Tinsley Gate');
+        $this->assertSame(4, $this->slots(ProtectionKind::Physical));
 
         $this->defence()->install($this->facility->fresh(), $this->card('Delta'));
 

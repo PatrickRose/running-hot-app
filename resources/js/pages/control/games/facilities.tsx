@@ -218,10 +218,19 @@ export default function ControlFacilities({
                             <CardTitle>{corporation.name}</CardTitle>
                             <CardDescription>
                                 {corporation.credits} Credits &middot;{' '}
-                                {corporation.slots_per_kind} card slots of each
-                                kind per Facility &middot;{' '}
+                                {corporation.physical_slots} physical and{' '}
+                                {corporation.cyber_slots} cyber slots per
+                                Facility &middot;{' '}
                                 {corporation.technology_capacity_per_facility}{' '}
                                 technologies storable per Facility
+                                {corporation.card_move_discount > 0 && (
+                                    <>
+                                        {' '}
+                                        &middot;{' '}
+                                        {corporation.card_move_discount} Credit
+                                        discount on moving cards
+                                    </>
+                                )}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4">

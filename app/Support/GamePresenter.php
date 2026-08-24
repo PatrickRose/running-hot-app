@@ -235,8 +235,14 @@ class GamePresenter
                 'key' => $type->key,
                 'name' => $type->name,
                 'description' => $type->description,
-                'protection_slots_granted' => $type->protection_slots_granted,
+                'access_effect' => $type->access_effect,
+                'build_cost' => $type->build_cost,
+                'physical_slots_granted' => $type->physical_slots_granted,
+                'cyber_slots_granted' => $type->cyber_slots_granted,
                 'technology_capacity_granted' => $type->technology_capacity_granted,
+                'card_move_discount' => $type->card_move_discount,
+                'grant_scaling' => $type->grant_scaling->value,
+                'grant_scaling_label' => $type->grant_scaling->label(),
                 'facility_count' => (int) $type->getAttribute('facilities_count'),
                 'in_use' => (int) $type->getAttribute('facilities_count') > 0,
             ])->all();
@@ -297,27 +303,30 @@ class GamePresenter
             ->orderBy('name')
             ->get()
             ->map(function ($corporation) use ($defence, $turnNumber): array {
-                // Derived once per Corporation: both numbers depend on the
-                // whole Facility list, not on the Facility being described.
-                $slots = $defence->slotsPerKind($corporation);
+                // Derived once per Corporation: every one of these depends on
+                // the whole Facility list, not on the Facility being described.
+                $totals = $defence->derivedTotals($corporation);
 
                 return [
                     'id' => $corporation->id,
                     'name' => $corporation->name,
                     'credits' => $corporation->credits,
-                    'slots_per_kind' => $slots,
-                    'technology_capacity_per_facility' => $defence->technologyCapacityPerFacility($corporation),
+                    'physical_slots' => $totals['physical_slots'],
+                    'cyber_slots' => $totals['cyber_slots'],
+                    'technology_capacity_per_facility' => $totals['technology_capacity'],
+                    'card_move_discount' => $totals['card_move_discount'],
                     'facilities' => $corporation->facilities
-                        ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $slots))
+                        ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $totals))
                         ->all(),
                 ];
             })->all();
     }
 
     /**
+     * @param  array{physical_slots: int, cyber_slots: int, technology_capacity: int, card_move_discount: int}  $totals
      * @return array<string, mixed>
      */
-    protected function facility(Facility $facility, ?int $turnNumber, int $slots): array
+    protected function facility(Facility $facility, ?int $turnNumber, array $totals): array
     {
         $state = $facility->turnStates->first();
 
@@ -330,12 +339,13 @@ class GamePresenter
             'available_from_turn' => $facility->available_from_turn,
             'available' => $facility->isAvailableOnTurn($turnNumber),
             'notes' => $facility->notes,
-            'slots_per_kind' => $slots,
             'stacks' => array_map(
                 fn (ProtectionKind $kind): array => [
                     'kind' => $kind->value,
                     'kind_label' => $kind->label(),
-                    'slots' => $slots,
+                    'slots' => $kind === ProtectionKind::Physical
+                        ? $totals['physical_slots']
+                        : $totals['cyber_slots'],
                     'cards' => $facility->protectionCards
                         ->where('kind', $kind)
                         ->sortBy('position')

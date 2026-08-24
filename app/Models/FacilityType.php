@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\FacilityGrantScaling;
 use Database\Factories\FacilityTypeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,19 +24,47 @@ use Illuminate\Support\Carbon;
  * @property string $key
  * @property string $name
  * @property string|null $description
- * @property int $protection_slots_granted
+ * @property string|null $access_effect
+ * @property int $build_cost
+ * @property int $physical_slots_granted
+ * @property int $cyber_slots_granted
  * @property int $technology_capacity_granted
+ * @property int $card_move_discount
+ * @property FacilityGrantScaling $grant_scaling
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'game_id', 'key', 'name', 'description',
-    'protection_slots_granted', 'technology_capacity_granted',
+    'game_id', 'key', 'name', 'description', 'access_effect', 'build_cost',
+    'physical_slots_granted', 'cyber_slots_granted',
+    'technology_capacity_granted', 'card_move_discount', 'grant_scaling',
 ])]
 class FacilityType extends Model
 {
     /** @use HasFactory<FacilityTypeFactory> */
     use HasFactory;
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'grant_scaling' => FacilityGrantScaling::class,
+        ];
+    }
+
+    /**
+     * What one of this type's effects is worth to a Corporation owning $count
+     * open Facilities of the type.
+     *
+     * The column is named rather than switched on so that a type Control
+     * invents scales the same way as one from the type sheet.
+     */
+    public function grantTotal(string $column, int $count): int
+    {
+        return $this->grant_scaling->total((int) $this->getAttribute($column), $count);
+    }
 
     /** @return BelongsTo<Game, $this> */
     public function game(): BelongsTo

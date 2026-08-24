@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Actions\RequisitionFacility;
+use App\Enums\FacilityGrantScaling;
 use App\Enums\PhaseType;
+use App\Enums\ProtectionKind;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityType;
@@ -25,13 +27,42 @@ class FacilityTest extends TestCase
         return User::factory()->control()->create();
     }
 
-    public function test_a_new_game_starts_with_the_three_facility_types(): void
+    public function test_a_new_game_starts_with_the_whole_type_sheet(): void
     {
         $game = Game::factory()->create();
 
         $this->assertSame(
-            ['corporate', 'research', 'security'],
-            $game->facilityTypes()->orderBy('key')->pluck('key')->all(),
+            array_column(FacilityTypeBlueprint::defaults(), 'key'),
+            $game->facilityTypes()->orderBy('id')->pluck('key')->all(),
+        );
+    }
+
+    public function test_each_type_carries_its_build_cost(): void
+    {
+        $game = Game::factory()->create();
+
+        $costs = $game->facilityTypes()->pluck('build_cost', 'key');
+
+        $this->assertSame(5, $costs[FacilityTypeBlueprint::SECURITY]);
+        $this->assertSame(12, $costs[FacilityTypeBlueprint::CORPORATE]);
+        $this->assertSame(8, $costs[FacilityTypeBlueprint::RESEARCH]);
+        $this->assertSame(20, $costs[FacilityTypeBlueprint::MISSILE_NETWORK]);
+    }
+
+    public function test_the_types_that_step_are_marked_as_stepping(): void
+    {
+        $game = Game::factory()->create();
+
+        $scaling = $game->facilityTypes()->pluck('grant_scaling', 'key');
+
+        // "an additional ... at 2, 3, 5, 8 etc Facilities" on the type sheet.
+        $this->assertSame(
+            FacilityGrantScaling::Thresholds,
+            $scaling[FacilityTypeBlueprint::FACTORY],
+        );
+        $this->assertSame(
+            FacilityGrantScaling::PerFacility,
+            $scaling[FacilityTypeBlueprint::SECURITY],
         );
     }
 
@@ -43,10 +74,13 @@ class FacilityTest extends TestCase
         $corporate = $game->facilityTypes()->where('key', FacilityTypeBlueprint::CORPORATE)->sole();
         $research = $game->facilityTypes()->where('key', FacilityTypeBlueprint::RESEARCH)->sole();
 
-        $this->assertSame(1, $security->protection_slots_granted);
+        // Asymmetric, from the game's type sheet: 1 physical, 2 cyber.
+        $this->assertSame(1, $security->physical_slots_granted);
+        $this->assertSame(2, $security->cyber_slots_granted);
         $this->assertSame(0, $security->technology_capacity_granted);
         $this->assertSame(2, $corporate->technology_capacity_granted);
-        $this->assertSame(0, $research->protection_slots_granted);
+        $this->assertSame(0, $research->physical_slots_granted);
+        $this->assertSame(0, $research->cyber_slots_granted);
     }
 
     public function test_control_can_add_a_facility_type_mid_game(): void
@@ -57,7 +91,8 @@ class FacilityTest extends TestCase
             ->post("/control/games/{$game->id}/facility-types", [
                 'name' => 'Fabrication',
                 'description' => 'Houses prototypes that cannot leave the line.',
-                'protection_slots_granted' => 0,
+                'physical_slots_granted' => 0,
+                'cyber_slots_granted' => 0,
                 'technology_capacity_granted' => 3,
             ])
             ->assertRedirect()
@@ -204,7 +239,31 @@ class FacilityTest extends TestCase
         $facility = $corporation->facilities()->sole();
 
         $this->assertSame(1, $facility->available_from_turn);
-        $this->assertSame(30, $corporation->fresh()->credits);
+
+        // The type sheet's price for a Corporate Facility, charged because
+        // Control named no other.
+        $this->assertSame(30 - 12, $corporation->fresh()->credits);
+    }
+
+    public function test_control_can_name_a_price_other_than_the_type_sheets(): void
+    {
+        $game = Game::factory()->create();
+        $corporation = Corporation::factory()->for($game)->create(['credits' => 30]);
+        $type = $game->facilityTypes()->where('key', FacilityTypeBlueprint::CORPORATE)->sole();
+
+        // MCM's Construction Leader technology is a discount on exactly this.
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/facilities", [
+                'corporation_id' => $corporation->id,
+                'facility_type_id' => $type->id,
+                'name' => 'Sheffield Spire',
+                'mode' => 'immediate',
+                'cost' => 9,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(21, $corporation->fresh()->credits);
     }
 
     public function test_control_can_bring_a_building_facility_forward(): void
@@ -265,7 +324,8 @@ class FacilityTest extends TestCase
         $this->actingAs($this->control())
             ->patch("/control/games/{$game->id}/facility-types/{$type->id}", [
                 'name' => 'Research and Development',
-                'protection_slots_granted' => 1,
+                'physical_slots_granted' => 1,
+                'cyber_slots_granted' => 1,
                 'technology_capacity_granted' => 1,
             ])
             ->assertRedirect()
@@ -274,7 +334,7 @@ class FacilityTest extends TestCase
         $type = $type->fresh();
 
         $this->assertSame('Research and Development', $type?->name);
-        $this->assertSame(1, $type?->protection_slots_granted);
+        $this->assertSame(1, $type?->physical_slots_granted);
 
         // The key is left alone, so anything keying off it still resolves.
         $this->assertSame(FacilityTypeBlueprint::RESEARCH, $type?->key);
@@ -287,11 +347,13 @@ class FacilityTest extends TestCase
         $type = $game->facilityTypes()->where('key', FacilityTypeBlueprint::RESEARCH)->sole();
         Facility::factory()->for($corporation)->for($type)->create();
 
-        $this->assertSame(3, app(FacilityDefenceService::class)->slotsPerKind($corporation));
+        $defence = app(FacilityDefenceService::class);
 
-        $type->forceFill(['protection_slots_granted' => 2])->save();
+        $this->assertSame(3, $defence->slotsPerKind($corporation, ProtectionKind::Physical));
 
-        $this->assertSame(5, app(FacilityDefenceService::class)->slotsPerKind($corporation->fresh()));
+        $type->forceFill(['physical_slots_granted' => 2])->save();
+
+        $this->assertSame(5, $defence->slotsPerKind($corporation->fresh(), ProtectionKind::Physical));
     }
 
     public function test_control_can_remove_a_facility(): void
