@@ -1,6 +1,10 @@
 <?php
 
 use App\Enums\CharacterRole;
+use App\Enums\ProtectionCardAvailability;
+use App\Enums\ProtectionKind;
+use App\Enums\RunnerSkill;
+use App\Support\FacilityTypeBlueprint;
 
 /**
  * The roster of the real game, applied to every new game by
@@ -139,6 +143,136 @@ return [
         ['name' => 'Th3 Undergr0und', 'role' => CharacterRole::Press],
         ['name' => 'HM Government', 'role' => CharacterRole::Other],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Starting Facilities
+    |--------------------------------------------------------------------------
+    |
+    | "Each Corporation will begin with a number of Facilities and some basic
+    | Protection Cards" (rulebook 3.3). Every Corporation gets this same set,
+    | named after itself, so the game opens symmetrically and Control builds
+    | the asymmetry from there.
+    |
+    | The type is a Facility type key from App\Support\FacilityTypeBlueprint.
+    | One of each starting type is deliberate rather than incidental: the
+    | Security Facility is what gives every Facility its fourth card slot of
+    | each kind, and the Corporate one is what makes technology storable at
+    | all. Adding a second Security Facility here would widen every stack in
+    | the game.
+    |
+    | Building is free at the start, because these Facilities are the position
+    | the game opens from rather than something a CEO signed off.
+    |
+    | PLACEHOLDER. Unlike the roster above, this does not come from the
+    | briefing documents: the count and the names are a stand-in until the real
+    | starting Facilities are to hand. The rulebook gives the three types and
+    | what they do, but not how many of each a Corporation opens with.
+    |
+    */
+
+    'facilities' => [
+        ['type' => FacilityTypeBlueprint::CORPORATE, 'suffix' => 'Headquarters'],
+        ['type' => FacilityTypeBlueprint::RESEARCH, 'suffix' => 'Laboratories'],
+        ['type' => FacilityTypeBlueprint::SECURITY, 'suffix' => 'Armoury'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Protection Card catalogue
+    |--------------------------------------------------------------------------
+    |
+    | The cards Security players are given a list of at the start of the game
+    | (rulebook 3.3.3): what is on sale now, what is rumoured to be in
+    | progress, and what only specialised research will unlock. Control edits
+    | the catalogue during play, and moves a card's availability as the game
+    | conditions the rulebook leaves to their judgement come to pass.
+    |
+    | 'installed_in_each' names the basic cards every starting Facility opens
+    | with, outermost last: the list is installed in order, and installing puts
+    | each new card in front of the one before it.
+    |
+    | PLACEHOLDER. Every card below is invented to give the stacks something to
+    | hold and the tests something to exercise. None of it is from the game's
+    | own card list - the titles, costs, challenge strengths and consequences
+    | all need replacing with the real ones. Emptying this list is safe: a game
+    | then opens with a catalogue Control fills in, and undefended Facilities.
+    |
+    */
+
+    'protection_cards' => [
+        [
+            'name' => 'Chain Link Fence',
+            'kind' => ProtectionKind::Physical,
+            'cost' => 2,
+            'challenge_skill' => RunnerSkill::Brawn,
+            'challenge_strength' => 1,
+            'consequence' => 'One Alert.',
+            'availability' => ProtectionCardAvailability::Available,
+        ],
+        [
+            'name' => 'Contract Guards',
+            'kind' => ProtectionKind::Physical,
+            'cost' => 4,
+            'challenge_skill' => RunnerSkill::Brawn,
+            'challenge_strength' => 2,
+            'consequence' => 'One Wound.',
+            'charge_cost' => 1,
+            'charge_consequence' => 'One Tag.',
+            'availability' => ProtectionCardAvailability::Available,
+        ],
+        [
+            'name' => 'Blast Door',
+            'kind' => ProtectionKind::Physical,
+            'cost' => 6,
+            'challenge_skill' => RunnerSkill::Brawn,
+            'challenge_strength' => 3,
+            'consequence' => 'One Wound and one Alert.',
+            'availability' => ProtectionCardAvailability::Available,
+        ],
+        [
+            'name' => 'Packet Filter',
+            'kind' => ProtectionKind::Cyber,
+            'cost' => 2,
+            'challenge_skill' => RunnerSkill::Hack,
+            'challenge_strength' => 1,
+            'consequence' => 'One Alert.',
+            'availability' => ProtectionCardAvailability::Available,
+        ],
+        [
+            'name' => 'Honeypot Subnet',
+            'kind' => ProtectionKind::Cyber,
+            'cost' => 4,
+            'challenge_skill' => RunnerSkill::Hack,
+            'challenge_strength' => 2,
+            'consequence' => 'One Tag.',
+            'charge_cost' => 2,
+            'charge_consequence' => 'One Alert.',
+            'availability' => ProtectionCardAvailability::Available,
+        ],
+        [
+            'name' => 'Black ICE',
+            'kind' => ProtectionKind::Cyber,
+            'cost' => 8,
+            'challenge_skill' => RunnerSkill::Hack,
+            'challenge_strength' => 4,
+            'consequence' => 'One Wound.',
+            'charge_cost' => 2,
+            'charge_consequence' => 'One Wound.',
+            'availability' => ProtectionCardAvailability::Rumoured,
+        ],
+        [
+            'name' => 'Neural Deadlock',
+            'kind' => ProtectionKind::Cyber,
+            'cost' => 10,
+            'challenge_skill' => RunnerSkill::Hack,
+            'challenge_strength' => 5,
+            'consequence' => 'Two Wounds.',
+            'availability' => ProtectionCardAvailability::ResearchOnly,
+        ],
+    ],
+
+    'installed_in_each' => ['Chain Link Fence', 'Packet Filter'],
 
     /*
     |--------------------------------------------------------------------------

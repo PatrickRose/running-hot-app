@@ -244,6 +244,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
 | A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
+| A game's starting Facilities and card catalogue | `config/running_hot.php`, `App\Actions\CreateDefaultFacilities` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -310,6 +311,10 @@ The roster has to exist first, since team channels are permissioned from it. A b
 **A security budget is escrowed.** Placing one takes the Credits off the Corporation immediately, because that is what putting Credits on the Facility does at the table and it stops the same Credits being promised twice. `TurnEngine` hands back whatever is unspent when the Action phase ends.
 
 **Directing Security is not secret.** The rulebook has Security committing simultaneously with Runners choosing targets, but that has since changed: Security decides what to protect after the attacks land, so there is deliberately no commit-then-reveal machinery here.
+
+**A new game opens with Facilities already standing.** `CreateDefaultFacilities` runs after `CreateDefaultRoster`, because Facilities belong to Corporations, and both are governed by the same "start empty" choice on the create form. It writes a starting position rather than a change, so the Facilities are built free and the basic cards installed free — nothing goes through `TrackerService`, because there is no before state. Re-running is a no-op: a second Armoury would silently widen every stack in the game.
+
+**The starting Facility list and the card catalogue in `config/running_hot.php` are placeholders**, unlike the roster beside them, which came from the briefing documents. The rulebook gives the three Facility types and what each does, but not how many a Corporation opens with, and the Protection Card titles, costs, challenge strengths and consequences are all invented. Replace them with the real lists; emptying either is safe.
 
 **Not modelled:** owning copies of cards. Buying from the Corporation shop, auctions, research grants and trading copies between Security players all happen at the table, and installing is free in the rulebook, so a card's `cost` is catalogue data. Installing reads the catalogue directly rather than consuming an inventory.
 
