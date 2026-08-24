@@ -28,6 +28,7 @@ class CharacterFactory extends Factory
             'role' => CharacterRole::Runner,
             'brawn' => 4,
             'hack' => 4,
+            'charisma' => 3,
             'body' => 3,
             'credits' => 0,
             'wounds' => 0,

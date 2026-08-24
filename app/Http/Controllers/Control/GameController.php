@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Control;
 
+use App\Actions\CreateDefaultRoster;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\StoreGameRequest;
 use App\Http\Requests\Control\UpdateGameWebhookRequest;
@@ -30,9 +31,13 @@ class GameController extends Controller
         ]);
     }
 
-    public function store(StoreGameRequest $request): RedirectResponse
+    public function store(StoreGameRequest $request, CreateDefaultRoster $roster): RedirectResponse
     {
         $game = Game::create($request->gameAttributes());
+
+        // Built before handing over to Discord: provisioning permissions the
+        // team channels from the roster, so the teams have to exist by then.
+        $created = $request->shouldCreateDefaultRoster() ? $roster->handle($game) : null;
 
         // Setting the Discord server up is the rest of creating a game, so go
         // straight on to it: the bot-add flow ends by provisioning, which is
@@ -41,8 +46,14 @@ class GameController extends Controller
             return to_route('control.games.discord.connect', $game);
         }
 
-        return to_route('control.games.show', $game)
-            ->with('status', 'Game created.');
+        $status = $created === null ? 'Game created.' : sprintf(
+            'Game created with %d corporations, %d gangs and %d characters.',
+            $created['corporations'],
+            $created['gangs'],
+            $created['characters'],
+        );
+
+        return to_route('control.games.show', $game)->with('status', $status);
     }
 
     public function show(Game $game, GamePresenter $presenter): Response
