@@ -60,6 +60,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->name('facilities.index');
             Route::post('games/{game}/facilities', [FacilityController::class, 'store'])
                 ->name('facilities.store');
+            Route::post('games/{game}/facilities/publish-list', [FacilityController::class, 'publishList'])
+                ->name('facilities.publish-list');
             Route::patch('games/{game}/facilities/{facility}', [FacilityController::class, 'update'])
                 ->name('facilities.update');
             Route::delete('games/{game}/facilities/{facility}', [FacilityController::class, 'destroy'])

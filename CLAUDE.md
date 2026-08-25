@@ -248,6 +248,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
+| The `#facility-list` embed, and posting it | `App\Support\Discord\FacilityListEmbed`, `App\Actions\PublishFacilityList` |
 | Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
 | Handing a player their Discord roles | `App\Actions\SyncDiscordRolesForUser` |
 | Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
@@ -325,6 +326,12 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 **A security budget is escrowed.** Placing one takes the Credits off the Corporation immediately, because that is what putting Credits on the Facility does at the table and it stops the same Credits being promised twice. `TurnEngine` hands back whatever is unspent when the Action phase ends.
 
+**The `#facility-list` embed is the one thing the application shows everyone at once**, so what it leaves out matters more than what it says. Facility names, their types and whether they are still building — and nothing else. Rulebook 3.4.2 makes the number of Protection Cards in a Facility Secret, and technology contents are secret so that reconnaissance costs something, so a stack size here would hand every Runner a free recon action. `FacilityListEmbed` is pure for exactly this reason: what players see is asserted in a test, including a guard that no card title ever reaches it.
+
+**It is posted once and then rewritten.** A list that changes every time a Facility opens would otherwise leave the channel full of superseded copies, and a player reading the wrong one is worse than a player reading none. The message id is a `discord_resources` row (`message:facility-list`), so the reconcile pattern already covers it. This needs the *bot*, not the webhook: a webhook only posts to the channel it was made in.
+
+**Control publishes it; the application never creates it unprompted.** `PublishFacilityList::refresh()` keeps an existing list current as each Setup phase opens and does nothing at all until Control has published one, so provisioning a server can never surprise it with a post. Refresh is fail-soft for the same reason announcements are — a list a turn out of date must never stall the clock.
+
 **Directing Security is not secret.** The rulebook has Security committing simultaneously with Runners choosing targets, but that has since changed: Security decides what to protect after the attacks land, so there is deliberately no commit-then-reveal machinery here.
 
 **A new game opens with Facilities already standing.** `CreateDefaultFacilities` runs after `CreateDefaultRoster`, because Facilities belong to Corporations, and both are governed by the same "start empty" choice on the create form. It writes a starting position rather than a change, so the Facilities are built free and the basic cards installed free — nothing goes through `TrackerService`, because there is no before state. Re-running is a no-op: a second Armoury would silently widen every stack in the game.
@@ -341,4 +348,4 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, and Facility Defence — Facilities, the Protection Card catalogue, the ordered stacks, and Directing Security.
 
-**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. The provisioned `#facility-list` channel is deliberately empty until Facilities exist.
+**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

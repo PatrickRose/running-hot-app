@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Control;
 
+use App\Actions\PublishFacilityList;
 use App\Actions\RequisitionFacility;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\InstallProtectionCardRequest;
@@ -36,6 +37,7 @@ class FacilityController extends Controller
     public function __construct(
         private readonly FacilityDefenceService $defence,
         private readonly RequisitionFacility $requisition,
+        private readonly PublishFacilityList $facilityList,
     ) {}
 
     public function index(Game $game, GamePresenter $presenter): Response
@@ -45,7 +47,24 @@ class FacilityController extends Controller
             'facilities' => $presenter->facilities($game),
             'facilityTypes' => $presenter->facilityTypes($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
+            'facilityList' => $presenter->facilityList($game),
         ]);
+    }
+
+    /**
+     * Publish the Facility list to the game's #facility-list channel.
+     *
+     * Control's call rather than automatic, because this is the application
+     * telling every player in the game something at once. Once it is up, the
+     * turn engine keeps it current.
+     */
+    public function publishList(Game $game): RedirectResponse
+    {
+        $result = $this->facilityList->handle($game);
+
+        return back()->with('status', $result['action'] === 'posted'
+            ? 'Facility list posted to #facility-list.'
+            : 'Facility list updated in #facility-list.');
     }
 
     public function store(Game $game, StoreFacilityRequest $request): RedirectResponse

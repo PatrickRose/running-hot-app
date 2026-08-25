@@ -14,10 +14,11 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { store } from '@/routes/control/facilities';
+import { publishList, store } from '@/routes/control/facilities';
 import { index, show } from '@/routes/control/games';
 import type {
     CorporationFacilities,
+    FacilityListState,
     FacilityTypeSummary,
     GameSummary,
     ProtectionCardSummary,
@@ -28,6 +29,7 @@ type Props = {
     facilities: CorporationFacilities[];
     facilityTypes: FacilityTypeSummary[];
     protectionCards: ProtectionCardSummary[];
+    facilityList: FacilityListState;
 };
 
 const SELECT_CLASS =
@@ -38,11 +40,18 @@ export default function ControlFacilities({
     facilities,
     facilityTypes,
     protectionCards,
+    facilityList,
 }: Props) {
     // Security is placing cards while Control watches, and the clock moving is
     // what opens a Facility, so this page has to stay live like the panel does.
     usePoll(5000, {
-        only: ['game', 'facilities', 'facilityTypes', 'protectionCards'],
+        only: [
+            'game',
+            'facilities',
+            'facilityTypes',
+            'protectionCards',
+            'facilityList',
+        ],
     });
 
     const currentTurn = game.phase?.turn ?? null;
@@ -68,6 +77,59 @@ export default function ControlFacilities({
                         Back to the game
                     </Button>
                 </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>#facility-list</CardTitle>
+                        <CardDescription>
+                            Who owns what, posted to the game's Discord as an
+                            embed that everyone can read. Facility names and
+                            types only — what is installed in them is Secret,
+                            and the channel is visible to Runners.
+                            <br />
+                            Published once and then rewritten in place, so
+                            nobody reads a superseded list. Once it is up, the
+                            turn clock keeps it current.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap items-center gap-3">
+                        <Button
+                            disabled={
+                                !facilityList.channel_exists ||
+                                !facilityList.bot_configured
+                            }
+                            onClick={() =>
+                                router.post(
+                                    publishList.url({ game: game.id }),
+                                    {},
+                                    { preserveScroll: true },
+                                )
+                            }
+                        >
+                            {facilityList.published
+                                ? 'Update the list'
+                                : 'Publish the list'}
+                        </Button>
+
+                        {!facilityList.channel_exists && (
+                            <p className="text-sm text-muted-foreground">
+                                Provision the game's Discord server first.
+                            </p>
+                        )}
+                        {facilityList.channel_exists &&
+                            !facilityList.bot_configured && (
+                                <p className="text-sm text-muted-foreground">
+                                    Needs DISCORD_BOT_TOKEN — the announcement
+                                    webhook can only post to its own channel.
+                                </p>
+                            )}
+                        {facilityList.published && (
+                            <p className="text-sm text-muted-foreground">
+                                Already posted; publishing again rewrites it.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
 
                 <Card>
                     <CardHeader>

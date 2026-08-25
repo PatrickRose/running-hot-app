@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Actions\PublishFacilityList;
 use App\Enums\ProtectionKind;
 use App\Enums\Tracker;
 use App\Models\Character;
@@ -14,6 +15,7 @@ use App\Models\Phase;
 use App\Models\ProtectionCardType;
 use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
+use App\Support\Discord\GuildBlueprint;
 use Throwable;
 
 /**
@@ -246,6 +248,24 @@ class GamePresenter
                 'facility_count' => (int) $type->getAttribute('facilities_count'),
                 'in_use' => (int) $type->getAttribute('facilities_count') > 0,
             ])->all();
+    }
+
+    /**
+     * Whether the Facility list can be published, and whether it already has.
+     *
+     * @return array<string, mixed>
+     */
+    public function facilityList(Game $game): array
+    {
+        $channel = $game->discordResources()
+            ->where('key', GuildBlueprint::CHANNEL_FACILITY_LIST)
+            ->first();
+
+        return [
+            'channel_exists' => $channel !== null,
+            'bot_configured' => app(DiscordApi::class)->isConfigured(),
+            'published' => app(PublishFacilityList::class)->hasBeenPublished($game),
+        ];
     }
 
     /**

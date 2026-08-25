@@ -35,6 +35,8 @@ class GuildBlueprint
 
     public const CHANNEL_ANNOUNCEMENTS = 'channel:common:announcements';
 
+    public const CHANNEL_FACILITY_LIST = 'channel:common:facility-list';
+
     /**
      * Team colours, indexed deterministically off the team's name so a role
      * keeps its colour across reconciles and two teams rarely collide.
@@ -158,7 +160,7 @@ class GuildBlueprint
                 topic: 'Everyone, out of character. Rules questions go here.',
             ),
             new PlannedChannel(
-                key: 'channel:common:facility-list',
+                key: self::CHANNEL_FACILITY_LIST,
                 kind: DiscordResourceKind::TextChannel,
                 name: 'facility-list',
                 parentKey: self::CATEGORY_COMMON,

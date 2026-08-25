@@ -216,3 +216,12 @@ export type CorporationFacilities = {
     card_move_discount: number;
     facilities: FacilitySummary[];
 };
+
+/** Whether the Facility list can be published to Discord, and whether it has. */
+export type FacilityListState = {
+    /** False until the game's Discord server has been provisioned. */
+    channel_exists: boolean;
+    /** False when DISCORD_BOT_TOKEN is unset; a webhook cannot do this. */
+    bot_configured: boolean;
+    published: boolean;
+};

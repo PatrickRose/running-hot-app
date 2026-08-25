@@ -12,6 +12,7 @@ enum DiscordResourceKind: string
     case TextChannel = 'text_channel';
     case VoiceChannel = 'voice_channel';
     case Webhook = 'webhook';
+    case Message = 'message';
 
     public function label(): string
     {
@@ -21,6 +22,7 @@ enum DiscordResourceKind: string
             self::TextChannel => 'Text channel',
             self::VoiceChannel => 'Voice channel',
             self::Webhook => 'Webhook',
+            self::Message => 'Message',
         };
     }
 
