@@ -54,10 +54,16 @@ class DemoGameSeeder extends Seeder
             $created['characters'],
         ));
         $this->command->info(sprintf(
-            '%d Facilities built, %d Protection Cards catalogued, %d installed.',
+            '%d Facilities built, %d card holdings given out, %d cards installed.',
             $defences['facilities'],
-            $defences['card_types'],
+            $defences['holdings'],
             $defences['installed'],
+        ));
+        $this->command->info(sprintf(
+            '%d Protection Cards, %d Equipment cards and %d technologies catalogued.',
+            $game->protectionCardTypes()->count(),
+            $game->equipmentCardTypes()->count(),
+            $game->technologyTypes()->count(),
         ));
         $this->command->info('Control login: control@example.com / password');
         $this->command->warn('Add a Discord server to the game in the Control panel before announcements will land.');

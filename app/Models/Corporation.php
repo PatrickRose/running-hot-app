@@ -45,6 +45,28 @@ class Corporation extends Model
         return $this->hasMany(Facility::class);
     }
 
+    /**
+     * The Protection Cards this Corporation has in hand, waiting to be
+     * installed. An installed copy is not among them.
+     *
+     * @return HasMany<ProtectionCardHolding, $this>
+     */
+    public function protectionCardHoldings(): HasMany
+    {
+        return $this->hasMany(ProtectionCardHolding::class);
+    }
+
+    /**
+     * The technologies on this Corporation's own tech tree, not counting the
+     * ones common to every Corporation.
+     *
+     * @return HasMany<TechnologyType, $this>
+     */
+    public function technologyTypes(): HasMany
+    {
+        return $this->hasMany(TechnologyType::class);
+    }
+
     /** @return MorphMany<TrackerAdjustment, $this> */
     public function trackerAdjustments(): MorphMany
     {

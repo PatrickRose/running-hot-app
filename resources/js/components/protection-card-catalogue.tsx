@@ -54,16 +54,22 @@ export function ProtectionCardCatalogue({
                             >
                                 <td className="py-2 pr-4 font-medium">
                                     {card.name}
+                                    {card.code ? (
+                                        <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                                            {card.code}
+                                        </span>
+                                    ) : null}
                                 </td>
                                 <td className="py-2 pr-4 text-muted-foreground">
                                     {card.kind_label}
                                 </td>
                                 <td className="py-2 pr-4 text-right font-mono tabular-nums">
-                                    {card.cost}
+                                    {/* A card nobody can buy yet has no price,
+                                        which is not the same as being free. */}
+                                    {card.cost ?? '—'}
                                 </td>
-                                <td className="py-2 pr-4 text-muted-foreground">
-                                    {card.challenge_skill_label}{' '}
-                                    {card.challenge_strength}
+                                <td className="max-w-48 py-2 pr-4 text-muted-foreground">
+                                    {card.challenge}
                                 </td>
                                 <td className="max-w-64 py-2 pr-4 text-muted-foreground">
                                     {card.consequence}
@@ -164,39 +170,38 @@ export function ProtectionCardCatalogue({
                                 name="cost"
                                 type="number"
                                 min={0}
-                                defaultValue={1}
-                                required
+                                placeholder="Not for sale"
                             />
                             <InputError message={errors.cost} />
                         </div>
 
                         <div className="grid gap-2">
-                            <Label htmlFor="card-skill">Challenge skill</Label>
-                            <select
-                                id="card-skill"
-                                name="challenge_skill"
-                                defaultValue="brawn"
-                                className={SELECT_CLASS}
-                            >
-                                <option value="brawn">Brawn</option>
-                                <option value="hack">Hack</option>
-                            </select>
-                            <InputError message={errors.challenge_skill} />
+                            <Label htmlFor="card-code">Card code</Label>
+                            <Input
+                                id="card-code"
+                                name="code"
+                                placeholder="Leave blank for a new card"
+                            />
+                            {/* The code is how a card's artwork is found, so a
+                                card invented here has none and is shown as its
+                                text. */}
+                            <InputError message={errors.code} />
                         </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="card-strength">
-                                Challenge strength
-                            </Label>
+                        <div className="grid gap-2 lg:col-span-2">
+                            <Label htmlFor="card-challenge">Challenge</Label>
                             <Input
-                                id="card-strength"
-                                name="challenge_strength"
-                                type="number"
-                                min={0}
-                                defaultValue={2}
+                                id="card-challenge"
+                                name="challenge"
                                 required
+                                placeholder="Brute (6)"
                             />
-                            <InputError message={errors.challenge_strength} />
+                            <p className="text-xs text-muted-foreground">
+                                As the card prints it. Anything the card says
+                                works, including "Brute/Hack (2)" or a strength
+                                that counts something.
+                            </p>
+                            <InputError message={errors.challenge} />
                         </div>
 
                         <div className="grid gap-2 lg:col-span-2">

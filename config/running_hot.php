@@ -1,9 +1,7 @@
 <?php
 
 use App\Enums\CharacterRole;
-use App\Enums\ProtectionCardAvailability;
 use App\Enums\ProtectionKind;
-use App\Enums\RunnerSkill;
 use App\Support\FacilityTypeBlueprint;
 
 /**
@@ -52,6 +50,17 @@ return [
                 ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Neepsend Armoury'],
                 ['type' => FacilityTypeBlueprint::POWER, 'name' => 'Blackburn Meadows Station'],
             ],
+            // From the briefing. ANT holds its own five cards rather than the
+            // five the other Corporations do - they are distinct cards, not
+            // ANT's names for them - plus the Orc everybody has.
+            'protection_cards' => [
+                'PS009' => 4, // Orc
+                'PS015' => 4, // Öryggissveit
+                'PS016' => 4, // Takkaborðið
+                'PS017' => 4, // Öryggisluggari
+                'PS018' => 3, // Vélfærafræði sporðdreka
+                'PS020' => 3, // Engill
+            ],
             'income' => 5,
             'political_will' => 5,
             'credits' => 40,
@@ -64,6 +73,14 @@ return [
                 ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Wincobank Keep'],
                 ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Grimesthorpe Barracks'],
                 ['type' => FacilityTypeBlueprint::ARMS, 'name' => 'Brightside Arsenal'],
+            ],
+            'protection_cards' => [
+                'PS009' => 4, // Orc
+                'PS003' => 4, // Security team
+                'PS005' => 4, // Keypad
+                'PS006' => 4, // Security shutter
+                'PS019' => 3, // Roboscorpion
+                'PS013' => 3, // Angel
             ],
             'income' => 13,
             'political_will' => 7,
@@ -78,6 +95,14 @@ return [
                 ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Equity House'],
                 ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Hallamshire Gatehouse'],
             ],
+            'protection_cards' => [
+                'PS009' => 4, // Orc
+                'PS003' => 4, // Security team
+                'PS005' => 4, // Keypad
+                'PS006' => 4, // Security shutter
+                'PS019' => 3, // Roboscorpion
+                'PS013' => 3, // Angel
+            ],
             'income' => 10,
             'political_will' => 10,
             'credits' => 10,
@@ -91,6 +116,14 @@ return [
                 ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Norfolk Park Registry'],
                 ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Burngreave Vault'],
             ],
+            'protection_cards' => [
+                'PS009' => 4, // Orc
+                'PS003' => 4, // Security team
+                'PS005' => 4, // Keypad
+                'PS006' => 4, // Security shutter
+                'PS019' => 3, // Roboscorpion
+                'PS013' => 3, // Angel
+            ],
             'income' => 13,
             'political_will' => 7,
             'credits' => 22,
@@ -103,6 +136,14 @@ return [
                 ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'McCullough House'],
                 ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Tinsley Gatehouse'],
                 ['type' => FacilityTypeBlueprint::FACTORY, 'name' => 'Templeborough Works'],
+            ],
+            'protection_cards' => [
+                'PS009' => 4, // Orc
+                'PS003' => 4, // Security team
+                'PS005' => 4, // Keypad
+                'PS006' => 4, // Security shutter
+                'PS019' => 3, // Roboscorpion
+                'PS013' => 3, // Angel
             ],
             'income' => 12,
             'political_will' => 9,
@@ -193,100 +234,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Protection Card catalogue
+    | The basic Protection Cards a starting Facility opens with
     |--------------------------------------------------------------------------
     |
-    | The cards Security players are given a list of at the start of the game
-    | (rulebook 3.3.3): what is on sale now, what is rumoured to be in
-    | progress, and what only specialised research will unlock. Control edits
-    | the catalogue during play, and moves a card's availability as the game
-    | conditions the rulebook leaves to their judgement come to pass.
+    | "Each Corporation will begin with a number of Facilities and some basic
+    | Protection Cards" (rulebook 3.3). This says how many of each kind go into
+    | each of those Facilities, and App\Actions\CreateDefaultFacilities draws
+    | them from what the Corporation actually holds - so ANT's Facilities open
+    | with ANT's own cards, and nothing is installed that the Corporation does
+    | not own a copy of.
     |
-    | 'installed_in_each' names the basic cards every starting Facility opens
-    | with, outermost last: the list is installed in order, and installing puts
-    | each new card in front of the one before it.
+    | One of each kind is what fits. A Corporation holds four copies of its
+    | commonest card and opens with four or five Facilities, so a single card
+    | cannot cover them all; the installer spreads the load across the cards a
+    | Corporation holds, which is also what keeps the one-copy-per-Facility rule
+    | of 3.3.4 satisfied. Raising these numbers is safe - a Facility simply gets
+    | fewer cards than asked for once the holdings run out.
     |
-    | PLACEHOLDER. Every card below is invented to give the stacks something to
-    | hold and the tests something to exercise. None of it is from the game's
-    | own card list - the titles, costs, challenge strengths and consequences
-    | all need replacing with the real ones. Emptying this list is safe: a game
-    | then opens with a catalogue Control fills in, and undefended Facilities.
+    | The catalogue itself is no longer here. All eighty-three cards, with their
+    | codes, challenges and consequences, are in
+    | App\Support\ProtectionCardBlueprint, beside the Equipment and technology
+    | lists - too long to read comfortably in a config file, and the same shape
+    | as the Facility type sheet already in App\Support.
     |
     */
 
-    'protection_cards' => [
-        [
-            'name' => 'Chain Link Fence',
-            'kind' => ProtectionKind::Physical,
-            'cost' => 2,
-            'challenge_skill' => RunnerSkill::Brawn,
-            'challenge_strength' => 1,
-            'consequence' => 'One Alert.',
-            'availability' => ProtectionCardAvailability::Available,
-        ],
-        [
-            'name' => 'Contract Guards',
-            'kind' => ProtectionKind::Physical,
-            'cost' => 4,
-            'challenge_skill' => RunnerSkill::Brawn,
-            'challenge_strength' => 2,
-            'consequence' => 'One Wound.',
-            'charge_cost' => 1,
-            'charge_consequence' => 'One Tag.',
-            'availability' => ProtectionCardAvailability::Available,
-        ],
-        [
-            'name' => 'Blast Door',
-            'kind' => ProtectionKind::Physical,
-            'cost' => 6,
-            'challenge_skill' => RunnerSkill::Brawn,
-            'challenge_strength' => 3,
-            'consequence' => 'One Wound and one Alert.',
-            'availability' => ProtectionCardAvailability::Available,
-        ],
-        [
-            'name' => 'Packet Filter',
-            'kind' => ProtectionKind::Cyber,
-            'cost' => 2,
-            'challenge_skill' => RunnerSkill::Hack,
-            'challenge_strength' => 1,
-            'consequence' => 'One Alert.',
-            'availability' => ProtectionCardAvailability::Available,
-        ],
-        [
-            'name' => 'Honeypot Subnet',
-            'kind' => ProtectionKind::Cyber,
-            'cost' => 4,
-            'challenge_skill' => RunnerSkill::Hack,
-            'challenge_strength' => 2,
-            'consequence' => 'One Tag.',
-            'charge_cost' => 2,
-            'charge_consequence' => 'One Alert.',
-            'availability' => ProtectionCardAvailability::Available,
-        ],
-        [
-            'name' => 'Black ICE',
-            'kind' => ProtectionKind::Cyber,
-            'cost' => 8,
-            'challenge_skill' => RunnerSkill::Hack,
-            'challenge_strength' => 4,
-            'consequence' => 'One Wound.',
-            'charge_cost' => 2,
-            'charge_consequence' => 'One Wound.',
-            'availability' => ProtectionCardAvailability::Rumoured,
-        ],
-        [
-            'name' => 'Neural Deadlock',
-            'kind' => ProtectionKind::Cyber,
-            'cost' => 10,
-            'challenge_skill' => RunnerSkill::Hack,
-            'challenge_strength' => 5,
-            'consequence' => 'Two Wounds.',
-            'availability' => ProtectionCardAvailability::ResearchOnly,
-        ],
+    'installed_in_each' => [
+        ProtectionKind::Physical->value => 1,
+        ProtectionKind::Cyber->value => 1,
     ],
-
-    'installed_in_each' => ['Chain Link Fence', 'Packet Filter'],
 
     /*
     |--------------------------------------------------------------------------

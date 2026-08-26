@@ -8,17 +8,20 @@ use App\Enums\Tracker;
 use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\DiscordMemberSync;
+use App\Models\EquipmentCardType;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\Phase;
 use App\Models\ProtectionCardType;
+use App\Models\TechnologyType;
 use App\Models\Turn;
 use App\Models\User;
 use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
 use App\Support\Discord\GuildBlueprint;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -370,6 +373,157 @@ class GamePresenter
     }
 
     /**
+     * What each Corporation holds of the Protection Card catalogue.
+     *
+     * Only the cards a Corporation has a stake in: a row in its holdings, or a
+     * copy installed somewhere. The full catalogue is eighty-three cards against
+     * five Corporations, and a table of four hundred rows that are nearly all
+     * zero would hide the six that matter.
+     *
+     * Both numbers are shown because they are two halves of one count. The
+     * briefing gives a Corporation four copies of a card; installing moves one
+     * into a Facility, so the hand reads three and the total is still four.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function protectionCardHoldings(Game $game): array
+    {
+        $installed = FacilityProtectionCard::query()
+            ->join('facilities', 'facilities.id', '=', 'facility_protection_cards.facility_id')
+            ->where('facilities.game_id', $game->id)
+            ->groupBy('facilities.corporation_id', 'facility_protection_cards.protection_card_type_id')
+            ->select([
+                'facilities.corporation_id',
+                'facility_protection_cards.protection_card_type_id as card_type_id',
+                DB::raw('count(*) as installed'),
+            ])
+            ->get()
+            ->groupBy('corporation_id');
+
+        $catalogue = $game->protectionCardTypes()->get()->keyBy('id');
+
+        return $game->corporations()
+            ->with(['protectionCardHoldings.cardType'])
+            ->orderBy('name')
+            ->get()
+            ->map(function (Corporation $corporation) use ($installed, $catalogue): array {
+                $installedHere = ($installed->get($corporation->id) ?? collect())
+                    ->pluck('installed', 'card_type_id');
+
+                $cards = [];
+
+                foreach ($corporation->protectionCardHoldings as $holding) {
+                    $cards[$holding->protection_card_type_id] = $this->holdingRow(
+                        $holding->cardType,
+                        $holding->copies,
+                        (int) ($installedHere[$holding->protection_card_type_id] ?? 0),
+                    );
+                }
+
+                // A card Control installed that the Corporation was never given
+                // a copy of still has to show, or the count on screen would not
+                // add up to what is on the table.
+                foreach ($installedHere as $cardTypeId => $count) {
+                    if (isset($cards[$cardTypeId])) {
+                        continue;
+                    }
+
+                    $cardType = $catalogue->get($cardTypeId);
+
+                    if ($cardType === null) {
+                        continue;
+                    }
+
+                    $cards[$cardTypeId] = $this->holdingRow($cardType, 0, (int) $count);
+                }
+
+                $cards = array_values($cards);
+                usort(
+                    $cards,
+                    fn (array $a, array $b): int => [$a['kind'], $a['name']] <=> [$b['kind'], $b['name']],
+                );
+
+                return [
+                    'corporation_id' => $corporation->id,
+                    'corporation' => $corporation->name,
+                    'cards' => $cards,
+                ];
+            })->all();
+    }
+
+    /**
+     * The game's Equipment catalogue (rulebook 3.4.1).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function equipmentCardTypes(Game $game): array
+    {
+        return $game->equipmentCardTypes()
+            ->orderBy('category')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (EquipmentCardType $card): array => [
+                'id' => $card->id,
+                'code' => $card->code,
+                'image_path' => $card->imagePath(),
+                'name' => $card->name,
+                'category' => $card->category->value,
+                'category_label' => $card->category->label(),
+                'effect' => $card->effect,
+                'cost' => $card->cost,
+                'notes' => $card->notes,
+            ])->all();
+    }
+
+    /**
+     * The game's technologies (rulebook 3.2.2).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function technologyTypes(Game $game): array
+    {
+        return $game->technologyTypes()
+            ->with(['corporation', 'requiredFacilityType'])
+            ->orderBy('tree')
+            ->orderBy('code')
+            ->get()
+            ->map(fn (TechnologyType $technology): array => [
+                'id' => $technology->id,
+                'code' => $technology->code,
+                'image_path' => $technology->imagePath(),
+                'name' => $technology->name,
+                'tree' => $technology->tree,
+                'corporation' => $technology->corporation?->name,
+                'description' => $technology->description,
+                'effect' => $technology->effect,
+                'cost' => $technology->cost(),
+                'is_free' => $technology->isFree(),
+                'prerequisites' => $technology->prerequisites,
+                'required_facility_type' => $technology->requiredFacilityType?->name,
+                'copy_strength' => $technology->copy_strength,
+                'destroy_strength' => $technology->destroy_strength,
+            ])->all();
+    }
+
+    /**
+     * One Corporation's stake in one card.
+     *
+     * @return array<string, mixed>
+     */
+    private function holdingRow(ProtectionCardType $cardType, int $inHand, int $installed): array
+    {
+        return [
+            'card_type_id' => $cardType->id,
+            'code' => $cardType->code,
+            'name' => $cardType->name,
+            'kind' => $cardType->kind->value,
+            'kind_label' => $cardType->kind->label(),
+            'copies_in_hand' => $inHand,
+            'installed' => $installed,
+        ];
+    }
+
+    /**
      * The game's Protection Card catalogue (rulebook 3.3.2).
      *
      * @return array<int, array<string, mixed>>
@@ -383,13 +537,13 @@ class GamePresenter
             ->get()
             ->map(fn (ProtectionCardType $card): array => [
                 'id' => $card->id,
+                'code' => $card->code,
+                'image_path' => $card->imagePath(),
                 'name' => $card->name,
                 'kind' => $card->kind->value,
                 'kind_label' => $card->kind->label(),
                 'cost' => $card->cost,
-                'challenge_skill' => $card->challenge_skill->value,
-                'challenge_skill_label' => $card->challenge_skill->label(),
-                'challenge_strength' => $card->challenge_strength,
+                'challenge' => $card->challenge,
                 'consequence' => $card->consequence,
                 'charge_cost' => $card->charge_cost,
                 'charge_consequence' => $card->charge_consequence,
@@ -485,12 +639,10 @@ class GamePresenter
                             'id' => $card->id,
                             'position' => $card->position,
                             'card_type_id' => $card->protection_card_type_id,
+                            'code' => $card->cardType->code,
+                            'image_path' => $card->cardType->imagePath(),
                             'name' => $card->cardType->name,
-                            'challenge' => sprintf(
-                                '%s %d',
-                                $card->cardType->challenge_skill->label(),
-                                $card->cardType->challenge_strength,
-                            ),
+                            'challenge' => $card->cardType->challenge,
                             'consequence' => $card->cardType->consequence,
                             'charge_cost' => $card->cardType->charge_cost,
                             'charge_consequence' => $card->cardType->charge_consequence,

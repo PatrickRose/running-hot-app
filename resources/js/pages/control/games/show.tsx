@@ -14,6 +14,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { index as cardsIndex } from '@/routes/control/cards';
 import { removeTag } from '@/routes/control/characters';
 import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
@@ -86,6 +87,14 @@ export default function ControlGameShow({
                             }
                         >
                             Facility Defence
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(cardsIndex.url({ game: game.id }))
+                            }
+                        >
+                            Card lists
                         </Button>
                         <Button
                             variant="ghost"

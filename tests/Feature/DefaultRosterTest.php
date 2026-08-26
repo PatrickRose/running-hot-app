@@ -9,6 +9,7 @@ use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\Gang;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -182,6 +183,31 @@ class DefaultRosterTest extends TestCase
      * A second application would collide with the unique index on a team name,
      * so a game that already has teams is left alone.
      */
+    /**
+     * The roster configuration carries entries the Corporation model has no
+     * column for - its starting Facilities, and the Protection Cards its
+     * briefing gives it - and they have to be stripped rather than left for
+     * mass assignment to drop.
+     *
+     * Artisan seeds with mass assignment turned off (SeedCommand wraps the run
+     * in Model::unguarded), so a stray key reaches the insert and takes the
+     * whole seeder down instead of being ignored. Which is exactly how it was
+     * found.
+     */
+    public function test_the_roster_seeds_with_mass_assignment_turned_off(): void
+    {
+        $game = Game::factory()->create();
+
+        Model::unguarded(function () use ($game): void {
+            $this->roster()->handle($game);
+        });
+
+        $this->assertSame(
+            count(config('running_hot.corporations')),
+            $game->corporations()->count(),
+        );
+    }
+
     public function test_it_leaves_a_game_that_already_has_teams_alone(): void
     {
         $game = Game::factory()->create();

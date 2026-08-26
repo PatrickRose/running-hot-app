@@ -244,7 +244,10 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
 | A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
-| A game's starting Facilities and card catalogue | `config/running_hot.php`, `App\Actions\CreateDefaultFacilities` |
+| A game's starting Facilities and card holdings | `config/running_hot.php`, `App\Actions\CreateDefaultFacilities` |
+| The three card lists | `App\Support\ProtectionCardBlueprint`, `EquipmentCardBlueprint`, `TechnologyBlueprint` |
+| Seeding them into a game | `App\Actions\SeedProtectionCards`, `SeedEquipmentCards`, `SeedTechnologies`, `SeedProtectionCardHoldings` |
+| Finding a card's artwork from its code | `App\Support\CardImage` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -358,14 +361,36 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 **Starting Facilities are per Corporation and the differences are mechanical**, not decorative. They live beside each Corporation in `config/running_hot.php`, from the briefing documents: DTC's second Security Facility widens every one of its stacks, Gordon's three Corporate Facilities make it the only Corporation storing six technologies per Facility, and Genetic Equity's three Research Facilities are its whole strategy. A Corporation the config says nothing about opens with none rather than a guessed set.
 
-**The Protection Card catalogue in `config/running_hot.php` is still a placeholder.** Eleven cards are known by title: Orc, which everyone holds, plus Security Team, Keypad, Security Shutter, Roboscorpion and Angel, and the five ANT holds instead — Öryggissveit, Takkaborðið, Öryggisluggari, Vélfærafræði sporðdreka and Engill. ANT's are *distinct cards*, not its own names for the other five. What is not known is kind, cost, challenge or consequence, and a card with no kind cannot be installed at all, because installation is per stack. The invented titles stay until the real attributes land; emptying the list is safe.
+## The card lists
 
-**Owning copies of cards is coming.** The briefings give each Corporation counts ("4 copies of Security Team"), which is the inventory this application does not yet model. It arrives with the real card list.
+Three card families, all real data from the game's own card sheet, all seeded per game and all editable by Control. They live in `App\Support` beside the Facility type sheet rather than in `config/running_hot.php`, because three hundred cards do not read comfortably in a config file: `ProtectionCardBlueprint` (83), `EquipmentCardBlueprint` (74) and `TechnologyBlueprint` (144). `Game::booted` seeds all three when a game is created — none of them depends on the roster, so they arrive before it does.
 
-**Not modelled:** owning copies of cards. Buying from the Corporation shop, auctions, research grants and trading copies between Security players all happen at the table, and installing is free in the rulebook, so a card's `cost` is catalogue data. Installing reads the catalogue directly rather than consuming an inventory.
+**The code printed on a card is what identifies it, not its title.** Doppleganger is two cards, `PX011` in the physical stack and `PX012` in the cyber one, so `protection_card_types` is unique on `(game_id, code)` and titles may repeat. The one-copy-per-Facility rule of 3.3.4 keys on the card type rather than the title, so a Facility can hold both Dopplegangers and still only one of each.
+
+**ANT's five cards are distinct cards, not its own names for the other five.** Öryggissveit, Takkaborðið, Öryggisluggari, Vélfærafræði sporðdreka and Engill (`PS015`–`PS020`) are ANT's own, and the four other Corporations hold Security team, Keypad, Security shutter, Roboscorpion and Angel instead. Everyone holds Orc. Their printed stats are identical pair for pair, which is exactly why it is worth writing down: they are still separate rows, and merging them would be wrong.
+
+**A challenge is the sentence the card prints, not a skill and a number.** Most cards are a plain `Brute (6)`, but `Brute/Hack (2)` lets the Runners choose, `Hack (4+N) - where N is the number of cards underneath this` is not known until the card is met, and `Hack (4), followed by Brute (4)` is two challenges on one card. There is no parsed skill or strength column: the words are stored and shown, and the table converts them, which is what it does with the card in hand anyway. Runs will need to read the text.
+
+**Availability is read off the code prefix, and that is a reading rather than a rule.** The card sheet has no availability column. `PS` and `PE` cards carry shop prices and are the ones the briefings hand out; every `PR` and `PX` card is the target of some technology's `Unlock:` effect, so they are seeded research-only. Three (`PR001`, `PR011`, `PR013`) are unlocked by no technology in the list at all and need Control either to price them or to add the research. `ProtectionCardBlueprint` says all of this in one place instead of deriving it at runtime.
+
+**A card with no price is not a free card.** `cost` is nullable, and null means the market does not sell it yet.
+
+**Cards are found by code, and a card with no artwork is normal.** `App\Support\CardImage` resolves `public/images/cards/<CODE>.{webp,png,jpg}` and answers null when there is nothing there. Control invents cards mid-game — the rulebook has research proposals priced and added to the tree during play, and DTC's "Unfortunate Malfunction" hands out a bypass card named after whichever Protection Card it counters — and those have never been printed. The `CardFace` React component shows artwork where there is any and a card-shaped box of the card's own text where there is not, so the text box is the other normal case rather than a fallback.
+
+**Owning copies is modelled; buying them is not.** `protection_card_holdings` is a count per Corporation per card, and it is what caps how far a card stretches: one copy per Facility, so four copies of Security Team defend four Facilities and no more. `FacilityDefenceService::install()` is the only place a copy leaves a hand and `remove()` the only place one comes back — a copy in a Facility is a row in `facility_protection_cards`, so the hand plus the installed copies is still the briefing's count. Installing with none left is refused; Control raises the count first.
+
+Control sets any count outright via `ProtectionCardHoldingController`. The Corporation shop, auctions, research grants and Security players trading between themselves all happen at the table, so the application records where a count ended up rather than replaying how it got there. **Buying from the shop is a follow-up.**
+
+**Starting cards are drawn from what a Corporation actually holds.** `installed_in_each` in `config/running_hot.php` says how many of each kind a starting Facility opens with (one each), and `CreateDefaultFacilities` picks the card the Corporation has most copies of that the Facility does not already have. That is what makes ANT's Facilities open with ANT's own cards, and it spreads the load — a Corporation holds four copies of its commonest card against five Facilities, so no single card can cover them all. Running out is not an error: a Facility simply opens thinner.
+
+**Equipment and technologies are catalogue only.** Both carry their effects as printed text, because the Run loop and the research game that would act on them are unbuilt. Equipment's `category` is the one attribute the application reads, since it decides when a card may be played and whether it counts against the three equipped items of 3.4.1. A technology carries its four suit costs, its prerequisites as printed titles (Control may add a technology others already name), a required Facility type, and its copy and destroy strengths. Control reads both lists at `/control/games/{game}/cards`, which is read-only on purpose.
+
+**Technology trees attach to Corporations late.** A game is created before its roster exists, so `SeedTechnologies` writes every technology unattached and fills in `corporation_id` on a second run, after `CreateDefaultRoster`. `CreateDefaultFacilities` makes that second call. Note the codes do not identify the tree reliably — Gordon and Genetic Equity both take a `G` — so the tree comes from the sheet's own column.
+
+**Not modelled, deliberately:** the Corporation shop, auctions, research grants, trading copies between Security players, and who owns which Equipment card. Each is a conversation with Control, who then sets the count.
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, and Facility Defence — Facilities, the Protection Card catalogue, the ordered stacks, and Directing Security.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — and the game's three real card lists with the Protection Card inventory.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

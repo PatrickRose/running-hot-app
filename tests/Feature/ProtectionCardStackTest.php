@@ -52,11 +52,20 @@ class ProtectionCardStackTest extends TestCase
             ->create(['name' => $name]);
     }
 
+    /**
+     * A card in the catalogue, with copies in the Corporation's hand.
+     *
+     * Installing takes a copy out of the hand, so a card nobody owns cannot be
+     * installed. These tests are about the stacks rather than the holdings, so
+     * they hand over more copies than any of them installs and let
+     * ProtectionCardHoldingTest cover running out.
+     */
     protected function card(string $name, ProtectionKind $kind = ProtectionKind::Physical): ProtectionCardType
     {
         return ProtectionCardType::factory()
             ->for($this->game)
             ->ofKind($kind)
+            ->heldBy($this->corporation->id, 8)
             ->create(['name' => $name]);
     }
 
@@ -407,10 +416,7 @@ class ProtectionCardStackTest extends TestCase
     {
         $ids = $this->installAlphaBravoCharlie();
 
-        $middle = FacilityProtectionCard::query()
-            ->where('facility_id', $this->facility->id)
-            ->where('protection_card_type_id', $ids['Bravo'])
-            ->sole();
+        $middle = FacilityProtectionCard::query()->findOrFail($ids['Bravo']);
 
         $this->defence()->remove($middle);
 
@@ -439,17 +445,14 @@ class ProtectionCardStackTest extends TestCase
     public function test_control_can_reorder_a_stack_over_http(): void
     {
         $ids = $this->installAlphaBravoCharlie();
-        $installed = FacilityProtectionCard::query()
-            ->where('facility_id', $this->facility->id)
-            ->pluck('id', 'protection_card_type_id');
 
         $this->actingAs($this->control())
             ->post("/control/games/{$this->game->id}/facilities/{$this->facility->id}/cards/order", [
                 'kind' => 'physical',
                 'order' => [
-                    $installed[$ids['Bravo']],
-                    $installed[$ids['Charlie']],
-                    $installed[$ids['Alpha']],
+                    $ids['Bravo'],
+                    $ids['Charlie'],
+                    $ids['Alpha'],
                 ],
             ])
             ->assertRedirect()
@@ -492,9 +495,11 @@ class ProtectionCardStackTest extends TestCase
         // Installed innermost first, so the stack reads Alpha, Bravo, Charlie
         // from the outside in - which is the worked example's A, B, C.
         foreach (['Charlie', 'Bravo', 'Alpha'] as $name) {
-            $card = $this->card($name);
-            $ids[$name] = $card->id;
-            $this->defence()->install($this->facility->fresh(), $card);
+            $installed = $this->defence()->install($this->facility->fresh(), $this->card($name));
+
+            // The installed card's id, not the catalogue card's: reorder names
+            // the copies in this Facility.
+            $ids[$name] = $installed->id;
         }
 
         return $ids;

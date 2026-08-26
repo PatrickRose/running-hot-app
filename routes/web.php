@@ -1,12 +1,14 @@
 <?php
 
 use App\Http\Controllers\Auth\DiscordController;
+use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\FacilityController;
 use App\Http\Controllers\Control\FacilityTypeController;
 use App\Http\Controllers\Control\GameController;
 use App\Http\Controllers\Control\PhaseController;
+use App\Http\Controllers\Control\ProtectionCardHoldingController;
 use App\Http\Controllers\Control\ProtectionCardTypeController;
 use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\DashboardController;
@@ -94,6 +96,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->name('facility-types.update');
             Route::delete('games/{game}/facility-types/{facilityType}', [FacilityTypeController::class, 'destroy'])
                 ->name('facility-types.destroy');
+
+            // How many copies of a card a Corporation owns (rulebook 3.3.4).
+            // Control's to set: everything that moves it happens at the table.
+            Route::patch('games/{game}/protection-card-holdings', [ProtectionCardHoldingController::class, 'update'])
+                ->name('protection-card-holdings.update');
+
+            // The Equipment and technology catalogues, read-only: the market and
+            // the research game that spend them are not built yet.
+            Route::get('games/{game}/cards', [CardCatalogueController::class, 'index'])
+                ->name('cards.index');
 
             Route::post('games/{game}/protection-cards', [ProtectionCardTypeController::class, 'store'])
                 ->name('protection-cards.store');

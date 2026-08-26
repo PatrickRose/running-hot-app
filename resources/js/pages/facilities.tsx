@@ -1,4 +1,5 @@
 import { Head } from '@inertiajs/react';
+import { CardFace } from '@/components/card-face';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -10,6 +11,22 @@ import {
 } from '@/components/ui/card';
 import { dashboard } from '@/routes';
 import type { FacilityBoard, GameSummary } from '@/types/game';
+
+/**
+ * Where in the stack a card sits, in words.
+ *
+ * Position 1 is the card Runners meet first (rulebook 3.3.4), so the stack reads
+ * as an order of encounter rather than as a list of numbers.
+ */
+function ordinal(position: number): string {
+    const suffixes = ['th', 'st', 'nd', 'rd'];
+    const remainder = position % 100;
+
+    return (
+        position +
+        (suffixes[(remainder - 20) % 10] ?? suffixes[remainder] ?? suffixes[0])
+    );
+}
 
 type Props = {
     game: GameSummary | null;
@@ -122,21 +139,39 @@ export default function Facilities({ game, board }: Props) {
                                                         {stack.slots}
                                                     </span>
                                                 </p>
-                                                <ol className="flex flex-col gap-1">
+                                                {/* Left to right in the
+                                                    order Runners meet them, so
+                                                    the stack reads the way it
+                                                    sits on the table. */}
+                                                <ol className="flex gap-3 overflow-x-auto pb-2">
                                                     {stack.cards.map((card) => (
-                                                        <li
-                                                            key={card.id}
-                                                            className="flex flex-wrap items-baseline gap-2 rounded border px-2 py-1 text-sm"
-                                                        >
-                                                            <span className="font-mono text-xs text-muted-foreground">
-                                                                {card.position}
-                                                            </span>
-                                                            <span className="flex-1">
-                                                                {card.name}
-                                                            </span>
-                                                            <span className="text-muted-foreground">
-                                                                {card.challenge}
-                                                            </span>
+                                                        <li key={card.id}>
+                                                            <CardFace
+                                                                name={card.name}
+                                                                code={card.code}
+                                                                imagePath={
+                                                                    card.image_path
+                                                                }
+                                                                lines={[
+                                                                    {
+                                                                        label: 'Challenge',
+                                                                        value: card.challenge,
+                                                                    },
+                                                                    {
+                                                                        label: '',
+                                                                        value: card.consequence,
+                                                                    },
+                                                                    {
+                                                                        label: 'Charge',
+                                                                        value: card.charge_consequence
+                                                                            ? `${card.charge_cost}cr — ${card.charge_consequence}`
+                                                                            : null,
+                                                                    },
+                                                                ]}
+                                                                footer={`Met ${ordinal(
+                                                                    card.position,
+                                                                )}`}
+                                                            />
                                                         </li>
                                                     ))}
                                                     {stack.cards.length ===

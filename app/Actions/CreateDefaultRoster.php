@@ -66,8 +66,11 @@ class CreateDefaultRoster
         $created = 0;
 
         foreach ($this->corporations() as $attributes) {
-            // Read by CreateDefaultFacilities rather than by the model.
-            unset($attributes['facilities']);
+            // Read by CreateDefaultFacilities and SeedProtectionCardHoldings
+            // rather than by the model. Stripped rather than left for mass
+            // assignment to drop, because seeding runs unguarded - a stray key
+            // reaches the insert and takes the whole seeder down.
+            unset($attributes['facilities'], $attributes['protection_cards']);
 
             $corporation = Corporation::create([
                 'game_id' => $game->id,

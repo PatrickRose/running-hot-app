@@ -49,6 +49,7 @@ class FacilityController extends Controller
             'facilities' => $presenter->facilities($game),
             'facilityTypes' => $presenter->facilityTypes($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
+            'cardHoldings' => $presenter->protectionCardHoldings($game),
             'facilityList' => $presenter->facilityList($game),
         ]);
     }

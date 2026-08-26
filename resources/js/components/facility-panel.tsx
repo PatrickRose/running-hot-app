@@ -303,8 +303,7 @@ function InstallCard({
                 <option value="">Install a card…</option>
                 {options.map((card) => (
                     <option key={card.id} value={card.id}>
-                        {card.name} ({card.challenge_skill_label}{' '}
-                        {card.challenge_strength})
+                        {card.name} — {card.challenge}
                     </option>
                 ))}
             </select>
