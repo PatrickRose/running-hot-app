@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Jobs\SyncFacilityChannels;
 use Database\Factories\FacilityFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -39,6 +40,23 @@ class Facility extends Model
      * The turn a game that has not started yet is treated as being on.
      */
     public const FIRST_TURN = 1;
+
+    /**
+     * Give a new Facility its Discord channels.
+     *
+     * A hook rather than a call in the requisition, so that every route into a
+     * Facility - a requisition, Control building one by hand, a seeder - ends
+     * up with somewhere to run against it. Queued after commit, because the
+     * job reads the Facility back and must not race the transaction that made
+     * it; and it does nothing at all for a game with no Discord server, which
+     * is every game at the moment it is created.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Facility $facility): void {
+            SyncFacilityChannels::dispatch($facility->id)->afterCommit();
+        });
+    }
 
     /** @return BelongsTo<Game, $this> */
     public function game(): BelongsTo

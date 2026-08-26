@@ -9,9 +9,9 @@ use App\Models\Game;
 use App\Services\Discord\DiscordApi;
 use App\Services\Discord\DiscordApiException;
 use App\Services\Discord\DiscordNotConfiguredException;
+use App\Support\Discord\ChannelPayload;
 use App\Support\Discord\GuildBlueprint;
 use App\Support\Discord\PlannedChannel;
-use App\Support\Discord\PlannedOverwrite;
 use App\Support\Discord\PlannedRole;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -253,50 +253,18 @@ class ProvisionDiscordGuild
      * @param  array<string, string>  $channelIds
      * @return array<string, mixed>
      */
+    /**
+     * @param  array<string, string>  $roleIds
+     * @param  array<string, string>  $channelIds
+     * @return array<string, mixed>
+     */
     private function channelPayload(
         PlannedChannel $planned,
         string $guildId,
         array $roleIds,
         array $channelIds,
     ): array {
-        $payload = [
-            'name' => $planned->name,
-            'type' => $planned->kind->channelType(),
-        ];
-
-        if ($planned->parentKey !== null && isset($channelIds[$planned->parentKey])) {
-            $payload['parent_id'] = $channelIds[$planned->parentKey];
-        }
-
-        // Discord rejects a topic on a voice channel, so only text gets one.
-        if ($planned->topic !== null && $planned->kind === DiscordResourceKind::TextChannel) {
-            $payload['topic'] = $planned->topic;
-        }
-
-        $overwrites = [];
-
-        foreach ($planned->overwrites as $overwrite) {
-            // The guild's default role shares the guild's snowflake, which is
-            // how Discord expresses "@everyone".
-            $target = $overwrite->target === PlannedOverwrite::EVERYONE
-                ? $guildId
-                : ($roleIds[$overwrite->target] ?? null);
-
-            if ($target === null) {
-                continue;
-            }
-
-            $overwrites[] = [
-                'id' => $target,
-                'type' => DiscordApi::OVERWRITE_ROLE,
-                'allow' => (string) $overwrite->allow,
-                'deny' => (string) $overwrite->deny,
-            ];
-        }
-
-        $payload['permission_overwrites'] = $overwrites;
-
-        return $payload;
+        return ChannelPayload::for($planned, $guildId, $roleIds, $channelIds);
     }
 
     /**

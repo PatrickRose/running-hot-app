@@ -3,10 +3,12 @@
 namespace App\Support\Discord;
 
 use App\Actions\ProvisionDiscordGuild;
+use App\Actions\ProvisionFacilityChannels;
 use App\Enums\CharacterRole;
 use App\Enums\DiscordResourceKind;
 use App\Models\Character;
 use App\Models\Corporation;
+use App\Models\Facility;
 use App\Models\Game;
 use App\Models\Gang;
 use App\Models\User;
@@ -36,6 +38,17 @@ class GuildBlueprint
     public const CHANNEL_ANNOUNCEMENTS = 'channel:common:announcements';
 
     public const CHANNEL_FACILITY_LIST = 'channel:common:facility-list';
+
+    /**
+     * Discord's limit on how many channels one category may hold.
+     *
+     * Facility channels come in pairs, so this is the point at which a single
+     * Corporation's Facilities stop fitting in their own category — 25 of them.
+     * Far beyond a game whose Corporations open with five, but the number is
+     * here so that a change to the shape of these channels has to reckon with
+     * it rather than discover it as a 400 from Discord mid-game.
+     */
+    public const MAX_CHANNELS_PER_CATEGORY = 50;
 
     /**
      * Team colours, indexed deterministically off the team's name so a role
@@ -120,6 +133,7 @@ class GuildBlueprint
             ...$this->controlChannels(),
             ...$this->functionChannels(),
             ...$this->teamChannels(),
+            ...$this->facilityChannels(),
         ];
     }
 
@@ -282,15 +296,115 @@ class GuildBlueprint
     }
 
     /**
+     * A text and voice channel for every Facility, where its Runs will happen.
+     *
+     * In a category of their own per Corporation rather than beside its team
+     * channels, so a Corporation with eight Facilities does not bury the two
+     * channels its players actually talk in. Discord allows 50 channels per
+     * category, which is 24 Facilities at two channels each — comfortable for
+     * a game whose Corporations open with five.
+     *
+     * Private to Control and the owning Corporation. The Runners attacking a
+     * Facility are added when a Run starts, which is the Run's business: they
+     * choose their target in Secret (rulebook 3.4.1), so access before the
+     * Action phase resolves would leak who is hitting what.
+     *
      * @return array<int, PlannedChannel>
      */
-    private function channelsForTeam(string $slug, string $name, string $roleKey): array
+    private function facilityChannels(): array
     {
-        $overwrites = [
+        $channels = [];
+
+        foreach ($this->corporations() as $corporation) {
+            $facilities = $corporation->facilities()->orderBy('name')->get();
+
+            if ($facilities->isEmpty()) {
+                continue;
+            }
+
+            $channels[] = new PlannedChannel(
+                key: self::facilityCategoryKey($corporation),
+                kind: DiscordResourceKind::Category,
+                name: $corporation->name.' Facilities',
+                overwrites: self::teamOverwrites(self::corporationRoleKey($corporation)),
+            );
+
+            foreach ($facilities as $facility) {
+                $channels = [...$channels, ...self::channelsForFacility($facility)];
+            }
+        }
+
+        return $channels;
+    }
+
+    /**
+     * The pair of channels one Facility should have.
+     *
+     * Static so that a Facility built mid-game can be given its channels
+     * without rebuilding the whole blueprint, and so both paths agree on the
+     * shape — {@see ProvisionFacilityChannels}.
+     *
+     * The name carries the Facility's name and nothing else. Its type is public
+     * (it is in #facility-list), but a channel name is a poor place for it, and
+     * rulebook 3.4.2 makes what is installed Secret regardless.
+     *
+     * @return array<int, PlannedChannel>
+     */
+    public static function channelsForFacility(Facility $facility): array
+    {
+        $corporation = $facility->corporation;
+        $overwrites = self::teamOverwrites(self::corporationRoleKey($corporation));
+        $parentKey = self::facilityCategoryKey($corporation);
+
+        return [
+            new PlannedChannel(
+                key: self::facilityChannelKey($facility, 'text'),
+                kind: DiscordResourceKind::TextChannel,
+                name: Str::slug($facility->name),
+                parentKey: $parentKey,
+                overwrites: $overwrites,
+                topic: $facility->name.' — Runs against this Facility happen here.',
+            ),
+            new PlannedChannel(
+                key: self::facilityChannelKey($facility, 'voice'),
+                kind: DiscordResourceKind::VoiceChannel,
+                name: $facility->name,
+                parentKey: $parentKey,
+                overwrites: $overwrites,
+            ),
+        ];
+    }
+
+    public static function facilityCategoryKey(Corporation $corporation): string
+    {
+        return 'category:corporation:'.$corporation->id.':facilities';
+    }
+
+    public static function facilityChannelKey(Facility $facility, string $kind): string
+    {
+        return 'channel:facility:'.$facility->id.':'.$kind;
+    }
+
+    /**
+     * Locked to everyone, open to Control and one team.
+     *
+     * @return array<int, PlannedOverwrite>
+     */
+    private static function teamOverwrites(string $roleKey): array
+    {
+        return [
             new PlannedOverwrite(PlannedOverwrite::EVERYONE, deny: DiscordApi::VIEW_CHANNEL),
             new PlannedOverwrite(self::ROLE_CONTROL, allow: DiscordApi::VIEW_CHANNEL | DiscordApi::SEND_MESSAGES | DiscordApi::CONNECT | DiscordApi::SPEAK),
             new PlannedOverwrite($roleKey, allow: DiscordApi::VIEW_CHANNEL | DiscordApi::SEND_MESSAGES | DiscordApi::CONNECT | DiscordApi::SPEAK),
         ];
+    }
+
+    /**
+     * @return array<int, PlannedChannel>
+     */
+    private function channelsForTeam(string $slug, string $name, string $roleKey): array
+    {
+        $overwrites = self::teamOverwrites($roleKey);
 
         return [
             new PlannedChannel(
