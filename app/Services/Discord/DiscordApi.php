@@ -90,6 +90,33 @@ class DiscordApi
     }
 
     /**
+     * Fail fast, and in words Control can act on, if the bot is not in a guild.
+     *
+     * This is by far the most common setup mistake, and Discord's own answer —
+     * a bare "Unknown Guild" 404 — reads like the server does not exist. With a
+     * token that authenticates (an invalid one is a 401), a 404 here means only
+     * one thing: this bot is not a member. Saying so, and pointing at the
+     * invite, saves the guess.
+     */
+    public function assertBotIsInGuild(string $guildId): void
+    {
+        try {
+            $this->guild($guildId);
+        } catch (DiscordApiException $exception) {
+            if (! $exception->isNotFound()) {
+                throw $exception;
+            }
+
+            throw new DiscordApiException(
+                'The bot is not a member of this Discord server (Discord answered "Unknown Guild"). '
+                .'Use "Add the bot to a Discord server" above, which also picks up the right server ID.',
+                $exception->status,
+                $exception->discordCode,
+            );
+        }
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function roles(string $guildId): array
@@ -116,6 +143,18 @@ class DiscordApi
     }
 
     /**
+     * Remove a role from the guild entirely.
+     *
+     * Only ever called by a deliberate reset. Discord refuses this for a
+     * managed role (one owned by an integration) and for any role sitting
+     * above the bot's own, so callers must expect a 403 and carry on.
+     */
+    public function deleteRole(string $guildId, string $roleId, ?string $reason = null): void
+    {
+        $this->send('delete', "/guilds/{$guildId}/roles/{$roleId}", null, $reason);
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function channels(string $guildId): array
@@ -139,6 +178,18 @@ class DiscordApi
     public function updateChannel(string $channelId, array $payload, ?string $reason = null): array
     {
         return $this->patch("/channels/{$channelId}", $payload, $reason);
+    }
+
+    /**
+     * Delete a channel or category, and with it every message in it.
+     *
+     * Deleting a category does not delete the channels inside it: Discord
+     * leaves them behind at the top level, so a caller clearing a guild has to
+     * take the children first.
+     */
+    public function deleteChannel(string $channelId, ?string $reason = null): void
+    {
+        $this->send('delete', "/channels/{$channelId}", null, $reason);
     }
 
     /**

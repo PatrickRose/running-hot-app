@@ -54,6 +54,15 @@ class FakeDiscordGuild
      */
     public bool $refuseRoleGrants = false;
 
+    /**
+     * Role names whose deletion answers 403, as Discord does for a role sitting
+     * above the bot's own in the guild's hierarchy. Every real guild has at
+     * least one, so a wipe has to cope with it.
+     *
+     * @var array<int, string>
+     */
+    public array $refuseRoleDeletes = [];
+
     public function __construct(public readonly string $guildId = '900000000000000001')
     {
         $this->members[$this->botUserId] = [];
@@ -65,7 +74,56 @@ class FakeDiscordGuild
             'color' => 0,
             'hoist' => false,
             'mentionable' => false,
+            'managed' => false,
         ];
+    }
+
+    /**
+     * Put a role in the guild that the application did not make.
+     *
+     * How a test describes the thing this fake exists to catch: a server
+     * somebody has already provisioned, or set up by hand, that the database
+     * knows nothing about.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return string the new role's snowflake
+     */
+    public function seedRole(string $name, array $attributes = []): string
+    {
+        $id = (string) $this->nextId++;
+
+        $this->roles[$id] = [
+            'id' => $id,
+            'name' => $name,
+            'color' => 0,
+            'hoist' => false,
+            'mentionable' => false,
+            'managed' => false,
+            ...$attributes,
+        ];
+
+        return $id;
+    }
+
+    /**
+     * Put a channel or category in the guild that the application did not make.
+     *
+     * @return string the new channel's snowflake
+     */
+    public function seedChannel(string $name, int $type, ?string $parentId = null): string
+    {
+        $id = (string) $this->nextId++;
+
+        $this->channels[$id] = [
+            'id' => $id,
+            'name' => $name,
+            'type' => $type,
+            'parent_id' => $parentId,
+            'topic' => null,
+            'permission_overwrites' => [],
+        ];
+
+        return $id;
     }
 
     /**
@@ -196,6 +254,7 @@ class FakeDiscordGuild
                     'color' => $body['color'],
                     'hoist' => $body['hoist'],
                     'mentionable' => $body['mentionable'],
+                    'managed' => false,
                 ];
                 $this->roles[$role['id']] = $role;
 
@@ -207,6 +266,25 @@ class FakeDiscordGuild
 
         if (preg_match('#^/guilds/(\d+)/roles/(\d+)$#', $path, $matches) === 1) {
             $roleId = $matches[2];
+
+            if (! isset($this->roles[$roleId])) {
+                return Http::response(['message' => 'Unknown Role', 'code' => 10011], 404);
+            }
+
+            if ($method === 'DELETE') {
+                // Discord refuses to delete a role belonging to an integration,
+                // and the default role is not a thing that can be deleted.
+                if ($roleId === $this->guildId
+                    || ($this->roles[$roleId]['managed'] ?? false) === true
+                    || in_array($this->roles[$roleId]['name'], $this->refuseRoleDeletes, true)) {
+                    return Http::response(['message' => 'Missing Permissions', 'code' => 50013], 403);
+                }
+
+                unset($this->roles[$roleId]);
+
+                return Http::response(null, 204);
+            }
+
             $this->roles[$roleId] = [...$this->roles[$roleId], ...array_intersect_key($body, array_flip(['name', 'color', 'hoist', 'mentionable']))];
 
             return Http::response($this->roles[$roleId]);
@@ -261,6 +339,28 @@ class FakeDiscordGuild
 
             if (! isset($this->channels[$channelId])) {
                 return Http::response(['message' => 'Unknown Channel', 'code' => 10003], 404);
+            }
+
+            if ($method === 'DELETE') {
+                $deleted = $this->channels[$channelId];
+                unset($this->channels[$channelId]);
+
+                // Deleting a category orphans its children at the top level
+                // rather than taking them with it, which is the behaviour a
+                // caller clearing a guild has to work around.
+                foreach ($this->channels as $id => $channel) {
+                    if (($channel['parent_id'] ?? null) === $channelId) {
+                        $this->channels[$id]['parent_id'] = null;
+                    }
+                }
+
+                // A webhook does not outlive the channel it posts to.
+                $this->webhooks = array_filter(
+                    $this->webhooks,
+                    fn (array $webhook): bool => $webhook['channel_id'] !== $channelId,
+                );
+
+                return Http::response($deleted);
             }
 
             $this->channels[$channelId] = [...$this->channels[$channelId], ...$body];
