@@ -6,6 +6,7 @@ use App\Actions\CreateDefaultFacilities;
 use App\Actions\CreateDefaultRoster;
 use App\Actions\PublishFacilityList;
 use App\Enums\DiscordResourceKind;
+use App\Models\Corporation;
 use App\Models\DiscordResource;
 use App\Models\Game;
 use App\Models\User;
@@ -88,12 +89,11 @@ class FacilityListPublishingTest extends TestCase
             'discord_id' => '123456789',
         ]);
 
-        Http::assertSent(function ($request): bool {
+        Http::assertSent(function ($request) use ($game): bool {
             $embeds = $request->data()['embeds'] ?? [];
 
             return $request->method() === 'POST'
-                && count($embeds) === 1
-                && $embeds[0]['title'] === 'Facilities';
+                && count($embeds) === $game->corporations()->count();
         });
     }
 
@@ -137,27 +137,71 @@ class FacilityListPublishingTest extends TestCase
         }
 
         // Nor the shape a stack count would arrive in.
-        $embed = $payload['embeds'][0];
-        $this->assertArrayNotHasKey('stacks', $embed);
-
-        foreach ($embed['fields'] as $field) {
-            $this->assertDoesNotMatchRegularExpression('#\d+\s*/\s*\d+#', $field['value']);
+        foreach ($payload['embeds'] as $embed) {
+            $this->assertArrayNotHasKey('fields', $embed);
+            $this->assertDoesNotMatchRegularExpression('#\d+\s*/\s*\d+#', $embed['description']);
         }
     }
 
-    public function test_the_embed_lists_every_corporation_and_its_facilities(): void
+    public function test_each_corporation_gets_its_own_embed(): void
     {
         $game = $this->gameWithChannel();
 
-        $payload = FacilityListEmbed::payload($game);
-        $fields = $payload['embeds'][0]['fields'];
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
 
-        $this->assertCount($game->corporations()->count(), $fields);
+        $this->assertCount($game->corporations()->count(), $embeds);
 
-        $gordon = collect($fields)->firstWhere('name', 'Gordon');
+        $this->assertSame(
+            $game->corporations()->orderBy('name')->pluck('name')->all(),
+            array_column($embeds, 'title'),
+        );
+
+        $gordon = collect($embeds)->firstWhere('title', 'Gordon');
         $this->assertNotNull($gordon);
-        $this->assertStringContainsString('Gordon Corporate 1', $gordon['value']);
-        $this->assertStringContainsString('Corporate', $gordon['value']);
+        $this->assertStringContainsString('Gordon Tower', $gordon['description']);
+        $this->assertStringContainsString('Corporate', $gordon['description']);
+    }
+
+    /**
+     * The same colour as the Discord role its players already wear, so a
+     * Corporation looks the same everywhere.
+     */
+    public function test_an_embed_is_coloured_like_its_corporations_role(): void
+    {
+        $game = $this->gameWithChannel();
+
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
+        $gordon = collect($embeds)->firstWhere('title', 'Gordon');
+
+        $this->assertNotNull($gordon);
+        $this->assertSame(GuildBlueprint::colourFor('Gordon'), $gordon['color']);
+    }
+
+    public function test_the_heading_and_the_timestamp_bracket_the_list(): void
+    {
+        $game = $this->gameWithChannel();
+
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
+        $last = count($embeds) - 1;
+
+        $this->assertGreaterThan(1, count($embeds));
+
+        // Read as one list: a heading at the top, the timestamp at the bottom.
+        $this->assertArrayHasKey('author', $embeds[0]);
+        $this->assertArrayNotHasKey('author', $embeds[1]);
+        $this->assertArrayHasKey('timestamp', $embeds[$last]);
+        $this->assertArrayNotHasKey('timestamp', $embeds[0]);
+        $this->assertStringContainsString('not public knowledge', $embeds[$last]['footer']['text']);
+    }
+
+    public function test_a_game_with_no_corporations_says_so(): void
+    {
+        $game = Game::factory()->create();
+
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
+
+        $this->assertCount(1, $embeds);
+        $this->assertSame('Nothing built yet', $embeds[0]['title']);
     }
 
     public function test_a_building_facility_is_marked_as_building(): void
@@ -174,24 +218,47 @@ class FacilityListPublishingTest extends TestCase
         $this->assertStringContainsString('building', $json);
     }
 
-    public function test_the_embed_stays_within_discords_limits(): void
+    public function test_the_embeds_stay_within_discords_limits(): void
     {
         $game = $this->gameWithChannel();
 
-        $embed = FacilityListEmbed::payload($game)['embeds'][0];
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
 
-        $this->assertLessThanOrEqual(256, mb_strlen($embed['title']));
-        $this->assertLessThanOrEqual(4096, mb_strlen($embed['description']));
-        $this->assertLessThanOrEqual(25, count($embed['fields']));
+        $this->assertLessThanOrEqual(FacilityListEmbed::MAX_EMBEDS, count($embeds));
 
-        foreach ($embed['fields'] as $field) {
-            $this->assertLessThanOrEqual(256, mb_strlen($field['name']));
-            $this->assertLessThanOrEqual(1024, mb_strlen($field['value']));
+        foreach ($embeds as $embed) {
+            $this->assertLessThanOrEqual(256, mb_strlen($embed['title']));
+            $this->assertLessThanOrEqual(
+                FacilityListEmbed::MAX_DESCRIPTION,
+                mb_strlen($embed['description']),
+            );
         }
 
-        $json = json_encode($embed);
+        $json = json_encode($embeds);
         $this->assertIsString($json);
-        $this->assertLessThanOrEqual(6000, mb_strlen($json));
+        $this->assertLessThanOrEqual(FacilityListEmbed::MAX_TOTAL_CHARACTERS, mb_strlen($json));
+    }
+
+    /**
+     * Discord takes at most ten embeds in a message, so a game with more
+     * Corporations than that is told what it is not seeing rather than being
+     * quietly short of a few.
+     */
+    public function test_more_corporations_than_discord_allows_embeds_are_reported(): void
+    {
+        $game = $this->gameWithChannel();
+
+        foreach (range(1, 8) as $number) {
+            Corporation::factory()->for($game)->create([
+                'name' => sprintf('Zzz Holdings %d', $number),
+            ]);
+        }
+
+        $embeds = FacilityListEmbed::payload($game->fresh())['embeds'];
+        $last = count($embeds) - 1;
+
+        $this->assertCount(FacilityListEmbed::MAX_EMBEDS, $embeds);
+        $this->assertStringContainsString('not shown', $embeds[$last]['footer']['text']);
     }
 
     public function test_a_long_facility_list_is_truncated_on_a_line_boundary(): void
@@ -200,7 +267,7 @@ class FacilityListPublishingTest extends TestCase
         $corporation = $game->corporations()->orderBy('name')->firstOrFail();
         $type = $game->facilityTypes()->firstOrFail();
 
-        foreach (range(1, 60) as $number) {
+        foreach (range(1, 200) as $number) {
             $corporation->facilities()->create([
                 'game_id' => $game->id,
                 'facility_type_id' => $type->id,
@@ -209,12 +276,15 @@ class FacilityListPublishingTest extends TestCase
             ]);
         }
 
-        $fields = FacilityListEmbed::payload($game->fresh())['embeds'][0]['fields'];
-        $field = collect($fields)->firstWhere('name', $corporation->name);
+        $embeds = FacilityListEmbed::payload($game->fresh())['embeds'];
+        $embed = collect($embeds)->firstWhere('title', $corporation->name);
 
-        $this->assertNotNull($field);
-        $this->assertLessThanOrEqual(1024, mb_strlen($field['value']));
-        $this->assertStringContainsString('more', $field['value']);
+        $this->assertNotNull($embed);
+        $this->assertLessThanOrEqual(
+            FacilityListEmbed::MAX_DESCRIPTION,
+            mb_strlen($embed['description']),
+        );
+        $this->assertStringContainsString('more', $embed['description']);
     }
 
     public function test_a_game_without_a_channel_is_refused(): void

@@ -101,26 +101,26 @@ class CreateDefaultFacilities
     /**
      * The Facilities this Corporation opens with, from its briefing.
      *
-     * Counts differ per Corporation and the difference is mechanical: a second
+     * Counts and types come from the briefings and are not uniform: a second
      * Security Facility widens every one of that Corporation's stacks, and a
      * third Corporate Facility raises what every one of its Facilities can
      * store.
      *
-     * Names are the Corporation's short name and the type, numbered only where
-     * it owns more than one - "Gordon Corporate 1" reads as one of three,
-     * "Gordon Security" as the only one.
+     * Each one is named in the configuration, because a Facility's name is what
+     * players call it all game and "Gordon Corporate 2" is a label rather than a
+     * name. An entry with no name falls back to the Corporation's short name
+     * and the type, so a Corporation added later still gets something usable.
      *
      * @return array<int, Facility>
      */
     private function startingFacilities(Corporation $corporation): array
     {
         $types = $corporation->game->facilityTypes()->get()->keyBy('key');
-        $shortName = $this->shortName($corporation->name);
-
         $facilities = [];
+        $unnamed = [];
 
-        foreach ($this->configuredFacilities($corporation->name) as $key => $count) {
-            $type = $types->get($key);
+        foreach ($this->configuredFacilities($corporation->name) as $planned) {
+            $type = $types->get((string) ($planned['type'] ?? ''));
 
             // A type Control has renamed away is skipped rather than invented:
             // the catalogue is theirs, and a Facility with no type is not a
@@ -129,31 +129,39 @@ class CreateDefaultFacilities
                 continue;
             }
 
-            foreach (range(1, max(1, $count)) as $number) {
-                /** @var Facility $facility */
-                $facility = $corporation->facilities()->create([
-                    'game_id' => $corporation->game_id,
-                    'facility_type_id' => $type->id,
-                    'name' => $count > 1
-                        ? sprintf('%s %s %d', $shortName, $type->name, $number)
-                        : sprintf('%s %s', $shortName, $type->name),
-                    'available_from_turn' => Facility::FIRST_TURN,
-                ]);
+            $name = (string) ($planned['name'] ?? '');
 
-                $facilities[] = $facility;
+            if ($name === '') {
+                $unnamed[$type->key] = ($unnamed[$type->key] ?? 0) + 1;
+
+                $name = sprintf('%s %s', $this->shortName($corporation->name), $type->name);
+
+                if ($unnamed[$type->key] > 1) {
+                    $name .= ' '.$unnamed[$type->key];
+                }
             }
+
+            /** @var Facility $facility */
+            $facility = $corporation->facilities()->create([
+                'game_id' => $corporation->game_id,
+                'facility_type_id' => $type->id,
+                'name' => $name,
+                'available_from_turn' => Facility::FIRST_TURN,
+            ]);
+
+            $facilities[] = $facility;
         }
 
         return $facilities;
     }
 
     /**
-     * The configured Facility counts for one Corporation, keyed by type.
+     * The configured Facilities for one Corporation.
      *
      * A Corporation the configuration says nothing about opens with none,
      * rather than with a guessed set.
      *
-     * @return array<string, int>
+     * @return array<int, array<string, mixed>>
      */
     private function configuredFacilities(string $corporationName): array
     {
@@ -162,7 +170,7 @@ class CreateDefaultFacilities
                 continue;
             }
 
-            /** @var array<string, int> $facilities */
+            /** @var array<int, array<string, mixed>> $facilities */
             $facilities = $configured['facilities'] ?? [];
 
             return $facilities;

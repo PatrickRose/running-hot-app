@@ -28,13 +28,18 @@ return [
     |
     | Each corporation fields the three corporate roles of rulebook 1.3.
     |
-    | 'facilities' is what the corporation opens with, from the same briefings:
-    | a count per Facility type key. These are not uniform, and the difference
-    | is mechanical rather than decorative - DTC's second Security Facility
-    | widens every one of its stacks, Gordon's three Corporate Facilities make
-    | it the only corporation that can store six technologies per Facility, and
-    | Genetic Equity's three Research Facilities are its whole strategy.
-    | Applied by App\Actions\CreateDefaultFacilities.
+    | 'facilities' is what the corporation opens with. The counts and types come
+    | from the briefings, and they are not uniform: the difference is mechanical
+    | rather than decorative - DTC's second Security Facility widens every one
+    | of its stacks, Gordon's three Corporate Facilities make it the only
+    | corporation that can store six technologies per Facility, and Genetic
+    | Equity's three Research Facilities are its whole strategy. Applied by
+    | App\Actions\CreateDefaultFacilities.
+    |
+    | The names are flavour rather than briefing data: Procatorion was bought
+    | out of land near Sheffield, so they are places there. Rename them freely,
+    | here or in the Control panel - a Facility's name is what players will call
+    | it all game, and nothing keys off it.
     |
     */
 
@@ -42,10 +47,10 @@ return [
         [
             'name' => 'Augmented Nucleotech',
             'facilities' => [
-                FacilityTypeBlueprint::RESEARCH => 1,
-                FacilityTypeBlueprint::CORPORATE => 1,
-                FacilityTypeBlueprint::SECURITY => 1,
-                FacilityTypeBlueprint::POWER => 1,
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Kelham Island Laboratories'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Nucleotech House'],
+                ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Neepsend Armoury'],
+                ['type' => FacilityTypeBlueprint::POWER, 'name' => 'Blackburn Meadows Station'],
             ],
             'income' => 5,
             'political_will' => 5,
@@ -54,10 +59,11 @@ return [
         [
             'name' => 'Digital Tactical Control',
             'facilities' => [
-                FacilityTypeBlueprint::RESEARCH => 1,
-                FacilityTypeBlueprint::CORPORATE => 1,
-                FacilityTypeBlueprint::SECURITY => 2,
-                FacilityTypeBlueprint::ARMS => 1,
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Shirecliffe Laboratories'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Tactical House'],
+                ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Wincobank Keep'],
+                ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Grimesthorpe Barracks'],
+                ['type' => FacilityTypeBlueprint::ARMS, 'name' => 'Brightside Arsenal'],
             ],
             'income' => 13,
             'political_will' => 7,
@@ -66,9 +72,11 @@ return [
         [
             'name' => 'Genetic Equity',
             'facilities' => [
-                FacilityTypeBlueprint::RESEARCH => 3,
-                FacilityTypeBlueprint::CORPORATE => 1,
-                FacilityTypeBlueprint::SECURITY => 1,
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Crookes Institute'],
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Broomhall Genome Wing'],
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Endcliffe Hatchery'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Equity House'],
+                ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Hallamshire Gatehouse'],
             ],
             'income' => 10,
             'political_will' => 10,
@@ -77,9 +85,11 @@ return [
         [
             'name' => 'Gordon',
             'facilities' => [
-                FacilityTypeBlueprint::RESEARCH => 1,
-                FacilityTypeBlueprint::CORPORATE => 3,
-                FacilityTypeBlueprint::SECURITY => 1,
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Owlerton Laboratories'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Gordon Tower'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Fitzalan Chambers'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'Norfolk Park Registry'],
+                ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Burngreave Vault'],
             ],
             'income' => 13,
             'political_will' => 7,
@@ -88,10 +98,11 @@ return [
         [
             'name' => 'McCullough Calibrated Mechanical',
             'facilities' => [
-                FacilityTypeBlueprint::RESEARCH => 2,
-                FacilityTypeBlueprint::CORPORATE => 1,
-                FacilityTypeBlueprint::SECURITY => 1,
-                FacilityTypeBlueprint::FACTORY => 1,
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Attercliffe Laboratories'],
+                ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Darnall Test Range'],
+                ['type' => FacilityTypeBlueprint::CORPORATE, 'name' => 'McCullough House'],
+                ['type' => FacilityTypeBlueprint::SECURITY, 'name' => 'Tinsley Gatehouse'],
+                ['type' => FacilityTypeBlueprint::FACTORY, 'name' => 'Templeborough Works'],
             ],
             'income' => 12,
             'political_will' => 9,

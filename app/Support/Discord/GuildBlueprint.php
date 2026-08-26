@@ -92,7 +92,7 @@ class GuildBlueprint
             $roles[self::corporationRoleKey($corporation)] = new PlannedRole(
                 key: self::corporationRoleKey($corporation),
                 name: $corporation->name,
-                colour: $this->colourFor($corporation->name),
+                colour: self::colourFor($corporation->name),
             );
         }
 
@@ -100,7 +100,7 @@ class GuildBlueprint
             $roles[self::gangRoleKey($gang)] = new PlannedRole(
                 key: self::gangRoleKey($gang),
                 name: $gang->name,
-                colour: $this->colourFor($gang->name),
+                colour: self::colourFor($gang->name),
             );
         }
 
@@ -385,7 +385,16 @@ class GuildBlueprint
         return $this->game->gangs()->orderBy('id')->get();
     }
 
-    private function colourFor(string $name): int
+    /**
+     * A team's colour, indexed off its name so the same team is the same colour
+     * everywhere the application draws it.
+     *
+     * Public because anything the application shows about a team should match
+     * the colour of the Discord role players already see against their own
+     * name - {@see FacilityListEmbed} colours a
+     * Corporation's embed with it.
+     */
+    public static function colourFor(string $name): int
     {
         $index = (int) hexdec(mb_substr(md5($name), 0, 8)) % count(self::TEAM_COLOURS);
 

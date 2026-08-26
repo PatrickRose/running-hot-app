@@ -8,7 +8,7 @@ use App\Models\Game;
 use Illuminate\Support\Carbon;
 
 /**
- * The Discord embed for #facility-list: who owns what.
+ * The Discord embeds for #facility-list: who owns what.
  *
  * Deliberately pure, like {@see GuildBlueprint}: it reads the roster and
  * returns a payload, touching neither Discord nor anything else. What players
@@ -29,72 +29,70 @@ use Illuminate\Support\Carbon;
 class FacilityListEmbed
 {
     /**
-     * Discord's own limits on an embed.
+     * Discord's own limits on a message's embeds.
      *
      * @see https://discord.com/developers/docs/resources/message#embed-object-embed-limits
      */
-    public const MAX_FIELDS = 25;
+    public const MAX_EMBEDS = 10;
 
-    public const MAX_FIELD_VALUE = 1024;
+    public const MAX_DESCRIPTION = 4096;
+
+    public const MAX_TOTAL_CHARACTERS = 6000;
 
     /**
-     * One inline field per Corporation, which Discord renders as a grid of
-     * three across. Fields rather than an embed each because Discord allows 25
-     * of them against 10 embeds, so this holds a far bigger game.
+     * One embed per Corporation, coloured to match the Discord role its players
+     * already wear, so a Corporation is the same colour everywhere.
+     *
+     * An embed each rather than one embed of fields because a Corporation with
+     * five Facilities is a block of text either way, and separating them gives
+     * each a heading, a colour and its own space. The cost is Discord's cap of
+     * ten embeds per message: a game with more Corporations than that gets the
+     * first ten and a line saying so, which is a limit worth living with for a
+     * game whose roster is five.
      *
      * @return array<string, mixed>
      */
     public static function payload(Game $game): array
     {
-        $turn = $game->currentTurn();
-
-        return [
-            'embeds' => [[
-                'title' => 'Facilities',
-                'description' => 'Every Facility in Procatorion, and who owns it. '
-                    ."What is installed in them is not public knowledge.\n\n"
-                    .'Use a reconnaissance action to learn more.',
-                'color' => 0x2B6CB0,
-                'fields' => self::fields($game),
-                'footer' => [
-                    'text' => $turn === null
-                        ? 'Before the game began'
-                        : sprintf('As of turn %d', $turn->number),
-                ],
-                'timestamp' => Carbon::now()->toIso8601String(),
-            ]],
-        ];
-    }
-
-    /**
-     * @return array<int, array{name: string, value: string, inline: bool}>
-     */
-    private static function fields(Game $game): array
-    {
         $corporations = $game->corporations()
             ->with(['facilities' => fn ($query) => $query->orderBy('name'), 'facilities.facilityType'])
             ->orderBy('name')
-            ->limit(self::MAX_FIELDS)
             ->get();
 
         if ($corporations->isEmpty()) {
-            return [[
-                'name' => 'Nothing built yet',
-                'value' => 'No Corporation has opened a Facility.',
-                'inline' => false,
-            ]];
+            return ['embeds' => [self::emptyEmbed($game)]];
         }
 
+        $shown = $corporations->take(self::MAX_EMBEDS);
+        $hidden = $corporations->count() - $shown->count();
         $turnNumber = $game->currentTurn()?->number;
 
-        return $corporations
-            ->map(fn (Corporation $corporation): array => [
-                'name' => $corporation->name,
-                'value' => self::facilityLines($corporation, $turnNumber),
-                'inline' => true,
-            ])
+        $embeds = $shown
             ->values()
+            ->map(fn (Corporation $corporation): array => self::corporationEmbed($corporation, $turnNumber))
             ->all();
+
+        // The heading goes on the first embed and the timestamp on the last, so
+        // the message reads as one list rather than as several.
+        $embeds[0]['author'] = ['name' => 'Facilities in Procatorion'];
+
+        $last = count($embeds) - 1;
+        $embeds[$last]['footer'] = ['text' => self::footerText($turnNumber, $hidden)];
+        $embeds[$last]['timestamp'] = Carbon::now()->toIso8601String();
+
+        return ['embeds' => $embeds];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function corporationEmbed(Corporation $corporation, ?int $turnNumber): array
+    {
+        return [
+            'title' => $corporation->name,
+            'color' => GuildBlueprint::colourFor($corporation->name),
+            'description' => self::facilityLines($corporation, $turnNumber),
+        ];
     }
 
     /**
@@ -104,30 +102,64 @@ class FacilityListEmbed
     private static function facilityLines(Corporation $corporation, ?int $turnNumber): string
     {
         $lines = $corporation->facilities
+            // Grouped by type, so a Corporation's two Security Facilities sit
+            // together rather than either end of an alphabetical list.
+            ->sortBy(fn (Facility $facility): string => $facility->facilityType->name.' '.$facility->name)
             ->map(fn (Facility $facility): string => sprintf(
-                '%s — %s%s',
+                '**%s** — %s%s',
                 $facility->name,
                 $facility->facilityType->name,
                 $facility->isAvailableOnTurn($turnNumber) ? '' : ' *(building)*',
             ))
+            ->values()
             ->all();
 
         if ($lines === []) {
             return '*No Facilities.*';
         }
 
-        $value = '';
+        $description = '';
 
         foreach ($lines as $index => $line) {
-            $candidate = $value === '' ? $line : $value."\n".$line;
+            $candidate = $description === '' ? $line : $description."\n".$line;
 
-            if (mb_strlen($candidate) > self::MAX_FIELD_VALUE - 32) {
-                return $value."\n".sprintf('*and %d more*', count($lines) - $index);
+            if (mb_strlen($candidate) > self::MAX_DESCRIPTION - 64) {
+                return $description."\n".sprintf('*and %d more*', count($lines) - $index);
             }
 
-            $value = $candidate;
+            $description = $candidate;
         }
 
-        return $value;
+        return $description;
+    }
+
+    private static function footerText(?int $turnNumber, int $hidden): string
+    {
+        $text = $turnNumber === null
+            ? 'Before the game began'
+            : sprintf('As of turn %d', $turnNumber);
+
+        $text .= ' · What is installed in a Facility is not public knowledge';
+
+        if ($hidden > 0) {
+            $text .= sprintf(' · %d more Corporation(s) not shown', $hidden);
+        }
+
+        return $text;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function emptyEmbed(Game $game): array
+    {
+        return [
+            'author' => ['name' => 'Facilities in Procatorion'],
+            'title' => 'Nothing built yet',
+            'description' => 'No Corporation has opened a Facility.',
+            'color' => 0x2B6CB0,
+            'footer' => ['text' => self::footerText($game->currentTurn()?->number, 0)],
+            'timestamp' => Carbon::now()->toIso8601String(),
+        ];
     }
 }

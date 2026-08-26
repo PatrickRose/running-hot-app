@@ -50,7 +50,7 @@ class DefaultFacilitiesTest extends TestCase
             $corporation = $game->corporations()->where('name', $entry['name'])->sole();
 
             $this->assertSame(
-                array_sum($entry['facilities']),
+                count($entry['facilities']),
                 $corporation->facilities()->count(),
                 $entry['name'].' should open with the Facilities from its briefing.',
             );
@@ -124,20 +124,40 @@ class DefaultFacilitiesTest extends TestCase
         $this->assertSame(0, $defence->cardMoveDiscount($gordon));
     }
 
-    public function test_repeated_facilities_are_numbered(): void
+    /**
+     * A Facility's name is what players call it all game, so each one is named
+     * in the configuration rather than labelled from its type.
+     */
+    public function test_each_facility_gets_its_configured_name(): void
     {
         $game = $this->setUpGame();
 
         app(CreateDefaultFacilities::class)->handle($game);
 
-        $gordon = $game->corporations()->where('name', 'Gordon')->sole();
-        $names = $gordon->facilities()->orderBy('name')->pluck('name')->all();
+        /** @var array<int, array<string, mixed>> $configured */
+        $configured = config('running_hot.corporations');
 
-        $this->assertContains('Gordon Corporate 1', $names);
-        $this->assertContains('Gordon Corporate 3', $names);
+        foreach ($configured as $entry) {
+            $corporation = $game->corporations()->where('name', $entry['name'])->sole();
+            $names = $corporation->facilities()->pluck('name')->all();
 
-        // Only one Security Facility, so it is not numbered.
-        $this->assertContains('Gordon Security', $names);
+            foreach ($entry['facilities'] as $planned) {
+                $this->assertContains($planned['name'], $names);
+            }
+        }
+    }
+
+    public function test_names_are_distinct_within_a_corporation(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        foreach ($game->corporations as $corporation) {
+            $names = $corporation->facilities()->pluck('name');
+
+            $this->assertSame($names->count(), $names->unique()->count());
+        }
     }
 
     public function test_the_starting_facilities_are_open_straight_away(): void
@@ -167,20 +187,32 @@ class DefaultFacilitiesTest extends TestCase
         $this->assertSame(0, $game->trackerAdjustments()->count());
     }
 
-    public function test_a_facility_is_named_after_its_corporation(): void
+    /**
+     * A configured Facility with no name of its own still gets a usable one, so
+     * a Corporation added to the roster later does not need naming first.
+     */
+    public function test_an_unnamed_facility_falls_back_to_its_corporation_and_type(): void
     {
         $game = Game::factory()->create();
         $corporation = Corporation::factory()->for($game)->create([
-            'name' => 'McCullough Calibrated Mechanical',
+            'name' => 'Sheffield Forgemasters',
         ]);
+
+        config()->set('running_hot.corporations', [[
+            'name' => 'Sheffield Forgemasters',
+            'facilities' => [
+                ['type' => FacilityTypeBlueprint::RESEARCH],
+                ['type' => FacilityTypeBlueprint::RESEARCH],
+                ['type' => FacilityTypeBlueprint::SECURITY],
+            ],
+        ]]);
 
         app(CreateDefaultFacilities::class)->handle($game);
 
-        $this->assertGreaterThan(0, $corporation->facilities()->count());
-
-        foreach ($corporation->facilities as $facility) {
-            $this->assertStringStartsWith('McCullough ', $facility->name);
-        }
+        $this->assertSame(
+            ['Sheffield Research', 'Sheffield Research 2', 'Sheffield Security'],
+            $corporation->facilities()->orderBy('name')->pluck('name')->all(),
+        );
     }
 
     /**
