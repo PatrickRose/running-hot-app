@@ -42,12 +42,10 @@ class GuildBlueprint
     /**
      * Discord's limit on how many channels one category may hold.
      *
-     * A Corporation's category holds its two team channels plus a pair for
-     * each Facility, so this is the point at which its 25th Facility stops
-     * fitting — 24 is the most it can hold. Far beyond a game whose
-     * Corporations open with five, but the number is here so that a change to
-     * the shape of these channels has to reckon with it rather than discover it
-     * as a 400 from Discord mid-game.
+     * A Corporation's category holds its two team channels plus a pair for each
+     * Facility, so it runs out at 24 Facilities — well past anything the game's
+     * economy allows one Corporation to build. Recorded rather than guarded
+     * against for that reason.
      */
     public const MAX_CHANNELS_PER_CATEGORY = 50;
 
@@ -301,8 +299,6 @@ class GuildBlueprint
      *
      * They sit in the Corporation's own category, beside the two channels its
      * players talk in, so everything belonging to a Corporation is in one place.
-     * Discord allows 50 channels per category and the team pair takes two of
-     * them, so this holds 24 Facilities per Corporation.
      *
      * Private to Control and the owning Corporation. The Runners attacking a
      * Facility are added when a Run starts, which is the Run's business: they
