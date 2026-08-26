@@ -35,6 +35,8 @@ class GuildBlueprint
 
     public const CHANNEL_ANNOUNCEMENTS = 'channel:common:announcements';
 
+    public const CHANNEL_FACILITY_LIST = 'channel:common:facility-list';
+
     /**
      * Team colours, indexed deterministically off the team's name so a role
      * keeps its colour across reconciles and two teams rarely collide.
@@ -90,7 +92,7 @@ class GuildBlueprint
             $roles[self::corporationRoleKey($corporation)] = new PlannedRole(
                 key: self::corporationRoleKey($corporation),
                 name: $corporation->name,
-                colour: $this->colourFor($corporation->name),
+                colour: self::colourFor($corporation->name),
             );
         }
 
@@ -98,7 +100,7 @@ class GuildBlueprint
             $roles[self::gangRoleKey($gang)] = new PlannedRole(
                 key: self::gangRoleKey($gang),
                 name: $gang->name,
-                colour: $this->colourFor($gang->name),
+                colour: self::colourFor($gang->name),
             );
         }
 
@@ -158,7 +160,7 @@ class GuildBlueprint
                 topic: 'Everyone, out of character. Rules questions go here.',
             ),
             new PlannedChannel(
-                key: 'channel:common:facility-list',
+                key: self::CHANNEL_FACILITY_LIST,
                 kind: DiscordResourceKind::TextChannel,
                 name: 'facility-list',
                 parentKey: self::CATEGORY_COMMON,
@@ -383,7 +385,16 @@ class GuildBlueprint
         return $this->game->gangs()->orderBy('id')->get();
     }
 
-    private function colourFor(string $name): int
+    /**
+     * A team's colour, indexed off its name so the same team is the same colour
+     * everywhere the application draws it.
+     *
+     * Public because anything the application shows about a team should match
+     * the colour of the Discord role players already see against their own
+     * name - {@see FacilityListEmbed} colours a
+     * Corporation's embed with it.
+     */
+    public static function colourFor(string $name): int
     {
         $index = (int) hexdec(mb_substr(md5($name), 0, 8)) % count(self::TEAM_COLOURS);
 

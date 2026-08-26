@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Control;
 
+use App\Actions\CreateDefaultFacilities;
 use App\Actions\CreateDefaultRoster;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\StoreGameRequest;
@@ -31,13 +32,30 @@ class GameController extends Controller
         ]);
     }
 
-    public function store(StoreGameRequest $request, CreateDefaultRoster $roster): RedirectResponse
-    {
+    public function store(
+        StoreGameRequest $request,
+        CreateDefaultRoster $roster,
+        CreateDefaultFacilities $facilities,
+    ): RedirectResponse {
         $game = Game::create($request->gameAttributes());
 
         // Built before handing over to Discord: provisioning permissions the
         // team channels from the roster, so the teams have to exist by then.
-        $created = $request->shouldCreateDefaultRoster() ? $roster->handle($game) : null;
+        $status = 'Game created.';
+
+        if ($request->shouldCreateDefaultRoster()) {
+            $created = $roster->handle($game);
+            // After the roster, because Facilities belong to Corporations.
+            $defences = $facilities->handle($game);
+
+            $status = sprintf(
+                'Game created with %d corporations, %d gangs, %d characters and %d Facilities.',
+                $created['corporations'],
+                $created['gangs'],
+                $created['characters'],
+                $defences['facilities'],
+            );
+        }
 
         // Setting the Discord server up is the rest of creating a game, so go
         // straight on to it: the bot-add flow ends by provisioning, which is
@@ -45,13 +63,6 @@ class GameController extends Controller
         if ($request->shouldConnectDiscord()) {
             return to_route('control.games.discord.connect', $game);
         }
-
-        $status = $created === null ? 'Game created.' : sprintf(
-            'Game created with %d corporations, %d gangs and %d characters.',
-            $created['corporations'],
-            $created['gangs'],
-            $created['characters'],
-        );
 
         return to_route('control.games.show', $game)->with('status', $status);
     }

@@ -9,7 +9,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { dashboard } from '@/routes';
+import { dashboard, facilities } from '@/routes';
 import { index } from '@/routes/control/games';
 import type { GameSummary } from '@/types/game';
 
@@ -67,14 +67,25 @@ export default function Dashboard({
                     }
                 />
 
-                {isControl && (
-                    <Link
-                        href={index()}
-                        className="self-start text-sm text-primary underline-offset-4 hover:underline"
-                    >
-                        Open the Control panel →
-                    </Link>
-                )}
+                <div className="flex flex-wrap gap-4">
+                    {game && (
+                        <Link
+                            href={facilities()}
+                            className="text-sm text-primary underline-offset-4 hover:underline"
+                        >
+                            See the Facilities →
+                        </Link>
+                    )}
+
+                    {isControl && (
+                        <Link
+                            href={index()}
+                            className="text-sm text-primary underline-offset-4 hover:underline"
+                        >
+                            Open the Control panel →
+                        </Link>
+                    )}
+                </div>
 
                 {discordJoin && (
                     <Card className="border-amber-500/50">

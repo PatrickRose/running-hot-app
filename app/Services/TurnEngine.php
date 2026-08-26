@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Actions\ApplyTeamTimeUpkeep;
+use App\Actions\PublishFacilityList;
 use App\Enums\GameStatus;
 use App\Enums\PhaseStatus;
 use App\Enums\PhaseType;
@@ -28,6 +29,8 @@ class TurnEngine
     public function __construct(
         private readonly DiscordAnnouncer $announcer,
         private readonly ApplyTeamTimeUpkeep $upkeep,
+        private readonly FacilityDefenceService $facilityDefence,
+        private readonly PublishFacilityList $facilityList,
     ) {}
 
     /**
@@ -67,6 +70,12 @@ class TurnEngine
             ])->save();
 
             $this->announcer->phaseEnded($phase);
+
+            // Any security budget Security did not spend goes back to the
+            // Corporation at the end of the Action phase (rulebook 3.3.5).
+            if ($phase->type === PhaseType::Action) {
+                $this->facilityDefence->returnUnspentBudgets($phase->turn, $actor);
+            }
 
             $next = $phase->type->next();
 
@@ -185,6 +194,13 @@ class TurnEngine
         $phase->setRelation('turn', $turn);
 
         $this->announcer->phaseStarted($phase);
+
+        // A Facility requisitioned last turn opens now, so the published list
+        // is a turn out of date the moment Setup begins. Only ever an edit:
+        // refresh does nothing until Control has published one.
+        if ($type === PhaseType::Setup) {
+            $this->facilityList->refresh($game);
+        }
 
         // Income and free Wound recovery land as Team Time opens, giving Control
         // the whole phase to review and override them.

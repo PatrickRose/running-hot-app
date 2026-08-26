@@ -39,6 +39,12 @@ class Corporation extends Model
         return $this->hasMany(Character::class);
     }
 
+    /** @return HasMany<Facility, $this> */
+    public function facilities(): HasMany
+    {
+        return $this->hasMany(Facility::class);
+    }
+
     /** @return MorphMany<TrackerAdjustment, $this> */
     public function trackerAdjustments(): MorphMany
     {

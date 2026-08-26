@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Actions\CreateDefaultFacilities;
 use App\Actions\CreateDefaultRoster;
 use App\Models\Game;
 use App\Models\User;
@@ -16,7 +17,10 @@ use Illuminate\Support\Facades\Hash;
  */
 class DemoGameSeeder extends Seeder
 {
-    public function __construct(private readonly CreateDefaultRoster $roster) {}
+    public function __construct(
+        private readonly CreateDefaultRoster $roster,
+        private readonly CreateDefaultFacilities $facilities,
+    ) {}
 
     public function run(): void
     {
@@ -41,12 +45,19 @@ class DemoGameSeeder extends Seeder
         ]);
 
         $created = $this->roster->handle($game);
+        $defences = $this->facilities->handle($game);
 
         $this->command->info(sprintf(
             'Demo game seeded: %d corporations, %d gangs, %d characters.',
             $created['corporations'],
             $created['gangs'],
             $created['characters'],
+        ));
+        $this->command->info(sprintf(
+            '%d Facilities built, %d Protection Cards catalogued, %d installed.',
+            $defences['facilities'],
+            $defences['card_types'],
+            $defences['installed'],
         ));
         $this->command->info('Control login: control@example.com / password');
         $this->command->warn('Add a Discord server to the game in the Control panel before announcements will land.');

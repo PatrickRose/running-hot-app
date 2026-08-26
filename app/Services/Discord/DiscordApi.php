@@ -189,6 +189,38 @@ class DiscordApi
         }
     }
 
+    /**
+     * Post a message to a channel as the bot.
+     *
+     * The announcement webhook cannot do this: a webhook only ever posts to the
+     * channel it was created in. Anything that has to land in a particular
+     * channel needs the bot.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function createMessage(string $channelId, array $payload): array
+    {
+        /** @var array<string, mixed> */
+        return $this->post("/channels/{$channelId}/messages", $payload);
+    }
+
+    /**
+     * Rewrite a message the bot posted earlier.
+     *
+     * Used rather than posting again so that a list which changes during the
+     * game stays in one place: a channel full of superseded lists is worse than
+     * no list, because players would have to work out which one is current.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function editMessage(string $channelId, string $messageId, array $payload): array
+    {
+        /** @var array<string, mixed> */
+        return $this->patch("/channels/{$channelId}/messages/{$messageId}", $payload);
+    }
+
     public function addRoleToMember(string $guildId, string $userId, string $roleId, ?string $reason = null): void
     {
         $this->send('put', "/guilds/{$guildId}/members/{$userId}/roles/{$roleId}", null, $reason);

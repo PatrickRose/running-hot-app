@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\SeedFacilityTypes;
 use App\Enums\DiscordProvisionStatus;
 use App\Enums\GameStatus;
 use Database\Factories\GameFactory;
@@ -43,6 +44,20 @@ class Game extends Model
     use HasFactory;
 
     /**
+     * Give every new game the starting Facility type catalogue.
+     *
+     * A hook rather than a call in the controller so that every route into a
+     * game - Control creating one, a seeder, a factory in a test - ends up with
+     * a catalogue. Control extends or edits it from there.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Game $game): void {
+            app(SeedFacilityTypes::class)->handle($game);
+        });
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -65,6 +80,24 @@ class Game extends Model
     public function corporations(): HasMany
     {
         return $this->hasMany(Corporation::class);
+    }
+
+    /** @return HasMany<FacilityType, $this> */
+    public function facilityTypes(): HasMany
+    {
+        return $this->hasMany(FacilityType::class);
+    }
+
+    /** @return HasMany<Facility, $this> */
+    public function facilities(): HasMany
+    {
+        return $this->hasMany(Facility::class);
+    }
+
+    /** @return HasMany<ProtectionCardType, $this> */
+    public function protectionCardTypes(): HasMany
+    {
+        return $this->hasMany(ProtectionCardType::class);
     }
 
     /** @return HasMany<Gang, $this> */

@@ -111,3 +111,143 @@ export type TrackerAdjustment = {
     actor: string | null;
     at: string | null;
 };
+
+export type ProtectionKind = 'physical' | 'cyber';
+
+export type ProtectionCardAvailability =
+    'available' | 'rumoured' | 'research_only';
+
+/**
+ * How a type's effect grows with the number a Corporation owns: flat per
+ * Facility, or stepping at 2, 3, 5, 8.
+ */
+export type FacilityGrantScaling = 'per_facility' | 'thresholds';
+
+/** An entry in the game's Facility type catalogue (rulebook 3.3.1). */
+export type FacilityTypeSummary = {
+    id: number;
+    key: string;
+    name: string;
+    description: string | null;
+    access_effect: string | null;
+    build_cost: number;
+    /** Physical slots each Facility of this type adds. Security grants 1. */
+    physical_slots_granted: number;
+    /** Cyber slots each Facility of this type adds. Security grants 2. */
+    cyber_slots_granted: number;
+    /** Technology storage each Facility of this type adds. */
+    technology_capacity_granted: number;
+    /** Credits off reordering a stack. Factory grants 2. */
+    card_move_discount: number;
+    grant_scaling: FacilityGrantScaling;
+    grant_scaling_label: string;
+    facility_count: number;
+    in_use: boolean;
+};
+
+/** An entry in the game's Protection Card catalogue (rulebook 3.3.2). */
+export type ProtectionCardSummary = {
+    id: number;
+    name: string;
+    kind: ProtectionKind;
+    kind_label: string;
+    cost: number;
+    challenge_skill: 'brawn' | 'hack';
+    challenge_skill_label: string;
+    challenge_strength: number;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+    availability: ProtectionCardAvailability;
+    availability_label: string;
+    notes: string | null;
+    installed_count: number;
+};
+
+export type InstalledProtectionCard = {
+    id: number;
+    /** 1 is the card Runners meet first. */
+    position: number;
+    card_type_id: number;
+    name: string;
+    challenge: string;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+};
+
+export type ProtectionStack = {
+    kind: ProtectionKind;
+    kind_label: string;
+    slots: number;
+    cards: InstalledProtectionCard[];
+};
+
+export type FacilitySecurityState = {
+    directed: boolean;
+    budget: number;
+    budget_spent: number;
+    budget_returned: boolean;
+    cards_removed: number;
+};
+
+export type FacilitySummary = {
+    id: number;
+    name: string;
+    corporation_id: number;
+    facility_type_id: number;
+    facility_type: string;
+    available_from_turn: number;
+    /** False while the Facility is still being built. */
+    available: boolean;
+    notes: string | null;
+    stacks: ProtectionStack[];
+    security: FacilitySecurityState;
+};
+
+export type CorporationFacilities = {
+    id: number;
+    name: string;
+    credits: number;
+    /** Physical and cyber move independently, so they are reported apart. */
+    physical_slots: number;
+    cyber_slots: number;
+    technology_capacity_per_facility: number;
+    card_move_discount: number;
+    facilities: FacilitySummary[];
+};
+
+/** Whether the Facility list can be published to Discord, and whether it has. */
+export type FacilityListState = {
+    /** False until the game's Discord server has been provisioned. */
+    channel_exists: boolean;
+    /** False when DISCORD_BOT_TOKEN is unset; a webhook cannot do this. */
+    bot_configured: boolean;
+    published: boolean;
+};
+
+export type PublicFacility = {
+    id: number;
+    name: string;
+    facility_type: string;
+    available: boolean;
+    available_from_turn: number;
+};
+
+/** What every player may see: who owns what, and nothing about its defences. */
+export type PublicCorporationFacilities = {
+    name: string;
+    is_yours: boolean;
+    facilities: PublicFacility[];
+};
+
+/**
+ * The Facility list as one player sees it. `own` is set only for a player
+ * holding a Corporate seat, and carries that Corporation's stacks in full —
+ * rulebook 3.4.2 makes those Secret from everyone else, not from their owner.
+ */
+export type FacilityBoard = {
+    turn: number | null;
+    public: PublicCorporationFacilities[];
+    own: CorporationFacilities | null;
+};

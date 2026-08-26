@@ -221,9 +221,10 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 
 **Control always wins.** The rulebook defers to Control constantly ("if reasonable, Control will typically give you the opportunity"). Every computed value must stay editable by Control. Never build a mechanic the organisers cannot override mid-game.
 
-**Never invent a rule the rulebook does not state.** Where the rules are silent, expose a value for Control to set rather than deriving one. Two live examples:
+**Never invent a rule the rulebook does not state.** Where the rules are silent, expose a value for Control to set rather than deriving one. Three live examples:
 - Income is *not* calculated from anything. It is the abstraction of a corporation's stock price, so stock price is not modelled at all.
 - Removing a Tag costs 3 Credits and is the player's choice, so upkeep never does it automatically.
+- A Facility build cost comes from its type's own price on the type sheet, and Control can name another — MCM's Construction Leader technology is a discount on exactly this. What is *not* derived is Income: more Corporate Facilities is a *reason* for Control to raise it, never a formula that raises it.
 
 **Never write a tracker directly.** All movement of Income, Political Will, Credits, Notoriety, Wounds, Tags, Stability and Civil Unrest goes through `TrackerService`, which writes a `tracker_adjustments` row recording before, after, delta, actor and reason. That ledger is how Control answers "why did that number change?" three turns later. `$model->update(['wounds' => ...])` bypasses it and is a bug.
 
@@ -240,13 +241,19 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 |---|---|
 | Phase transitions, pause/resume/extend | `App\Services\TurnEngine` |
 | Tracker writes and the audit ledger | `App\Services\TrackerService` |
+| Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
+| Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
+| A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
+| A game's starting Facilities and card catalogue | `config/running_hot.php`, `App\Actions\CreateDefaultFacilities` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
+| The `#facility-list` embed, and posting it | `App\Support\Discord\FacilityListEmbed`, `App\Actions\PublishFacilityList` |
 | Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
 | Handing a player their Discord roles | `App\Actions\SyncDiscordRolesForUser` |
 | Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
 | Inertia payload shaping | `App\Support\GamePresenter` |
+| What a player may see of the Facilities | `App\Http\Controllers\FacilityBoardController` |
 | Auto-advance and its backstop | `App\Jobs\AdvancePhase`, `game:tick` |
 
 ## Gotchas that have already cost time
@@ -291,8 +298,63 @@ The roster has to exist first, since team channels are permissioned from it. A b
 
 **Never let a test reach Discord.** `TestCase` calls `Http::preventStrayRequests()` and `phpunit.xml` blanks `DISCORD_WEBHOOK_URL`, because the sync queue driver runs the announcement job inline: without both, a real webhook in `.env` gets posted to for real. `SendDiscordAnnouncement` deliberately rethrows `StrayRequestException` so this fails loudly rather than being swallowed by its fail-soft catch.
 
+## Facility Defence
+
+**A Facility type is a row, not an enum case.** The rulebook's footnote to 3.3.1 says more Facility types may be researched during the game, so Control adds one mid-game. `App\Support\FacilityTypeBlueprint` holds the game's own type sheet — all eleven, with their build costs and both effect columns.
+
+What a type *does* travels on the row as well, so a type Control invents is mechanical rather than decorative without new code:
+
+| Column | Meaning | Who grants it |
+|---|---|---|
+| `physical_slots_granted` | physical card slots added to every Facility the Corporation owns | Security: 1 |
+| `cyber_slots_granted` | cyber card slots, same reading | Security: 2 |
+| `technology_capacity_granted` | technology storage, same reading | Corporate: 2 |
+| `card_move_discount` | Credits off reordering a stack | Factory: 2, Mini-factory: 1 |
+
+Two traps in there. **Physical and cyber slots are asymmetric** — the type sheet gives a Security Facility 1 physical and 2 cyber, and rulebook 3.3.4's "1 more of each type" is the older number. And **technology capacity scales with the count of Corporate Facilities**, not with the type of the Facility doing the storing, which is where "2 x the number of Corporate Facilities" comes from.
+
+**Effects scale two different ways**, held on the row as `grant_scaling`. Security and Corporate are flat: each Facility adds its effect again. Research, AI School, Factory, Mini-factory and Arms *step* — the type sheet gives them their effect once and then "an additional ... at 2, 3, 5, 8 etc Facilities", so a fourth Factory is worth nothing and a fifth is worth one more. `App\Enums\FacilityGrantScaling` owns the arithmetic. Its thresholds beyond 8 continue the Fibonacci run the sheet's "etc" implies and are a reading rather than something written down.
+
+**Most of a type's effect is text, not code.** Research hand size, the strength bonuses Directing Security gets from AI School and Arms, how many cyber cards a Power Facility activates, what an Equipment Facility produces, and every access effect are stored as words for Control to read. They belong to sub-games this application has not built, and none of those numbers move on their own.
+
+**Slots and storage are derived, never stored.** Both move the moment a Security or Corporate Facility opens. Facilities still building do not count: they are not yours until they open.
+
+**A Facility stores the turn it opens**, not a "building" flag. A requisition raised during turn N's Setup opens during turn N+1's, so the clock moving is all it takes, and Control brings one forward by editing the number.
+
+**Position 1 is the card Runners meet first.** Installing puts the new card there and pushes the rest back, which is what "outermost" means in 3.3.4. The physical and cyber stacks are numbered independently and `FacilityDefenceService` keeps each dense at 1..n; nothing else may write a position.
+
+**Reordering costs 1 Credit per card that has to move**, which is the cards left over once the longest run keeping its relative order stays put. The rulebook's worked example (A,B,C → B,C,A costs 1; → C,B,A costs 2) is encoded in `tests/Unit/ProtectionCardMoveCostTest.php`.
+
+**A security budget is escrowed.** Placing one takes the Credits off the Corporation immediately, because that is what putting Credits on the Facility does at the table and it stops the same Credits being promised twice. `TurnEngine` hands back whatever is unspent when the Action phase ends.
+
+**The `#facility-list` embed is the one thing the application shows everyone at once**, so what it leaves out matters more than what it says. Facility names, their types and whether they are still building — and nothing else. Rulebook 3.4.2 makes the number of Protection Cards in a Facility Secret, and technology contents are secret so that reconnaissance costs something, so a stack size here would hand every Runner a free recon action. `FacilityListEmbed` is pure for exactly this reason: what players see is asserted in a test, including a guard that no card title ever reaches it.
+
+**One embed per Corporation**, coloured with `GuildBlueprint::colourFor()` so a Corporation matches the Discord role its players already wear. The cost is Discord's cap of ten embeds per message, against twenty-five fields had it been one embed of fields — a game with more Corporations than ten gets the first ten and a footer saying so. Two Corporations can still collide on a colour, because `colourFor` is a hash of the name across ten colours; that is true of the roles too.
+
+**It is posted once and then rewritten.** A list that changes every time a Facility opens would otherwise leave the channel full of superseded copies, and a player reading the wrong one is worse than a player reading none. The message id is a `discord_resources` row (`message:facility-list`), so the reconcile pattern already covers it. This needs the *bot*, not the webhook: a webhook only posts to the channel it was made in.
+
+**Control publishes it; the application never creates it unprompted.** `PublishFacilityList::refresh()` keeps an existing list current as each Setup phase opens and does nothing at all until Control has published one, so provisioning a server can never surprise it with a post. Refresh is fail-soft for the same reason announcements are — a list a turn out of date must never stall the clock.
+
+**Players read the Facilities at `/facilities`, in two tiers, and the line between them is the point.** Everyone sees the same public list the embed carries — Corporation, Facility name, type, building. A player holding a Corporate seat additionally sees *their own* Corporation's stacks in full, because 3.4.2 makes a stack Secret from everyone else, not from the Corporation that installed it. So a Runner learns nothing there that reconnaissance would otherwise have to buy, and a Security player cannot read a rival's stack. `GamePresenter::facilityBoard()` decides which tier a viewer gets, from the Corporate characters they have claimed rather than from a column.
+
+**That page is read-only.** Security tells Control what to install and where to Direct Security, exactly as they would hand over a requisition slip at the table, so every write stays on a `control.` route.
+
+**Directing Security is not secret.** The rulebook has Security committing simultaneously with Runners choosing targets, but that has since changed: Security decides what to protect after the attacks land, so there is deliberately no commit-then-reveal machinery here.
+
+**A new game opens with Facilities already standing.** `CreateDefaultFacilities` runs after `CreateDefaultRoster`, because Facilities belong to Corporations, and both are governed by the same "start empty" choice on the create form. It writes a starting position rather than a change, so the Facilities are built free and the basic cards installed free — nothing goes through `TrackerService`, because there is no before state. Re-running is a no-op: a second Armoury would silently widen every stack in the game.
+
+**Every Facility is named in `config/running_hot.php`, not labelled from its type.** A Facility's name is what players call it all game, and "Gordon Corporate 2" is a label. The names there are flavour rather than briefing data — places near Sheffield, since that is where Procatorion was bought — so rename them freely; nothing keys off them. An entry with no name falls back to the Corporation's short name and the type, so a Corporation added later still works.
+
+**Starting Facilities are per Corporation and the differences are mechanical**, not decorative. They live beside each Corporation in `config/running_hot.php`, from the briefing documents: DTC's second Security Facility widens every one of its stacks, Gordon's three Corporate Facilities make it the only Corporation storing six technologies per Facility, and Genetic Equity's three Research Facilities are its whole strategy. A Corporation the config says nothing about opens with none rather than a guessed set.
+
+**The Protection Card catalogue in `config/running_hot.php` is still a placeholder.** Eleven cards are known by title: Orc, which everyone holds, plus Security Team, Keypad, Security Shutter, Roboscorpion and Angel, and the five ANT holds instead — Öryggissveit, Takkaborðið, Öryggisluggari, Vélfærafræði sporðdreka and Engill. ANT's are *distinct cards*, not its own names for the other five. What is not known is kind, cost, challenge or consequence, and a card with no kind cannot be installed at all, because installation is per stack. The invented titles stay until the real attributes land; emptying the list is safe.
+
+**Owning copies of cards is coming.** The briefings give each Corporation counts ("4 copies of Security Team"), which is the inventory this application does not yet model. It arrives with the real card list.
+
+**Not modelled:** owning copies of cards. Buying from the Corporation shop, auctions, research grants and trading copies between Security players all happen at the table, and installing is free in the rulebook, so a card's `cost` is catalogue data. Installing reads the catalogue directly rather than consuming an inventory.
+
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, and Discord server provisioning with role assignment.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, and Facility Defence — Facilities, the Protection Card catalogue, the ordered stacks, and Directing Security.
 
-**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. The provisioned `#facility-list` channel is deliberately empty until Facilities exist.
+**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.
