@@ -139,8 +139,6 @@ class FacilityListEmbed
             ? 'Before the game began'
             : sprintf('As of turn %d', $turnNumber);
 
-        $text .= ' · What is installed in a Facility is not public knowledge';
-
         if ($hidden > 0) {
             $text .= sprintf(' · %d more Corporation(s) not shown', $hidden);
         }
