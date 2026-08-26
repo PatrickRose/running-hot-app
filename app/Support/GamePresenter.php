@@ -6,6 +6,7 @@ use App\Actions\PublishFacilityList;
 use App\Enums\ProtectionKind;
 use App\Enums\Tracker;
 use App\Models\Character;
+use App\Models\Corporation;
 use App\Models\DiscordMemberSync;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
@@ -13,6 +14,8 @@ use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\Phase;
 use App\Models\ProtectionCardType;
+use App\Models\Turn;
+use App\Models\User;
 use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
 use App\Support\Discord\GuildBlueprint;
@@ -248,6 +251,104 @@ class GamePresenter
                 'facility_count' => (int) $type->getAttribute('facilities_count'),
                 'in_use' => (int) $type->getAttribute('facilities_count') > 0,
             ])->all();
+    }
+
+    /**
+     * The Facility list as one player may see it.
+     *
+     * Two tiers, and the line between them is the whole point. Every player
+     * sees the same public list the #facility-list embed carries: a Corporation,
+     * a Facility name, a type, and whether it is still building. A player who
+     * holds a Corporate role additionally sees their own Corporation's stacks in
+     * full, because those are their own defences - rulebook 3.4.2 makes the
+     * number of Protection Cards in a Facility Secret from everyone else, not
+     * from the Corporation that installed them.
+     *
+     * A Runner therefore learns nothing here that reconnaissance would
+     * otherwise have to buy, and a Security player cannot read a rival's stack.
+     *
+     * @return array<string, mixed>
+     */
+    public function facilityBoard(Game $game, ?User $user): array
+    {
+        $defence = app(FacilityDefenceService::class);
+        $turn = $game->currentTurn();
+        $turnNumber = $turn?->number;
+
+        $corporations = $game->corporations()
+            ->with(['facilities' => fn ($query) => $query->orderBy('name'), 'facilities.facilityType'])
+            ->orderBy('name')
+            ->get();
+
+        $own = $user === null ? null : $this->ownCorporation($game, $user);
+
+        return [
+            'turn' => $turnNumber,
+            'public' => $corporations->map(fn (Corporation $corporation): array => [
+                'name' => $corporation->name,
+                'is_yours' => $own !== null && $own->is($corporation),
+                'facilities' => $corporation->facilities
+                    ->sortBy(fn (Facility $facility): string => $facility->facilityType->name.' '.$facility->name)
+                    ->values()
+                    ->map(fn (Facility $facility): array => [
+                        'id' => $facility->id,
+                        'name' => $facility->name,
+                        'facility_type' => $facility->facilityType->name,
+                        'available' => $facility->isAvailableOnTurn($turnNumber),
+                        'available_from_turn' => $facility->available_from_turn,
+                    ])->all(),
+            ])->all(),
+            'own' => $own === null ? null : $this->ownDefences($own, $turn, $turnNumber, $defence),
+        ];
+    }
+
+    /**
+     * The Corporation this player sits in, if any.
+     *
+     * Read from their claimed characters rather than from a column, because a
+     * player is bound to a Corporation by holding one of its seats.
+     */
+    private function ownCorporation(Game $game, User $user): ?Corporation
+    {
+        $character = $game->characters()
+            ->where('user_id', $user->id)
+            ->whereNotNull('corporation_id')
+            ->with('corporation')
+            ->get()
+            ->first(fn (Character $character): bool => $character->role->isCorporate());
+
+        return $character?->corporation;
+    }
+
+    /**
+     * One Corporation's own defences, in full.
+     *
+     * @return array<string, mixed>
+     */
+    private function ownDefences(
+        Corporation $corporation,
+        ?Turn $turn,
+        ?int $turnNumber,
+        FacilityDefenceService $defence,
+    ): array {
+        $totals = $defence->derivedTotals($corporation);
+
+        $facilities = $corporation->facilities()
+            ->with(['facilityType', 'protectionCards.cardType', 'turnStates' => fn ($query) => $query->where('turn_id', $turn?->id)])
+            ->orderBy('name')
+            ->get();
+
+        return [
+            'name' => $corporation->name,
+            'credits' => $corporation->credits,
+            'physical_slots' => $totals['physical_slots'],
+            'cyber_slots' => $totals['cyber_slots'],
+            'technology_capacity_per_facility' => $totals['technology_capacity'],
+            'card_move_discount' => $totals['card_move_discount'],
+            'facilities' => $facilities
+                ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $totals))
+                ->all(),
+        ];
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Http\Controllers\Control\PhaseController;
 use App\Http\Controllers\Control\ProtectionCardTypeController;
 use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FacilityBoardController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -21,6 +22,10 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    // Players' own view of the Facilities: the public list everyone may see,
+    // plus their own Corporation's defences in full.
+    Route::get('facilities', FacilityBoardController::class)->name('facilities');
 
     Route::middleware('can:control')
         ->prefix('control')

@@ -191,7 +191,7 @@ class FacilityListPublishingTest extends TestCase
         $this->assertArrayNotHasKey('author', $embeds[1]);
         $this->assertArrayHasKey('timestamp', $embeds[$last]);
         $this->assertArrayNotHasKey('timestamp', $embeds[0]);
-        $this->assertStringContainsString('not public knowledge', $embeds[$last]['footer']['text']);
+        $this->assertStringContainsString('Before the game began', $embeds[$last]['footer']['text']);
     }
 
     public function test_a_game_with_no_corporations_says_so(): void

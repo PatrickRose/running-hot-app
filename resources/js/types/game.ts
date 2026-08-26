@@ -225,3 +225,29 @@ export type FacilityListState = {
     bot_configured: boolean;
     published: boolean;
 };
+
+export type PublicFacility = {
+    id: number;
+    name: string;
+    facility_type: string;
+    available: boolean;
+    available_from_turn: number;
+};
+
+/** What every player may see: who owns what, and nothing about its defences. */
+export type PublicCorporationFacilities = {
+    name: string;
+    is_yours: boolean;
+    facilities: PublicFacility[];
+};
+
+/**
+ * The Facility list as one player sees it. `own` is set only for a player
+ * holding a Corporate seat, and carries that Corporation's stacks in full —
+ * rulebook 3.4.2 makes those Secret from everyone else, not from their owner.
+ */
+export type FacilityBoard = {
+    turn: number | null;
+    public: PublicCorporationFacilities[];
+    own: CorporationFacilities | null;
+};
