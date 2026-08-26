@@ -61,10 +61,12 @@ class ProvisionDiscordGuildJob implements ShouldQueue
         }
 
         ProvisionDiscordGuild::markStatus($game, DiscordProvisionStatus::Completed, sprintf(
-            '%d role(s) created, %d updated; %d channel(s) created, %d updated.',
+            '%d role(s) created, %d adopted, %d updated; %d channel(s) created, %d adopted, %d updated.',
             $tally['roles_created'],
+            $tally['roles_adopted'],
             $tally['roles_updated'],
             $tally['channels_created'],
+            $tally['channels_adopted'],
             $tally['channels_updated'],
         ));
     }

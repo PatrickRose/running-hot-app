@@ -20,12 +20,19 @@ use RuntimeException;
 /**
  * Brings a game's Discord guild in line with its blueprint.
  *
- * Reconciles rather than resets. Every object the application has made is
- * recorded in `discord_resources` against a stable key, so a re-run renames
- * what drifted, rebuilds what somebody deleted by hand, and adds whatever the
- * roster has grown since. Anything in the guild that the application did not
- * create is never touched: Control's own channels are Control's business, and
- * a mid-game run must be safe.
+ * Reconciles rather than resets. Every object the application owns is recorded
+ * in `discord_resources` against a stable key, so a re-run renames what
+ * drifted, rebuilds what somebody deleted by hand, and adds whatever the roster
+ * has grown since.
+ *
+ * A key with no record is looked for in the guild by name before it is created.
+ * Without that, a guild the application has provisioned before but has no
+ * record of — a database rebuilt, a game recreated, a server set up by hand
+ * against the blueprint — grows a second Control role and a second category
+ * per team every single run. Adopting is the reconcile the recorded key would
+ * have done, on the evidence available. Anything the blueprint does not ask
+ * for is still never touched: Control's own channels are Control's business,
+ * and a mid-game run must be safe.
  *
  * The guild itself is never created here. Discord's Create Guild endpoint only
  * works for bots in fewer than ten guilds and yields a server with no members
@@ -55,9 +62,12 @@ class ProvisionDiscordGuild
         $blueprint = new GuildBlueprint($game);
         $reason = sprintf('Running Hot: provisioning "%s" (game #%d)', $game->name, $game->id);
 
-        $this->assertBotIsInGuild($guildId);
+        $this->api->assertBotIsInGuild($guildId);
 
-        $tally = ['roles_created' => 0, 'roles_updated' => 0, 'channels_created' => 0, 'channels_updated' => 0];
+        $tally = [
+            'roles_created' => 0, 'roles_adopted' => 0, 'roles_updated' => 0,
+            'channels_created' => 0, 'channels_adopted' => 0, 'channels_updated' => 0,
+        ];
 
         $roleIds = $this->reconcileRoles($game, $guildId, $blueprint, $reason, $tally);
         $this->giveBotTheControlRole($guildId, $roleIds, $reason);
@@ -68,33 +78,6 @@ class ProvisionDiscordGuild
         Log::info('Discord guild provisioned.', ['game_id' => $game->id, 'guild_id' => $guildId, ...$tally]);
 
         return $tally;
-    }
-
-    /**
-     * Fail fast, and in words Control can act on, if the bot is not in the guild.
-     *
-     * This is by far the most common setup mistake, and Discord's own answer —
-     * a bare "Unknown Guild" 404 — reads like the server does not exist. With a
-     * token that authenticates (an invalid one is a 401), a 404 here means only
-     * one thing: this bot is not a member. Saying so, and pointing at the
-     * invite, saves the guess.
-     */
-    private function assertBotIsInGuild(string $guildId): void
-    {
-        try {
-            $this->api->guild($guildId);
-        } catch (DiscordApiException $exception) {
-            if (! $exception->isNotFound()) {
-                throw $exception;
-            }
-
-            throw new DiscordApiException(
-                'The bot is not a member of this Discord server (Discord answered "Unknown Guild"). '
-                .'Use "Add the bot to a Discord server" above, which also picks up the right server ID.',
-                $exception->status,
-                $exception->discordCode,
-            );
-        }
     }
 
     /**
@@ -110,6 +93,7 @@ class ProvisionDiscordGuild
     ): array {
         $live = $this->bySnowflake($this->api->roles($guildId));
         $recorded = $this->recorded($game, DiscordResourceKind::Role);
+        $claimed = $this->claimedSnowflakes($game);
 
         $roleIds = [];
 
@@ -118,13 +102,24 @@ class ProvisionDiscordGuild
             $existing = $resource === null ? null : ($live[self::snowflakeKey($resource->discord_id)] ?? null);
 
             if ($existing === null) {
-                // Either never created, or somebody deleted it in Discord.
-                $created = $this->api->createRole($guildId, $planned->payload(), $reason);
-                $this->record($game, DiscordResourceKind::Role, $key, (string) $created['id'], $planned->name);
-                $roleIds[$key] = (string) $created['id'];
-                $tally['roles_created']++;
+                // No record, or the recorded one has been deleted in Discord.
+                // Before making another, see whether the guild already has the
+                // role this key describes.
+                $existing = $this->roleToAdopt($live, $claimed, $planned, $guildId);
 
-                continue;
+                if ($existing === null) {
+                    $created = $this->api->createRole($guildId, $planned->payload(), $reason);
+                    $this->claim($claimed, (string) $created['id']);
+                    $this->record($game, DiscordResourceKind::Role, $key, (string) $created['id'], $planned->name);
+                    $roleIds[$key] = (string) $created['id'];
+                    $tally['roles_created']++;
+
+                    continue;
+                }
+
+                $this->claim($claimed, (string) $existing['id']);
+                $resource = $this->record($game, DiscordResourceKind::Role, $key, (string) $existing['id'], $planned->name);
+                $tally['roles_adopted']++;
             }
 
             $roleIds[$key] = $resource->discord_id;
@@ -137,6 +132,40 @@ class ProvisionDiscordGuild
         }
 
         return $roleIds;
+    }
+
+    /**
+     * The role already in the guild that this key describes, if there is one.
+     *
+     * Name is all there is to go on, so the match is on name alone, ignoring
+     * case because Discord does not. Two things are never candidates: the
+     * guild's default role, which is @everyone under a snowflake that happens
+     * to equal the guild's, and a managed role, which belongs to an integration
+     * and cannot be renamed or given to anybody anyway.
+     *
+     * @param  array<string, array<string, mixed>>  $live
+     * @param  array<string, true>  $claimed
+     * @return array<string, mixed>|null
+     */
+    private function roleToAdopt(array $live, array $claimed, PlannedRole $planned, string $guildId): ?array
+    {
+        foreach ($live as $snowflakeKey => $role) {
+            $id = (string) $role['id'];
+
+            if ($id === $guildId || ($role['managed'] ?? false) === true) {
+                continue;
+            }
+
+            if (isset($claimed[$snowflakeKey])) {
+                continue;
+            }
+
+            if ($this->sameName((string) ($role['name'] ?? ''), $planned->name)) {
+                return $role;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -206,6 +235,7 @@ class ProvisionDiscordGuild
     ): void {
         $live = $this->bySnowflake($this->api->channels($guildId));
         $recorded = $this->recorded($game);
+        $claimed = $this->claimedSnowflakes($game);
 
         // Snowflakes of the categories created in this pass, so a channel can
         // be parented to one made moments ago.
@@ -218,15 +248,24 @@ class ProvisionDiscordGuild
             $payload = $this->channelPayload($planned, $guildId, $roleIds, $channelIds);
 
             if ($existing === null) {
-                $created = $this->lockoutAware(
-                    $planned,
-                    fn (): array => $this->api->createChannel($guildId, $payload, $reason),
-                );
-                $this->record($game, $planned->kind, $planned->key, (string) $created['id'], $planned->name);
-                $channelIds[$planned->key] = (string) $created['id'];
-                $tally['channels_created']++;
+                $existing = $this->channelToAdopt($live, $claimed, $planned, $channelIds);
 
-                continue;
+                if ($existing === null) {
+                    $created = $this->lockoutAware(
+                        $planned,
+                        fn (): array => $this->api->createChannel($guildId, $payload, $reason),
+                    );
+                    $this->claim($claimed, (string) $created['id']);
+                    $this->record($game, $planned->kind, $planned->key, (string) $created['id'], $planned->name);
+                    $channelIds[$planned->key] = (string) $created['id'];
+                    $tally['channels_created']++;
+
+                    continue;
+                }
+
+                $this->claim($claimed, (string) $existing['id']);
+                $resource = $this->record($game, $planned->kind, $planned->key, (string) $existing['id'], $planned->name);
+                $tally['channels_adopted']++;
             }
 
             $channelIds[$planned->key] = $resource->discord_id;
@@ -246,6 +285,60 @@ class ProvisionDiscordGuild
 
             $tally['channels_updated']++;
         }
+    }
+
+    /**
+     * The channel already in the guild that this key describes, if there is one.
+     *
+     * Stricter than the role match, because a channel name on its own is not
+     * distinctive: a corporation's category and its text channel are both named
+     * for the corporation, and two teams could each have a "voice". So the type
+     * and the parent category have to line up as well, which is exactly the
+     * triple that makes a channel unique to a player looking at the sidebar.
+     *
+     * A planned child whose category was only just created cannot match
+     * anything — nothing can already be parented to a category that did not
+     * exist a moment ago — so those fall through to being created, which is
+     * right.
+     *
+     * @param  array<string, array<string, mixed>>  $live
+     * @param  array<string, true>  $claimed
+     * @param  array<string, string>  $channelIds
+     * @return array<string, mixed>|null
+     */
+    private function channelToAdopt(array $live, array $claimed, PlannedChannel $planned, array $channelIds): ?array
+    {
+        if ($planned->parentKey === null) {
+            $wantedParent = null;
+        } elseif (isset($channelIds[$planned->parentKey])) {
+            $wantedParent = $channelIds[$planned->parentKey];
+        } else {
+            // The parent could not be resolved. Matching on a null parent here
+            // would adopt some unrelated top-level channel.
+            return null;
+        }
+
+        foreach ($live as $snowflakeKey => $channel) {
+            if (isset($claimed[$snowflakeKey])) {
+                continue;
+            }
+
+            if ((int) ($channel['type'] ?? -1) !== $planned->kind->channelType()) {
+                continue;
+            }
+
+            $parentId = $channel['parent_id'] ?? null;
+
+            if (($parentId === null ? null : (string) $parentId) !== $wantedParent) {
+                continue;
+            }
+
+            if ($this->sameName((string) ($channel['name'] ?? ''), $planned->name)) {
+                return $channel;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -289,13 +382,34 @@ class ProvisionDiscordGuild
             ->where('key', 'webhook:announcements')
             ->first();
 
-        if ($existing !== null) {
-            $stillThere = collect($this->api->channelWebhooks($channel->discord_id))
-                ->contains(fn (array $webhook): bool => (string) $webhook['id'] === $existing->discord_id);
+        $live = collect($this->api->channelWebhooks($channel->discord_id));
 
-            if ($stillThere) {
-                return;
+        if ($existing !== null
+            && $live->contains(fn (array $webhook): bool => (string) $webhook['id'] === $existing->discord_id)) {
+            return;
+        }
+
+        // Same reasoning as roles and channels: a channel that already has this
+        // application's webhook in it should not collect a second one because
+        // the record of the first has been lost.
+        $adopted = $live->first(fn (array $webhook): bool => $this->sameName((string) ($webhook['name'] ?? ''), 'Running Hot'));
+
+        if (is_array($adopted)) {
+            $this->record($game, DiscordResourceKind::Webhook, 'webhook:announcements', (string) $adopted['id'], 'Running Hot');
+
+            // Listing webhooks as the bot gives back the token rather than the
+            // ready-made URL, so the URL is rebuilt from it. Only ever written
+            // when the game has none: a game Control has pointed somewhere else
+            // stays pointed there, exactly as for a webhook we made ourselves.
+            $url = $adopted['url'] ?? (filled($adopted['token'] ?? null)
+                ? sprintf('https://discord.com/api/webhooks/%s/%s', $adopted['id'], $adopted['token'])
+                : null);
+
+            if (blank($game->discord_webhook_url) && filled($url)) {
+                $game->update(['discord_webhook_url' => $url]);
             }
+
+            return;
         }
 
         $webhook = $this->api->createWebhook($channel->discord_id, 'Running Hot', $reason);
@@ -414,12 +528,51 @@ class ProvisionDiscordGuild
             ->keyBy('key');
     }
 
-    private function record(Game $game, DiscordResourceKind $kind, string $key, string $discordId, string $name): void
+    private function record(Game $game, DiscordResourceKind $kind, string $key, string $discordId, string $name): DiscordResource
     {
-        DiscordResource::query()->updateOrCreate(
+        return DiscordResource::query()->updateOrCreate(
             ['game_id' => $game->id, 'key' => $key],
             ['kind' => $kind, 'discord_id' => $discordId, 'name' => $name],
         );
+    }
+
+    /**
+     * Every snowflake this game has already spoken for.
+     *
+     * Adoption matches on a name, and names repeat: without this, a
+     * corporation's category and its voice channel — which share a name — would
+     * both adopt the same object, and the second key would then be recorded
+     * against a snowflake the first one is also using.
+     *
+     * @return array<string, true>
+     */
+    private function claimedSnowflakes(Game $game): array
+    {
+        $claimed = [];
+
+        foreach ($this->recorded($game) as $resource) {
+            $claimed[self::snowflakeKey($resource->discord_id)] = true;
+        }
+
+        return $claimed;
+    }
+
+    /**
+     * @param  array<string, true>  $claimed
+     */
+    private function claim(array &$claimed, string $discordId): void
+    {
+        $claimed[self::snowflakeKey($discordId)] = true;
+    }
+
+    /**
+     * Discord lower-cases a text channel's name for you and is case-insensitive
+     * about collisions, so a match that cared about case would miss the very
+     * objects adoption exists to find.
+     */
+    private function sameName(string $actual, string $planned): bool
+    {
+        return mb_strtolower(trim($actual)) === mb_strtolower(trim($planned));
     }
 
     public static function markStatus(Game $game, DiscordProvisionStatus $status, ?string $message = null): void

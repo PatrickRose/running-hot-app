@@ -13,7 +13,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { discord } from '@/routes/control/games';
-import { connect, provision, syncRoles } from '@/routes/control/games/discord';
+import {
+    connect,
+    provision,
+    reset,
+    syncRoles,
+} from '@/routes/control/games/discord';
 import type {
     DiscordBotGuilds,
     DiscordMemberSync,
@@ -47,17 +52,20 @@ const RESOURCE_LABELS: Record<string, string> = {
  */
 export function GameDiscordPanel({
     gameId,
+    gameName,
     discordState,
     syncs,
     botGuilds,
 }: {
     gameId: number;
+    gameName: string;
     discordState: GameDiscord;
     syncs: DiscordMemberSync[];
     botGuilds?: DiscordBotGuilds;
 }) {
     const [pickingServer, setPickingServer] = useState(false);
     const [showManualId, setShowManualId] = useState(false);
+    const [showReset, setShowReset] = useState(false);
 
     const notJoined = syncs.filter((sync) => sync.status === 'not_a_member');
     const failed = syncs.filter((sync) => sync.status === 'failed');
@@ -333,11 +341,99 @@ export function GameDiscordPanel({
 
                     <p className="text-xs text-muted-foreground">
                         Reconciling is safe mid-game: it creates what is
-                        missing, renames what has drifted, and never deletes
+                        missing, adopts anything already in the server that
+                        matches, renames what has drifted, and never deletes
                         anything. Players also get their roles automatically
                         each time they sign in.
                     </p>
                 </div>
+
+                {discordState.guild_id && (
+                    <div className="flex flex-col gap-3 border-t pt-4">
+                        {!showReset ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowReset(true)}
+                                className="self-start text-xs text-red-600 underline-offset-4 hover:underline dark:text-red-500"
+                            >
+                                Clear the whole server and start again
+                            </button>
+                        ) : (
+                            <Form
+                                {...reset.form({ game: gameId })}
+                                options={{ preserveScroll: true }}
+                                onSuccess={() => setShowReset(false)}
+                                className="flex flex-col gap-3 rounded-md border border-red-600/40 p-4"
+                            >
+                                {({ processing, errors }) => (
+                                    <>
+                                        <h3 className="text-sm font-medium text-red-600 dark:text-red-500">
+                                            Clear the Discord server
+                                        </h3>
+
+                                        <p className="text-sm text-muted-foreground">
+                                            Deletes <strong>every</strong>{' '}
+                                            channel and role the bot can reach
+                                            in{' '}
+                                            <span className="font-mono text-xs">
+                                                {discordState.guild_id}
+                                            </span>
+                                            , not only the ones this application
+                                            made — including every message in
+                                            them, and anything Control set up by
+                                            hand. The server, its members and
+                                            its name survive. There is no undo.
+                                        </p>
+
+                                        <p className="text-sm text-muted-foreground">
+                                            This is for a test server. Do not do
+                                            it to a game that is being played.
+                                        </p>
+
+                                        <div className="flex flex-col gap-2">
+                                            <Label htmlFor="confirm">
+                                                Type <strong>{gameName}</strong>{' '}
+                                                to confirm
+                                            </Label>
+                                            <Input
+                                                id="confirm"
+                                                name="confirm"
+                                                autoComplete="off"
+                                                className="max-w-sm"
+                                            />
+                                            <InputError
+                                                message={errors.confirm}
+                                            />
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                type="submit"
+                                                variant="destructive"
+                                                disabled={
+                                                    processing ||
+                                                    !discordState.bot_configured ||
+                                                    discordState.provision_in_progress
+                                                }
+                                            >
+                                                Delete everything
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    setShowReset(false)
+                                                }
+                                            >
+                                                Cancel
+                                            </Button>
+                                        </div>
+                                    </>
+                                )}
+                            </Form>
+                        )}
+                    </div>
+                )}
 
                 {syncs.length > 0 && (
                     <div className="flex flex-col gap-2 border-t pt-4">

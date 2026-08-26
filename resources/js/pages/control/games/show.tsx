@@ -291,6 +291,7 @@ export default function ControlGameShow({
 
                 <GameDiscordPanel
                     gameId={game.id}
+                    gameName={game.name}
                     discordState={game.discord}
                     syncs={discordSyncs}
                     botGuilds={discordGuilds}

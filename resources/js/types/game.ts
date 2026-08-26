@@ -16,7 +16,7 @@ export type PhaseSummary = {
 };
 
 export type DiscordProvisionStatus =
-    'idle' | 'queued' | 'running' | 'completed' | 'failed';
+    'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'resetting';
 
 export type GameDiscord = {
     guild_id: string | null;

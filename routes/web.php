@@ -48,6 +48,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->name('games.discord.provision');
             Route::post('games/{game}/discord/sync-roles', [DiscordGuildController::class, 'syncRoles'])
                 ->name('games.discord.sync-roles');
+            // Destructive, and the only route in the application that is. The
+            // request will not let it through without the game's name typed out.
+            Route::post('games/{game}/discord/reset', [DiscordGuildController::class, 'reset'])
+                ->name('games.discord.reset');
 
             Route::post('games/{game}/phase/start', [PhaseController::class, 'start'])->name('phase.start');
             Route::post('games/{game}/phase/advance', [PhaseController::class, 'advance'])->name('phase.advance');

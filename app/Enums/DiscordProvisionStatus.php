@@ -7,7 +7,8 @@ namespace App\Enums;
  *
  * Provisioning is a queued job because it is dozens of rate-limited API calls,
  * so Control watches it through this rather than through the response to the
- * request that started it.
+ * request that started it. A reset is the same shape of work in reverse, and
+ * reports itself here for the same reason.
  */
 enum DiscordProvisionStatus: string
 {
@@ -16,6 +17,7 @@ enum DiscordProvisionStatus: string
     case Running = 'running';
     case Completed = 'completed';
     case Failed = 'failed';
+    case Resetting = 'resetting';
 
     public function label(): string
     {
@@ -25,11 +27,12 @@ enum DiscordProvisionStatus: string
             self::Running => 'Provisioning',
             self::Completed => 'Provisioned',
             self::Failed => 'Provisioning failed',
+            self::Resetting => 'Clearing the server',
         };
     }
 
     public function isInProgress(): bool
     {
-        return in_array($this, [self::Queued, self::Running], true);
+        return in_array($this, [self::Queued, self::Running, self::Resetting], true);
     }
 }

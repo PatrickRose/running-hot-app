@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Control;
 use App\Actions\ProvisionDiscordGuild;
 use App\Enums\DiscordProvisionStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Control\ResetDiscordGuildRequest;
 use App\Http\Requests\Control\UpdateGameGuildRequest;
 use App\Jobs\ProvisionDiscordGuildJob;
+use App\Jobs\ResetDiscordGuildJob;
 use App\Jobs\SyncDiscordRoles;
 use App\Models\Game;
 use App\Models\User;
@@ -188,6 +190,41 @@ class DiscordGuildController extends Controller
         ProvisionDiscordGuildJob::dispatch($game->id);
 
         return back()->with('status', 'Provisioning the Discord server. This takes a minute or two.');
+    }
+
+    /**
+     * Delete every channel and role in the game's server, so the next provision
+     * builds it from nothing.
+     *
+     * Deliberately not part of provisioning, and deliberately awkward to reach:
+     * reconciling is safe mid-game precisely because it never deletes, and this
+     * is the button that does. It exists for a test server that has collected
+     * the leavings of a dozen runs. The confirmation lives in the request,
+     * which will not let this through until Control has typed the game's name.
+     */
+    public function reset(Game $game, ResetDiscordGuildRequest $request): RedirectResponse
+    {
+        if (! $game->hasDiscordGuild()) {
+            return back()->withErrors([
+                'confirm' => 'This game has no Discord server to clear.',
+            ]);
+        }
+
+        if (! $this->api->isConfigured()) {
+            return back()->withErrors([
+                'confirm' => 'DISCORD_BOT_TOKEN is not set, so the application cannot act as a bot yet.',
+            ]);
+        }
+
+        if ($game->discord_provision_status->isInProgress()) {
+            return back()->with('status', 'Something is already running against this server. Wait for it to finish.');
+        }
+
+        ProvisionDiscordGuild::markStatus($game, DiscordProvisionStatus::Resetting);
+
+        ResetDiscordGuildJob::dispatch($game->id);
+
+        return back()->with('status', 'Clearing the Discord server. Provision again once it reports back.');
     }
 
     /**
