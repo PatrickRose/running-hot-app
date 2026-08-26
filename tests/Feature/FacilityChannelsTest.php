@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CreateDefaultFacilities;
+use App\Actions\CreateDefaultRoster;
 use App\Actions\ProvisionDiscordGuild;
 use App\Actions\ProvisionFacilityChannels;
 use App\Enums\CharacterRole;
@@ -238,6 +240,52 @@ class FacilityChannelsTest extends TestCase
             'game_id' => $game->id,
             'key' => GuildBlueprint::facilityCategoryKey($corporation),
         ]);
+    }
+
+    /**
+     * The realistic case, at the scale a real game has it.
+     *
+     * A game is created with its whole roster and 24 Facilities before it has a
+     * Discord server at all - the seeder and the Control panel both work that
+     * way - so every one of those Facilities queues a job that no-ops. The
+     * provision run that follows attaching the server is what actually gives
+     * them their channels.
+     */
+    public function test_provisioning_a_fully_seeded_game_gives_every_facility_its_channels(): void
+    {
+        $game = Game::factory()->create();
+        app(CreateDefaultRoster::class)->handle($game);
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $facilities = $game->facilities()->with('corporation')->get();
+
+        $this->assertGreaterThan(20, $facilities->count());
+        $this->assertSame(0, $game->discordResources()->count());
+
+        // Control attaches the server afterwards, then provisions.
+        $guild = (new FakeDiscordGuild)->bind();
+        $game->forceFill(['discord_guild_id' => $guild->guildId])->save();
+
+        app(ProvisionDiscordGuild::class)->handle($game->fresh());
+
+        $keys = $game->discordResources()->pluck('key');
+
+        foreach ($facilities as $facility) {
+            foreach (['text', 'voice'] as $kind) {
+                $this->assertTrue(
+                    $keys->contains(GuildBlueprint::facilityChannelKey($facility, $kind)),
+                    $facility->name.' should have a '.$kind.' channel.',
+                );
+            }
+        }
+
+        // And a Facilities category for each Corporation that owns any.
+        foreach ($facilities->pluck('corporation')->unique('id') as $corporation) {
+            $this->assertTrue(
+                $keys->contains(GuildBlueprint::facilityCategoryKey($corporation)),
+                $corporation->name.' should have a Facilities category.',
+            );
+        }
     }
 
     public function test_provisioning_rebuilds_a_channel_deleted_by_hand(): void
