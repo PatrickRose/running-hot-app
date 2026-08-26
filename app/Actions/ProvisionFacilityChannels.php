@@ -43,7 +43,7 @@ class ProvisionFacilityChannels
         $guildId = $game->discord_guild_id;
         $recorded = $game->discordResources()->get()->keyBy('key');
 
-        $categoryKey = GuildBlueprint::facilityCategoryKey($facility->corporation);
+        $categoryKey = GuildBlueprint::corporationCategoryKey($facility->corporation);
         $reason = sprintf('Running Hot: channels for %s', $facility->name);
 
         // Snowflakes the payload builder resolves overwrites and parents from.
@@ -57,13 +57,16 @@ class ProvisionFacilityChannels
             ->map(fn (DiscordResource $resource): string => $resource->discord_id)
             ->all();
 
-        // The category the pair hangs off. A Corporation whose Facilities have
-        // never been provisioned has none yet, so it is made first.
+        // The Corporation's own category, which the pair hangs off alongside its
+        // team channels. Normally provisioning has already made it; a
+        // Corporation added to the roster afterwards has none yet, so it is made
+        // here under the same key, and the next provision run reconciles it
+        // rather than making a second one.
         if (! isset($channelIds[$categoryKey])) {
             $category = new PlannedChannel(
                 key: $categoryKey,
                 kind: DiscordResourceKind::Category,
-                name: $facility->corporation->name.' Facilities',
+                name: $facility->corporation->name,
                 overwrites: GuildBlueprint::channelsForFacility($facility)[0]->overwrites,
             );
 

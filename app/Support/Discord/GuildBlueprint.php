@@ -42,11 +42,12 @@ class GuildBlueprint
     /**
      * Discord's limit on how many channels one category may hold.
      *
-     * Facility channels come in pairs, so this is the point at which a single
-     * Corporation's Facilities stop fitting in their own category — 25 of them.
-     * Far beyond a game whose Corporations open with five, but the number is
-     * here so that a change to the shape of these channels has to reckon with
-     * it rather than discover it as a 400 from Discord mid-game.
+     * A Corporation's category holds its two team channels plus a pair for
+     * each Facility, so this is the point at which its 25th Facility stops
+     * fitting — 24 is the most it can hold. Far beyond a game whose
+     * Corporations open with five, but the number is here so that a change to
+     * the shape of these channels has to reckon with it rather than discover it
+     * as a 400 from Discord mid-game.
      */
     public const MAX_CHANNELS_PER_CATEGORY = 50;
 
@@ -298,11 +299,10 @@ class GuildBlueprint
     /**
      * A text and voice channel for every Facility, where its Runs will happen.
      *
-     * In a category of their own per Corporation rather than beside its team
-     * channels, so a Corporation with eight Facilities does not bury the two
-     * channels its players actually talk in. Discord allows 50 channels per
-     * category, which is 24 Facilities at two channels each — comfortable for
-     * a game whose Corporations open with five.
+     * They sit in the Corporation's own category, beside the two channels its
+     * players talk in, so everything belonging to a Corporation is in one place.
+     * Discord allows 50 channels per category and the team pair takes two of
+     * them, so this holds 24 Facilities per Corporation.
      *
      * Private to Control and the owning Corporation. The Runners attacking a
      * Facility are added when a Run starts, which is the Run's business: they
@@ -316,20 +316,7 @@ class GuildBlueprint
         $channels = [];
 
         foreach ($this->corporations() as $corporation) {
-            $facilities = $corporation->facilities()->orderBy('name')->get();
-
-            if ($facilities->isEmpty()) {
-                continue;
-            }
-
-            $channels[] = new PlannedChannel(
-                key: self::facilityCategoryKey($corporation),
-                kind: DiscordResourceKind::Category,
-                name: $corporation->name.' Facilities',
-                overwrites: self::teamOverwrites(self::corporationRoleKey($corporation)),
-            );
-
-            foreach ($facilities as $facility) {
+            foreach ($corporation->facilities()->orderBy('name')->get() as $facility) {
                 $channels = [...$channels, ...self::channelsForFacility($facility)];
             }
         }
@@ -354,7 +341,7 @@ class GuildBlueprint
     {
         $corporation = $facility->corporation;
         $overwrites = self::teamOverwrites(self::corporationRoleKey($corporation));
-        $parentKey = self::facilityCategoryKey($corporation);
+        $parentKey = self::corporationCategoryKey($corporation);
 
         return [
             new PlannedChannel(
@@ -375,9 +362,13 @@ class GuildBlueprint
         ];
     }
 
-    public static function facilityCategoryKey(Corporation $corporation): string
+    /**
+     * The category holding everything a Corporation owns: its two team channels
+     * and a pair for each of its Facilities.
+     */
+    public static function corporationCategoryKey(Corporation $corporation): string
     {
-        return 'category:corporation:'.$corporation->id.':facilities';
+        return 'category:corporation:'.$corporation->id;
     }
 
     public static function facilityChannelKey(Facility $facility, string $kind): string

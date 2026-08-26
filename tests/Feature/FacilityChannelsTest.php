@@ -73,23 +73,29 @@ class FacilityChannelsTest extends TestCase
         $this->assertSame('Gordon Tower', $voice->name);
     }
 
-    public function test_a_facilitys_channels_sit_in_their_corporations_own_category(): void
+    /**
+     * Everything a Corporation owns lives in one category: its two team
+     * channels and a pair for each Facility.
+     */
+    public function test_a_facilitys_channels_sit_in_their_corporations_category(): void
     {
         $game = Game::factory()->create();
         $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
         $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
 
         $blueprint = new GuildBlueprint($game);
-        $expected = GuildBlueprint::facilityCategoryKey($corporation);
+        $expected = GuildBlueprint::corporationCategoryKey($corporation);
 
         $category = $this->channel($blueprint, $expected);
 
         $this->assertSame(DiscordResourceKind::Category, $category->kind);
-        $this->assertSame('Gordon Facilities', $category->name);
+        $this->assertSame('Gordon', $category->name);
 
-        // Separate from the team category, so eight Facilities do not bury the
-        // two channels a Corporation's players actually talk in.
-        $this->assertNotSame('category:corporation:'.$corporation->id, $expected);
+        // The same category the team channels hang off, not one of its own.
+        $this->assertSame(
+            $this->channel($blueprint, 'channel:corporation:'.$corporation->id.':text')->parentKey,
+            $expected,
+        );
 
         foreach (['text', 'voice'] as $kind) {
             $this->assertSame(
@@ -97,6 +103,13 @@ class FacilityChannelsTest extends TestCase
                 $this->channel($blueprint, GuildBlueprint::facilityChannelKey($facility, $kind))->parentKey,
             );
         }
+
+        // And exactly one category for the Corporation, not two.
+        $categories = collect($blueprint->channels())
+            ->filter(fn (PlannedChannel $channel): bool => $channel->kind === DiscordResourceKind::Category)
+            ->filter(fn (PlannedChannel $channel): bool => str_contains($channel->key, 'corporation:'.$corporation->id));
+
+        $this->assertCount(1, $categories);
     }
 
     public function test_a_facility_channel_is_hidden_from_everyone_but_control_and_its_owner(): void
@@ -151,22 +164,24 @@ class FacilityChannelsTest extends TestCase
         }
     }
 
-    public function test_a_corporation_with_no_facilities_gets_no_category(): void
+    public function test_a_corporation_with_no_facilities_still_gets_its_team_category(): void
     {
         $game = Game::factory()->create();
-        Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
 
         $keys = array_map(
             fn (PlannedChannel $channel): string => $channel->key,
             (new GuildBlueprint($game))->channels(),
         );
 
-        $this->assertNotContains('category:corporation:1:facilities', $keys);
+        $this->assertContains(GuildBlueprint::corporationCategoryKey($corporation), $keys);
+        $this->assertNotContains('category:corporation:'.$corporation->id.':facilities', $keys);
     }
 
     /**
-     * Two channels each, in one category per Corporation, so the ceiling is 25
-     * Facilities. A game whose Corporations open with five has room to spare.
+     * A Corporation's category holds its two team channels plus a pair for each
+     * Facility, so 24 Facilities fills it exactly. A game whose Corporations
+     * open with five has room to spare.
      */
     public function test_a_corporations_facilities_fit_in_their_category(): void
     {
@@ -179,14 +194,15 @@ class FacilityChannelsTest extends TestCase
             $this->facilityFor($game, $corporation, 'Site '.$number);
         }
 
-        $key = GuildBlueprint::facilityCategoryKey($corporation);
+        $key = GuildBlueprint::corporationCategoryKey($corporation);
 
         $inCategory = collect((new GuildBlueprint($game))->channels())
             ->where('parentKey', $key)
             ->count();
 
-        $this->assertSame(48, $inCategory);
-        $this->assertLessThanOrEqual(GuildBlueprint::MAX_CHANNELS_PER_CATEGORY, $inCategory);
+        // Two team channels and 48 Facility channels: right on the limit.
+        $this->assertSame(50, $inCategory);
+        $this->assertSame(GuildBlueprint::MAX_CHANNELS_PER_CATEGORY, $inCategory);
     }
 
     public function test_provisioning_creates_the_channels(): void
@@ -238,7 +254,7 @@ class FacilityChannelsTest extends TestCase
 
         $this->assertDatabaseHas('discord_resources', [
             'game_id' => $game->id,
-            'key' => GuildBlueprint::facilityCategoryKey($corporation),
+            'key' => GuildBlueprint::corporationCategoryKey($corporation),
         ]);
     }
 
@@ -282,7 +298,7 @@ class FacilityChannelsTest extends TestCase
         // And a Facilities category for each Corporation that owns any.
         foreach ($facilities->pluck('corporation')->unique('id') as $corporation) {
             $this->assertTrue(
-                $keys->contains(GuildBlueprint::facilityCategoryKey($corporation)),
+                $keys->contains(GuildBlueprint::corporationCategoryKey($corporation)),
                 $corporation->name.' should have a Facilities category.',
             );
         }
@@ -386,7 +402,7 @@ class FacilityChannelsTest extends TestCase
 
         $this->assertDatabaseHas('discord_resources', [
             'game_id' => $game->id,
-            'key' => GuildBlueprint::facilityCategoryKey($corporation),
+            'key' => GuildBlueprint::corporationCategoryKey($corporation),
         ]);
     }
 
