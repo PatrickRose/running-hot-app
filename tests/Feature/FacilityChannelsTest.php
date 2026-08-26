@@ -199,6 +199,65 @@ class FacilityChannelsTest extends TestCase
         }
     }
 
+    /**
+     * The recovery path. A Facility can miss its channels two ways: it was
+     * built before the game had a Discord server at all, or the queued job hit
+     * a Discord that was down and failed soft. Either way the next full
+     * provision run must pick it up.
+     */
+    public function test_a_full_provision_run_gives_an_older_facility_its_channels(): void
+    {
+        Queue::fake();
+
+        // No guild yet, so nothing could have created channels for this one.
+        $game = Game::factory()->create();
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        $this->assertSame(0, $game->discordResources()->count());
+
+        // Control attaches the server and provisions it later.
+        $guild = (new FakeDiscordGuild)->bind();
+        $game->forceFill(['discord_guild_id' => $guild->guildId])->save();
+
+        app(ProvisionDiscordGuild::class)->handle($game->fresh());
+
+        foreach (['text', 'voice'] as $kind) {
+            $this->assertDatabaseHas('discord_resources', [
+                'game_id' => $game->id,
+                'key' => GuildBlueprint::facilityChannelKey($facility, $kind),
+            ]);
+        }
+
+        $this->assertDatabaseHas('discord_resources', [
+            'game_id' => $game->id,
+            'key' => GuildBlueprint::facilityCategoryKey($corporation),
+        ]);
+    }
+
+    public function test_provisioning_rebuilds_a_channel_deleted_by_hand(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create(['discord_guild_id' => $guild->guildId]);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        app(ProvisionDiscordGuild::class)->handle($game);
+
+        $key = GuildBlueprint::facilityChannelKey($facility, 'text');
+        $resource = $game->discordResources()->where('key', $key)->sole();
+
+        // Someone deletes it in Discord: the record survives, the channel does not.
+        unset($guild->channels[$resource->discord_id]);
+
+        app(ProvisionDiscordGuild::class)->handle($game->fresh());
+
+        $rebuilt = $game->discordResources()->where('key', $key)->sole();
+
+        $this->assertNotSame($resource->discord_id, $rebuilt->discord_id);
+        $this->assertArrayHasKey($rebuilt->discord_id, $guild->channels);
+    }
+
     public function test_provisioning_twice_does_not_make_a_second_pair(): void
     {
         $guild = (new FakeDiscordGuild)->bind();
