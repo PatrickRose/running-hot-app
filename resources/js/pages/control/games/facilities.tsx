@@ -56,6 +56,11 @@ export default function ControlFacilities({
 
     const currentTurn = game.phase?.turn ?? null;
 
+    // A Facility's channels need both a server to build them in and a bot to
+    // build them with, so without either there is nothing to report or fix.
+    const discordReady =
+        game.discord.guild_id !== null && game.discord.bot_configured;
+
     return (
         <>
             <Head title={`Facilities — ${game.name}`} />
@@ -303,6 +308,7 @@ export default function ControlFacilities({
                                     facility={facility}
                                     catalogue={protectionCards}
                                     currentTurn={currentTurn}
+                                    discordReady={discordReady}
                                 />
                             ))}
                             {corporation.facilities.length === 0 && (

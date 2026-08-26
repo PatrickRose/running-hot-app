@@ -191,6 +191,15 @@ export type FacilitySecurityState = {
     cards_removed: number;
 };
 
+/**
+ * Whether the application has this Facility's Discord channels on record.
+ * Null for a viewer with no business knowing — only Control gets it.
+ */
+export type FacilityChannels = {
+    text: boolean;
+    voice: boolean;
+};
+
 export type FacilitySummary = {
     id: number;
     name: string;
@@ -201,6 +210,7 @@ export type FacilitySummary = {
     /** False while the Facility is still being built. */
     available: boolean;
     notes: string | null;
+    channels: FacilityChannels | null;
     stacks: ProtectionStack[];
     security: FacilitySecurityState;
 };

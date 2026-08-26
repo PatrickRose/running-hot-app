@@ -414,6 +414,10 @@ class GamePresenter
         $turn = $game->currentTurn();
         $turnNumber = $turn?->number;
 
+        // Which Discord channels the application has on record, so Control can
+        // see at a glance whether a Facility has somewhere to be run against.
+        $channelKeys = array_fill_keys($game->discordResources()->pluck('key')->all(), true);
+
         return $game->corporations()
             ->with([
                 'facilities' => fn ($query) => $query->orderBy('name'),
@@ -423,7 +427,7 @@ class GamePresenter
             ])
             ->orderBy('name')
             ->get()
-            ->map(function ($corporation) use ($defence, $turnNumber): array {
+            ->map(function ($corporation) use ($defence, $turnNumber, $channelKeys): array {
                 // Derived once per Corporation: every one of these depends on
                 // the whole Facility list, not on the Facility being described.
                 $totals = $defence->derivedTotals($corporation);
@@ -437,7 +441,7 @@ class GamePresenter
                     'technology_capacity_per_facility' => $totals['technology_capacity'],
                     'card_move_discount' => $totals['card_move_discount'],
                     'facilities' => $corporation->facilities
-                        ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $totals))
+                        ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $totals, $channelKeys))
                         ->all(),
                 ];
             })->all();
@@ -445,10 +449,16 @@ class GamePresenter
 
     /**
      * @param  array{physical_slots: int, cyber_slots: int, technology_capacity: int, card_move_discount: int}  $totals
+     * @param  array<string, bool>|null  $channelKeys  recorded Discord resource keys,
+     *                                                 or null for a caller with no business knowing
      * @return array<string, mixed>
      */
-    protected function facility(Facility $facility, ?int $turnNumber, array $totals): array
-    {
+    protected function facility(
+        Facility $facility,
+        ?int $turnNumber,
+        array $totals,
+        ?array $channelKeys = null,
+    ): array {
         $state = $facility->turnStates->first();
 
         return [
@@ -490,6 +500,10 @@ class GamePresenter
             ),
             // A Facility nobody has touched this turn has no state row, which
             // reads the same as an untouched one: no meeple, no budget.
+            'channels' => $channelKeys === null ? null : [
+                'text' => isset($channelKeys[GuildBlueprint::facilityChannelKey($facility, 'text')]),
+                'voice' => isset($channelKeys[GuildBlueprint::facilityChannelKey($facility, 'voice')]),
+            ],
             'security' => [
                 'directed' => $state !== null && $state->security_directed,
                 'budget' => $state === null ? 0 : $state->security_budget,
