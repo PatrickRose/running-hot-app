@@ -81,6 +81,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             Route::post('games/{game}/facilities/{facility}/security', [FacilityController::class, 'updateSecurity'])
                 ->name('facilities.security');
+            Route::post('games/{game}/facilities/{facility}/channels', [FacilityController::class, 'provisionChannels'])
+                ->name('facilities.channels');
 
             Route::post('games/{game}/facility-types', [FacilityTypeController::class, 'store'])
                 ->name('facility-types.store');

@@ -4,17 +4,22 @@ namespace Tests\Feature;
 
 use App\Actions\ProvisionDiscordGuild;
 use App\Actions\ProvisionFacilityChannels;
+use App\Enums\CharacterRole;
 use App\Enums\DiscordResourceKind;
+use App\Enums\GameStatus;
 use App\Jobs\SyncFacilityChannels;
+use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityType;
 use App\Models\Game;
+use App\Models\User;
 use App\Services\Discord\DiscordApi;
 use App\Support\Discord\GuildBlueprint;
 use App\Support\Discord\PlannedChannel;
 use App\Support\Discord\PlannedOverwrite;
 use App\Support\FacilityTypeBlueprint;
+use App\Support\GamePresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
@@ -414,6 +419,127 @@ class FacilityChannelsTest extends TestCase
         $this->assertTrue($facility->exists);
         $this->assertDatabaseHas('facilities', ['id' => $facility->id]);
         $this->assertSame(0, $game->discordResources()->count());
+    }
+
+    public function test_control_can_build_a_missing_pair_from_the_panel(): void
+    {
+        Queue::fake();
+
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create(['discord_guild_id' => $guild->guildId]);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        $this->actingAs(User::factory()->control()->create())
+            ->post("/control/games/{$game->id}/facilities/{$facility->id}/channels")
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        foreach (['text', 'voice'] as $kind) {
+            $this->assertDatabaseHas('discord_resources', [
+                'game_id' => $game->id,
+                'key' => GuildBlueprint::facilityChannelKey($facility, $kind),
+            ]);
+        }
+    }
+
+    public function test_pressing_it_twice_is_harmless(): void
+    {
+        Queue::fake();
+
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create(['discord_guild_id' => $guild->guildId]);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+        $control = User::factory()->control()->create();
+
+        $this->actingAs($control)
+            ->post("/control/games/{$game->id}/facilities/{$facility->id}/channels");
+        $after = $game->discordResources()->count();
+
+        $this->actingAs($control)
+            ->post("/control/games/{$game->id}/facilities/{$facility->id}/channels")
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($after, $game->discordResources()->count());
+    }
+
+    public function test_a_game_with_no_discord_server_says_so_rather_than_failing(): void
+    {
+        Queue::fake();
+
+        $game = Game::factory()->create();
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        $this->actingAs(User::factory()->control()->create())
+            ->post("/control/games/{$game->id}/facilities/{$facility->id}/channels")
+            ->assertSessionHasErrors('channels');
+    }
+
+    public function test_a_player_cannot_build_channels(): void
+    {
+        Queue::fake();
+
+        $game = Game::factory()->create(['discord_guild_id' => '900000000000000001']);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        $this->actingAs(User::factory()->create())
+            ->post("/control/games/{$game->id}/facilities/{$facility->id}/channels")
+            ->assertForbidden();
+    }
+
+    /**
+     * The badge Control reads. A silent miss should be visible on the panel,
+     * not something discovered when Security has nowhere to run.
+     */
+    public function test_the_panel_reports_whether_a_facility_has_its_channels(): void
+    {
+        Queue::fake();
+
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = Game::factory()->create(['discord_guild_id' => $guild->guildId]);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $facility = $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        $presenter = app(GamePresenter::class);
+
+        $before = $presenter->facilities($game)[0]['facilities'][0]['channels'];
+
+        $this->assertFalse($before['text']);
+        $this->assertFalse($before['voice']);
+
+        app(ProvisionFacilityChannels::class)->handle($facility);
+
+        $after = $presenter->facilities($game->fresh())[0]['facilities'][0]['channels'];
+
+        $this->assertTrue($after['text']);
+        $this->assertTrue($after['voice']);
+    }
+
+    /**
+     * A player's own view of their Facilities is not where Discord plumbing
+     * belongs, so it carries none of it.
+     */
+    public function test_a_players_own_facilities_carry_no_channel_state(): void
+    {
+        Queue::fake();
+
+        $game = Game::factory()->create(['status' => GameStatus::Running]);
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Gordon']);
+        $this->facilityFor($game, $corporation, 'Gordon Tower');
+
+        $user = User::factory()->create();
+        Character::factory()->for($game)->for($corporation)->create([
+            'role' => CharacterRole::Security,
+            'user_id' => $user->id,
+        ]);
+
+        $board = app(GamePresenter::class)->facilityBoard($game, $user);
+
+        $this->assertNotNull($board['own']);
+        $this->assertNull($board['own']['facilities'][0]['channels']);
     }
 
     public function test_removing_a_facility_leaves_its_channel_alone(): void

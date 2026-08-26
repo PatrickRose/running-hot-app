@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Control;
 
+use App\Actions\ProvisionFacilityChannels;
 use App\Actions\PublishFacilityList;
 use App\Actions\RequisitionFacility;
 use App\Http\Controllers\Controller;
@@ -38,6 +39,7 @@ class FacilityController extends Controller
         private readonly FacilityDefenceService $defence,
         private readonly RequisitionFacility $requisition,
         private readonly PublishFacilityList $facilityList,
+        private readonly ProvisionFacilityChannels $facilityChannels,
     ) {}
 
     public function index(Game $game, GamePresenter $presenter): Response
@@ -124,6 +126,32 @@ class FacilityController extends Controller
         $facility->delete();
 
         return back()->with('status', $facility->name.' removed.');
+    }
+
+    /**
+     * Build this Facility's Discord channels now.
+     *
+     * They are created by a queued job when the Facility is built, but that job
+     * is fail-soft: if Discord was down at the time, the Facility simply has no
+     * channels and nothing retries. A full provision run would pick it up, at
+     * the cost of re-PATCHing every channel and role in the guild, so this is
+     * the targeted way back. Idempotent, so pressing it twice is harmless.
+     */
+    public function provisionChannels(Game $game, Facility $facility): RedirectResponse
+    {
+        abort_if($facility->game_id !== $game->id, 404);
+
+        if (blank($game->discord_guild_id)) {
+            throw ValidationException::withMessages([
+                'channels' => 'This game has no Discord server yet.',
+            ]);
+        }
+
+        $created = $this->facilityChannels->handle($facility);
+
+        return back()->with('status', $created === []
+            ? $facility->name.' already has its channels.'
+            : sprintf('Created %d channel(s) for %s.', count($created), $facility->name));
     }
 
     /**

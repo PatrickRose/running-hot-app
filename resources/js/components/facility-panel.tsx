@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { destroy, security } from '@/routes/control/facilities';
+import { channels, destroy, security } from '@/routes/control/facilities';
 import {
     install as installCard,
     reorder as reorderCards,
@@ -32,12 +32,19 @@ export function FacilityPanel({
     facility,
     catalogue,
     currentTurn,
+    discordReady,
 }: {
     gameId: number;
     facility: FacilitySummary;
     catalogue: ProtectionCardSummary[];
     currentTurn: number | null;
+    /** False when the game has no Discord server, or no bot to build with. */
+    discordReady: boolean;
 }) {
+    const channelState = facility.channels;
+    const channelsReady =
+        channelState !== null && channelState.text && channelState.voice;
+
     return (
         <div className="rounded-md border p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -69,6 +76,35 @@ export function FacilityPanel({
                     )}
                     {facility.security.directed && (
                         <Badge>Security directed here</Badge>
+                    )}
+                    {discordReady && channelState !== null && (
+                        <>
+                            {channelsReady ? (
+                                <Badge variant="outline">Channels ready</Badge>
+                            ) : (
+                                <>
+                                    <Badge variant="destructive">
+                                        No Discord channels
+                                    </Badge>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                            router.post(
+                                                channels.url({
+                                                    game: gameId,
+                                                    facility: facility.id,
+                                                }),
+                                                {},
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        Create its channels
+                                    </Button>
+                                </>
+                            )}
+                        </>
                     )}
                     <Button
                         size="sm"
