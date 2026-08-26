@@ -346,11 +346,6 @@ class ProvisionDiscordGuild
      * @param  array<string, string>  $channelIds
      * @return array<string, mixed>
      */
-    /**
-     * @param  array<string, string>  $roleIds
-     * @param  array<string, string>  $channelIds
-     * @return array<string, mixed>
-     */
     private function channelPayload(
         PlannedChannel $planned,
         string $guildId,
