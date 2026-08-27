@@ -15,10 +15,18 @@
  * (see App\Enums\ResearchSuit). That means a failure to load this font shows a
  * bare letter rather than nothing, which is why every icon is rendered with a
  * text label beside it for screen readers.
+ *
+ * It lives under resources/ and is referenced relatively so that Vite processes
+ * it, the same way the Instrument Sans in --font-sans arrives. A font under
+ * public/ cannot be referenced from here: laravel-vite-plugin sets Vite's
+ * publicDir to false, so the dev server does not serve public/ - and in dev this
+ * stylesheet is served from the Vite origin, where a root-relative /fonts/...
+ * is a 404. That loads once built and silently falls back to a bare letter for
+ * everybody running the dev server, which is exactly how it was found.
  */
 @font-face {
     font-family: 'Running Hot Icons';
-    src: url('/fonts/RunningHot-Font.ttf') format('truetype');
+    src: url('../fonts/RunningHot-Font.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
     /* Show the label immediately and swap the icon in when the font lands,

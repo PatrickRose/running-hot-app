@@ -20,6 +20,11 @@ use Tests\TestCase;
  */
 class ResearchSuitTest extends TestCase
 {
+    /**
+     * Under resources/ rather than public/, because Vite has to process it: the
+     * dev server does not serve public/, so a font referenced from there loads
+     * once built and never in development.
+     */
     private const FONT = 'fonts/RunningHot-Font.ttf';
 
     public function test_every_suit_has_a_label_and_a_cost_column(): void
@@ -56,7 +61,7 @@ class ResearchSuitTest extends TestCase
 
     public function test_the_icon_font_is_on_record(): void
     {
-        $this->assertFileExists(public_path(self::FONT));
+        $this->assertFileExists(resource_path(self::FONT));
     }
 
     /**
@@ -68,7 +73,7 @@ class ResearchSuitTest extends TestCase
      */
     public function test_the_font_maps_every_suit_glyph(): void
     {
-        $mapped = $this->mappedCodepoints(public_path(self::FONT));
+        $mapped = $this->mappedCodepoints(resource_path(self::FONT));
 
         $this->assertNotEmpty($mapped, 'The font maps no characters at all.');
 
@@ -96,7 +101,7 @@ class ResearchSuitTest extends TestCase
      */
     public function test_the_font_reader_reports_a_missing_character_as_missing(): void
     {
-        $mapped = $this->mappedCodepoints(public_path(self::FONT));
+        $mapped = $this->mappedCodepoints(resource_path(self::FONT));
 
         $this->assertContains(mb_ord('A'), $mapped);
         $this->assertNotContains(mb_ord('N'), $mapped, 'N is the one capital this font has no icon for.');
