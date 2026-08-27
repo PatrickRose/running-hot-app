@@ -26,6 +26,7 @@ class CardImageTest extends TestCase
         }
 
         $this->written = [];
+        CardImage::flush();
 
         parent::tearDown();
     }
@@ -38,6 +39,10 @@ class CardImageTest extends TestCase
         $path = $directory.'/'.$file;
         File::put($path, 'not really an image');
         $this->written[] = $path;
+
+        // The directory listing is cached for the life of the process, so a file
+        // written after something has already read it needs the listing dropped.
+        CardImage::flush();
 
         return $path;
     }
@@ -86,6 +91,31 @@ class CardImageTest extends TestCase
         $this->writeArtwork('ZZ003.webp');
 
         $this->assertSame('/images/cards/ZZ003.webp', CardImage::pathFor('ZZ003'));
+    }
+
+    /**
+     * An export from a designer is not always upper case, and the code printed
+     * on the card always is, so the file name is folded the same way as the code.
+     */
+    public function test_a_lower_case_file_name_still_resolves(): void
+    {
+        $this->writeArtwork('zz006.webp');
+
+        $this->assertSame('/images/cards/zz006.webp', CardImage::pathFor('ZZ006'));
+    }
+
+    /**
+     * The directory is read once per request rather than once per card, so a
+     * page listing two hundred cards costs one listing.
+     */
+    public function test_the_listing_reports_what_is_on_record(): void
+    {
+        $before = CardImage::countOnRecord();
+
+        $this->writeArtwork('ZZ007.webp');
+        $this->writeArtwork('ZZ008.png');
+
+        $this->assertSame($before + 2, CardImage::countOnRecord());
     }
 
     /**

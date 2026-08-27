@@ -19,9 +19,15 @@ use Illuminate\Support\Facades\File;
  * instead. Which means every caller has to cope with null, and the front end
  * treats the text box as the normal case rather than a fallback.
  *
- * The files live under public/ because that is the only place Discord can reach
- * them: an embed references an image by absolute URL and cannot attach one by
- * path.
+ * The directory is read once per request and answered from memory after that.
+ * There are three hundred cards, the catalogue pages show two hundred at a time
+ * and each card would otherwise cost one filesystem check per extension - so
+ * asking the directory once is the difference between one listing and the better
+ * part of a thousand stat calls.
+ *
+ * The files live under public/ because they are referenced from an img tag at
+ * runtime and the page itself is served by Laravel. That is the opposite of the
+ * icon font, which is referenced from CSS and so has to go through Vite.
  */
 class CardImage
 {
@@ -40,11 +46,18 @@ class CardImage
     public const EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg'];
 
     /**
+     * Artwork file names by upper-cased code, or null before the first read.
+     *
+     * @var array<string, string>|null
+     */
+    private static ?array $manifest = null;
+
+    /**
      * The web path to the artwork for a code, or null where there is none.
      *
      * Returns a rooted path rather than a full URL so the same value works
      * behind whatever host the game is served on. Callers that need an absolute
-     * URL - the Discord embeds - pass it through url().
+     * URL - a Discord embed would - pass it through url().
      */
     public static function pathFor(?string $code): ?string
     {
@@ -62,49 +75,92 @@ class CardImage
             return null;
         }
 
-        $code = self::normalise($code);
-
-        foreach (self::EXTENSIONS as $extension) {
-            $file = $code.'.'.$extension;
-
-            if (File::exists(public_path(self::DIRECTORY.'/'.$file))) {
-                return $file;
-            }
-        }
-
-        return null;
+        return self::manifest()[self::normalise($code)] ?? null;
     }
 
     /**
      * Whether any artwork is on record at all.
      *
      * Worth asking once before rendering a long list: the artwork is added to
-     * the repository as a batch, so a checkout without it should show every card
-     * as text rather than a page of broken images.
+     * the repository as a batch, so a checkout without it should say so rather
+     * than showing every card as text as though Control had invented them all.
      */
     public static function anyOnRecord(): bool
     {
+        return self::manifest() !== [];
+    }
+
+    /**
+     * How many cards have artwork on record.
+     */
+    public static function countOnRecord(): int
+    {
+        return count(self::manifest());
+    }
+
+    /**
+     * Forget the directory listing.
+     *
+     * For tests, which write artwork while running: the listing is cached for
+     * the life of the process, and a test that adds a file after something else
+     * has already read the directory would otherwise not see it.
+     */
+    public static function flush(): void
+    {
+        self::$manifest = null;
+    }
+
+    /**
+     * Every artwork file, indexed by the code it belongs to.
+     *
+     * A code with more than one file keeps whichever extension wins, so adding
+     * a webp beside an existing png quietly supersedes it rather than making
+     * which one is served depend on the order the directory happens to list.
+     *
+     * @return array<string, string>
+     */
+    private static function manifest(): array
+    {
+        if (self::$manifest !== null) {
+            return self::$manifest;
+        }
+
         $directory = public_path(self::DIRECTORY);
 
         if (! File::isDirectory($directory)) {
-            return false;
+            return self::$manifest = [];
         }
 
-        foreach (self::EXTENSIONS as $extension) {
-            if (File::glob($directory.'/*.'.$extension) !== []) {
-                return true;
+        $ranked = [];
+        $manifest = [];
+
+        foreach (File::files($directory) as $file) {
+            $rank = array_search(strtolower($file->getExtension()), self::EXTENSIONS, true);
+
+            if ($rank === false) {
+                continue;
             }
+
+            $code = self::normalise($file->getFilenameWithoutExtension());
+
+            if ($code === '' || (isset($ranked[$code]) && $ranked[$code] <= $rank)) {
+                continue;
+            }
+
+            $ranked[$code] = $rank;
+            $manifest[$code] = $file->getFilename();
         }
 
-        return false;
+        return self::$manifest = $manifest;
     }
 
     /**
      * A code as it is filed.
      *
-     * Codes are printed in upper case and filed that way. Trimming and
-     * upper-casing here means a code Control types in by hand still finds its
-     * artwork, and a code cannot be used to reach outside the artwork directory.
+     * Codes are printed in upper case, but an export from a designer is not
+     * always, so both the file name and the code being looked up are folded the
+     * same way. Anything that is not part of a code is dropped, which also means
+     * a code cannot be used to reach outside the artwork directory.
      */
     private static function normalise(string $code): string
     {
