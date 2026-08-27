@@ -2,6 +2,10 @@ import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import Heading from '@/components/heading';
+import {
+    ResearchSuitCost,
+    ResearchSuitIcon,
+} from '@/components/research-suit-cost';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +20,7 @@ import { index, show } from '@/routes/control/games';
 import type {
     EquipmentCardSummary,
     GameSummary,
+    ResearchSuitSummary,
     TechnologySummary,
 } from '@/types/game';
 
@@ -23,10 +28,9 @@ type Props = {
     game: GameSummary;
     equipment: EquipmentCardSummary[];
     technologies: TechnologySummary[];
+    researchSuits: ResearchSuitSummary[];
     hasArtwork: boolean;
 };
-
-const SUITS = ['cog', 'brain', 'leaf', 'maths'] as const;
 
 /**
  * The Equipment and technology card lists.
@@ -40,6 +44,7 @@ export default function ControlCards({
     game,
     equipment,
     technologies,
+    researchSuits,
     hasArtwork,
 }: Props) {
     const [query, setQuery] = useState('');
@@ -162,6 +167,23 @@ export default function ControlCards({
                             there, and one with no cost at all is a starting
                             technology rather than a free one.
                         </CardDescription>
+                        {/* The rulebook shows the suits as icons and never
+                            names them, so the table does the same. This is the
+                            key to them. */}
+                        <div className="flex flex-wrap items-center gap-4 pt-1 text-sm text-muted-foreground">
+                            {researchSuits.map((suit) => (
+                                <span
+                                    key={suit.value}
+                                    className="flex items-center gap-1.5"
+                                >
+                                    <ResearchSuitIcon
+                                        suit={suit}
+                                        className="font-icons text-lg leading-none"
+                                    />
+                                    <span aria-hidden="true">{suit.label}</span>
+                                </span>
+                            ))}
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-x-auto">
@@ -222,20 +244,11 @@ export default function ControlCards({
                                                         technology.tree}
                                                 </Badge>
                                             </td>
-                                            <td className="py-2 pr-4 font-mono text-xs whitespace-nowrap tabular-nums">
-                                                {technology.is_free
-                                                    ? '—'
-                                                    : SUITS.filter(
-                                                          (suit) =>
-                                                              technology.cost[
-                                                                  suit
-                                                              ] > 0,
-                                                      )
-                                                          .map(
-                                                              (suit) =>
-                                                                  `${technology.cost[suit]} ${suit}`,
-                                                          )
-                                                          .join(', ')}
+                                            <td className="py-2 pr-4 text-xs">
+                                                <ResearchSuitCost
+                                                    cost={technology.cost}
+                                                    suits={researchSuits}
+                                                />
                                             </td>
                                             <td className="max-w-72 py-2 pr-4 text-muted-foreground">
                                                 {technology.effect ?? '—'}

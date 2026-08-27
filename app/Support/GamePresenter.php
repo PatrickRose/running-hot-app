@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Actions\PublishFacilityList;
 use App\Enums\ProtectionKind;
+use App\Enums\ResearchSuit;
 use App\Enums\Tracker;
 use App\Models\Character;
 use App\Models\Corporation;
@@ -449,6 +450,23 @@ class GamePresenter
                     'cards' => $cards,
                 ];
             })->all();
+    }
+
+    /**
+     * The four Research Point suits, with the icon that draws each.
+     *
+     * Sent once for the page rather than repeated on all four costs of every
+     * technology, which would be five hundred copies of the same four letters.
+     *
+     * @return array<int, array{value: string, label: string, glyph: string}>
+     */
+    public function researchSuits(): array
+    {
+        return array_map(fn (ResearchSuit $suit): array => [
+            'value' => $suit->value,
+            'label' => $suit->label(),
+            'glyph' => $suit->glyph(),
+        ], ResearchSuit::all());
     }
 
     /**

@@ -178,6 +178,20 @@ export type EquipmentCardSummary = {
     notes: string | null;
 };
 
+/**
+ * One of the four Research Point suits, with the character that draws its icon
+ * in the game's own font.
+ *
+ * The glyph is a bare capital letter — the font maps icons onto ASCII — so it
+ * only reads as an icon while the font is loaded, and the label always travels
+ * with it.
+ */
+export type ResearchSuitSummary = {
+    value: string;
+    label: string;
+    glyph: string;
+};
+
 /** A technology on a Corporation's tech tree (rulebook 3.2.2). */
 export type TechnologySummary = {
     id: number;

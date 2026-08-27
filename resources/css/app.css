@@ -7,11 +7,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * The game's own icon font, drawn by its designer.
+ *
+ * It is an icon font rather than a symbol font: each icon is mapped onto an
+ * ASCII letter, so the four Research Point suits are the characters A to D
+ * (see App\Enums\ResearchSuit). That means a failure to load this font shows a
+ * bare letter rather than nothing, which is why every icon is rendered with a
+ * text label beside it for screen readers.
+ */
+@font-face {
+    font-family: 'Running Hot Icons';
+    src: url('/fonts/RunningHot-Font.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    /* Show the label immediately and swap the icon in when the font lands,
+       rather than leaving a gap where a cost should be. */
+    font-display: swap;
+}
+
 @theme {
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
+
+    --font-icons: 'Running Hot Icons';
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
