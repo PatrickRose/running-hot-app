@@ -1,3 +1,8 @@
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { ResearchSuitSummary } from '@/types/game';
 
 /**
@@ -7,8 +12,8 @@ import type { ResearchSuitSummary } from '@/types/game';
  * so this does the same. The icons come from the game's own font, which maps
  * each one onto an ASCII letter — so the glyph is a bare capital until the font
  * loads, and a screen reader would read that letter out. Every icon therefore
- * carries the suit's name beside it: hidden from view, but not from a reader,
- * and it is what a `title` shows on hover.
+ * carries the suit's name beside it, hidden from view but not from a reader, and
+ * says it again in a tooltip for anyone learning the four by pointing at them.
  *
  * Only the suits that cost something are shown. Most technologies are free in at
  * least one suit, and four columns of mostly zeroes reads worse than the two or
@@ -32,16 +37,24 @@ export function ResearchSuitCost({
     return (
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {priced.map((suit) => (
-                <span
-                    key={suit.value}
-                    className="flex items-center gap-1 whitespace-nowrap"
-                    title={`${cost[suit.value]} ${suit.label}`}
-                >
-                    <span className="font-mono tabular-nums">
-                        {cost[suit.value]}
-                    </span>
-                    <ResearchSuitIcon suit={suit} />
-                </span>
+                <Tooltip key={suit.value}>
+                    {/* asChild rather than the default button: this table runs
+                        to a hundred and forty rows, and a tab stop per suit per
+                        row would drown the page. The name is in the sr-only
+                        span inside, so nothing depends on reaching the
+                        tooltip. */}
+                    <TooltipTrigger asChild>
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                            <span className="font-mono tabular-nums">
+                                {cost[suit.value]}
+                            </span>
+                            <ResearchSuitIcon suit={suit} />
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        {cost[suit.value]} {suit.label}
+                    </TooltipContent>
+                </Tooltip>
             ))}
         </span>
     );
