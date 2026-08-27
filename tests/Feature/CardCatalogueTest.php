@@ -111,14 +111,39 @@ class CardCatalogueTest extends TestCase
         $this->assertSame('available', $orc->availability->value);
     }
 
-    public function test_a_card_nobody_can_buy_has_no_price_rather_than_a_free_one(): void
+    /**
+     * The card sheet has a cost column, but the Corporation shop does not work
+     * the way it suggests, so seeding those numbers would encode a pricing model
+     * the game does not use. Cards arrive unpriced and the shop brings its own
+     * pricing when it is built.
+     */
+    public function test_the_seeded_cards_carry_no_shop_prices(): void
     {
         $game = Game::factory()->create();
 
-        // Anzû is unlocked by research and never priced on the card list.
-        $this->assertNull($game->protectionCardTypes()->where('code', 'PR010')->sole()->cost);
-        // Orc is a shop card.
-        $this->assertSame(4, $game->protectionCardTypes()->where('code', 'PS009')->sole()->cost);
+        $this->assertSame(
+            $game->protectionCardTypes()->count(),
+            $game->protectionCardTypes()->whereNull('cost')->count(),
+        );
+        $this->assertSame(
+            $game->equipmentCardTypes()->count(),
+            $game->equipmentCardTypes()->whereNull('cost')->count(),
+        );
+    }
+
+    /**
+     * A Charge is nothing to do with buying a card: it is Credits Security
+     * spends during a Run, printed on the card, and it survives.
+     */
+    public function test_a_charge_keeps_its_printed_cost(): void
+    {
+        $game = Game::factory()->create();
+
+        $orc = $game->protectionCardTypes()->where('code', 'PS003')->sole();
+
+        $this->assertSame(1, $orc->charge_cost);
+        $this->assertSame('2 alert, 1 wound', $orc->charge_consequence);
+        $this->assertTrue($orc->hasCharge());
     }
 
     public function test_equipment_carries_its_category(): void
@@ -141,17 +166,20 @@ class CardCatalogueTest extends TestCase
     }
 
     /**
-     * The bypass cards are granted by a technology rather than sold, so they
-     * have no market price.
+     * Control can still put a figure on a card while the market is unbuilt, and
+     * that is the only way one gets a price.
      */
-    public function test_equipment_the_market_does_not_sell_has_no_price(): void
+    public function test_control_can_price_a_card_by_hand(): void
     {
         $game = Game::factory()->create();
 
         $bypass = $game->equipmentCardTypes()->where('code', 'ERS021')->sole();
 
-        $this->assertNull($bypass->cost);
         $this->assertFalse($bypass->isOnSale());
+
+        $bypass->update(['cost' => 6]);
+
+        $this->assertTrue($bypass->fresh()?->isOnSale());
     }
 
     public function test_a_technology_is_priced_in_the_four_research_suits(): void

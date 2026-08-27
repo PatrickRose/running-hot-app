@@ -61,7 +61,6 @@ class ProtectionCardBlueprint
      *     kind: ProtectionKind,
      *     challenge: string,
      *     consequence: string,
-     *     cost: int|null,
      *     charge_cost: int|null,
      *     charge_consequence: string|null,
      *     availability: ProtectionCardAvailability,
@@ -76,7 +75,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (Number of wounds + 2)',
                 consequence: '2 tag, end the run',
-                cost: 7,
             ),
             self::card(
                 code: 'PE002',
@@ -84,7 +82,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Hack (3)',
                 consequence: '3 tag',
-                cost: 6,
                 chargeCost: 1,
                 chargeConsequence: '4 tag',
             ),
@@ -94,7 +91,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Hack (5)',
                 consequence: '1 wound, 1 tag',
-                cost: 8,
             ),
             self::card(
                 code: 'PE004',
@@ -102,7 +98,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Brute (3)',
                 consequence: '4 wound',
-                cost: 7,
                 chargeCost: 6,
                 chargeConsequence: '1 wound, end the run',
             ),
@@ -449,7 +444,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (5)',
                 consequence: '2 tags',
-                cost: 2,
                 chargeCost: 2,
                 chargeConsequence: 'All tagged runners take 2 wound',
             ),
@@ -459,7 +453,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (5)',
                 consequence: 'If tagged, end the run.',
-                cost: 1,
                 chargeCost: 1,
                 chargeConsequence: '1 tag',
             ),
@@ -505,7 +498,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (2)',
                 consequence: '1 alert',
-                cost: 2,
             ),
             self::card(
                 code: 'PS002',
@@ -513,7 +505,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (1)',
                 consequence: '1 alert',
-                cost: 1,
             ),
             self::card(
                 code: 'PS003',
@@ -521,7 +512,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (2)',
                 consequence: '1 alert, 1 wound',
-                cost: 5,
                 chargeCost: 1,
                 chargeConsequence: '2 alert, 1 wound',
             ),
@@ -531,7 +521,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (2)',
                 consequence: '1 alert',
-                cost: 3,
                 chargeCost: 1,
                 chargeConsequence: '2 alert',
             ),
@@ -541,7 +530,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute/Hack (2)',
                 consequence: '1 alert, retry',
-                cost: 6,
                 chargeCost: 1,
                 chargeConsequence: 'End the run',
             ),
@@ -551,7 +539,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute or Hack (Number of alerts+2)',
                 consequence: 'End the run',
-                cost: 5,
             ),
             self::card(
                 code: 'PS007',
@@ -559,7 +546,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Hack (4)',
                 consequence: '1 tag, 1 alert',
-                cost: 4,
                 chargeCost: 1,
                 chargeConsequence: '2 alert, 1 tag',
             ),
@@ -569,7 +555,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (3)',
                 consequence: '1 tag, End the run',
-                cost: 9,
             ),
             self::card(
                 code: 'PS009',
@@ -577,7 +562,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Brute (2)',
                 consequence: '1 wound',
-                cost: 4,
             ),
             self::card(
                 code: 'PS010',
@@ -585,7 +569,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Brute (3)',
                 consequence: '3 wound',
-                cost: 8,
                 chargeCost: 5,
                 chargeConsequence: 'End the run',
             ),
@@ -595,7 +578,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Brute (2)',
                 consequence: '2 wound',
-                cost: 6,
                 chargeCost: 5,
                 chargeConsequence: 'End the run',
             ),
@@ -605,7 +587,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (2)',
                 consequence: '2 tag, end the run',
-                cost: 4,
                 chargeCost: 1,
                 chargeConsequence: '3 tag',
             ),
@@ -615,7 +596,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (3)',
                 consequence: 'End the run, 1 tag',
-                cost: 8,
             ),
             self::card(
                 code: 'PS014',
@@ -623,7 +603,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (3)',
                 consequence: '2 wound, 1 tag',
-                cost: 7,
             ),
             self::card(
                 code: 'PS015',
@@ -631,7 +610,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (2)',
                 consequence: '1 alert, 1 wound',
-                cost: 5,
                 chargeCost: 1,
                 chargeConsequence: '2 alert, 1 wound',
             ),
@@ -641,7 +619,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute/Hack (2)',
                 consequence: '1 alert, retry',
-                cost: 6,
                 chargeCost: 1,
                 chargeConsequence: 'End the run',
             ),
@@ -651,7 +628,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute or Hack (Number of alerts+2)',
                 consequence: 'End the run',
-                cost: 5,
             ),
             self::card(
                 code: 'PS018',
@@ -659,7 +635,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (3)',
                 consequence: '2 wounds',
-                cost: 7,
                 chargeCost: 1,
                 chargeConsequence: '2 wounds, end the run',
             ),
@@ -669,7 +644,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (3)',
                 consequence: '2 wounds',
-                cost: 7,
                 chargeCost: 1,
                 chargeConsequence: '2 wounds, end the run',
             ),
@@ -679,7 +653,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (3)',
                 consequence: 'End the run, 1 tag',
-                cost: 8,
             ),
             self::card(
                 code: 'PX001',
@@ -763,7 +736,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Physical,
                 challenge: 'Hack (8) or Brute (8)',
                 consequence: '5 tags',
-                cost: 4,
                 chargeCost: 3,
                 chargeConsequence: 'All tagged runners take 4 wounds',
             ),
@@ -773,7 +745,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (8) or Brute (8)',
                 consequence: '5 tags',
-                cost: 4,
                 chargeCost: 3,
                 chargeConsequence: 'All tagged runners take 4 wounds',
             ),
@@ -783,13 +754,17 @@ class ProtectionCardBlueprint
     /**
      * One card, as it is printed.
      *
-     * A card with no cost is one nobody can buy yet, which is not the same as a
-     * card that is free - so the column is nullable and stays null rather than
-     * falling back to zero.
+     * No shop price. The card sheet has a cost column, but the Corporation shop
+     * does not work the way it suggests, so seeding those numbers would encode a
+     * pricing model the game does not use. Cards arrive unpriced and the shop
+     * brings its own pricing when it is built; Control can still put a figure on
+     * a card in the meantime.
      *
-     * A Charge is a cost and a consequence together (rulebook 3.3.5): a cost
-     * with nothing to spend it on, or a consequence with no price, is neither
-     * usable nor printable, so the two always travel as a pair.
+     * A Charge is different: its cost is Credits spent during a Run, printed on
+     * the card, and nothing to do with buying one. It is a cost and a
+     * consequence together (rulebook 3.3.5) - a cost with nothing to spend it
+     * on, or a consequence with no price, is neither usable nor printable, so
+     * the two always travel as a pair.
      *
      * @return array{
      *     code: string,
@@ -797,7 +772,6 @@ class ProtectionCardBlueprint
      *     kind: ProtectionKind,
      *     challenge: string,
      *     consequence: string,
-     *     cost: int|null,
      *     charge_cost: int|null,
      *     charge_consequence: string|null,
      *     availability: ProtectionCardAvailability,
@@ -809,7 +783,6 @@ class ProtectionCardBlueprint
         ProtectionKind $kind,
         string $challenge,
         string $consequence,
-        ?int $cost = null,
         ?int $chargeCost = null,
         ?string $chargeConsequence = null,
     ): array {
@@ -819,7 +792,6 @@ class ProtectionCardBlueprint
             'kind' => $kind,
             'challenge' => $challenge,
             'consequence' => $consequence,
-            'cost' => $cost,
             'charge_cost' => $chargeCost,
             'charge_consequence' => $chargeConsequence,
             'availability' => self::availabilityFor($code),

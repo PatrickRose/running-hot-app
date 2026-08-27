@@ -113,9 +113,9 @@ export default function ControlCards({
                             Permanent items are equipped before a Run and only
                             three at a time; the other two are played as
                             Protection Cards are met and then go back to
-                            Control. A card with no price is granted by a
-                            technology or a Facility's access effect rather than
-                            bought.
+                            Control. The list carries no prices — the market is
+                            its own piece of work, and it does not work the way
+                            the card sheet's cost column suggests.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-3">
@@ -134,7 +134,7 @@ export default function ControlCards({
                                 ]}
                                 footer={
                                     card.cost === null
-                                        ? 'Not sold on the market'
+                                        ? null
                                         : `${card.cost} Credits`
                                 }
                             />

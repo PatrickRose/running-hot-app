@@ -17,10 +17,10 @@ use App\Enums\EquipmentCategory;
  * Each card carries the code printed on it, which is also how its artwork is
  * found (see App\Support\CardImage).
  *
- * A card with no cost is one the market does not sell: eight of the "Bypass"
- * cards and the Reconnaissance items are granted by a technology or a Facility's
- * access effect rather than bought, so the column stays null rather than
- * falling back to a free price.
+ * No prices. The card sheet has a cost column, but the market does not work the
+ * way it suggests, so seeding those numbers would encode a pricing model the
+ * game does not use. Cards arrive unpriced and the market brings its own pricing
+ * when it is built.
  *
  * Deliberately absent: who owns which copies. Runners buy equipment from the
  * market or from each other during the Setup phase (rulebook 2.2.1), which is a
@@ -34,7 +34,6 @@ class EquipmentCardBlueprint
      *     name: string,
      *     category: EquipmentCategory,
      *     effect: string,
-     *     cost: int|null,
      * }>
      */
     public static function defaults(): array
@@ -46,28 +45,24 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::Permanent,
                 effect: 'Retry any failed rolls once. For each time you do this take a wound at '
                     .'the end of the run',
-                cost: 5,
             ),
             self::card(
                 code: 'EEP002',
                 name: 'Katana',
                 category: EquipmentCategory::Permanent,
                 effect: '+2 Brute',
-                cost: 5,
             ),
             self::card(
                 code: 'EEP003',
                 name: 'Neural interface',
                 category: EquipmentCategory::Permanent,
                 effect: '+2 Hack',
-                cost: 5,
             ),
             self::card(
                 code: 'EEP009',
                 name: 'Foresight',
                 category: EquipmentCategory::Permanent,
                 effect: 'If you leave a run, remove two wounds or one tag.',
-                cost: 5,
             ),
             self::card(
                 code: 'EEP010',
@@ -75,7 +70,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::Permanent,
                 effect: 'If you leave a run, see the Challenge and consequences of one '
                     .'unencountered protection on that run.',
-                cost: 5,
             ),
             self::card(
                 code: 'EEP011',
@@ -83,21 +77,18 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::Permanent,
                 effect: 'If you beat the Challenge of a protection, you may pay 5 credits to '
                     .'destroy that protection and return this card to Control',
-                cost: 8,
             ),
             self::card(
                 code: 'EEP012',
                 name: 'Magnum',
                 category: EquipmentCategory::Permanent,
                 effect: 'Optionally add +3 Brute to your next roll. If you do, add 3 alert',
-                cost: 4,
             ),
             self::card(
                 code: 'EEP013',
                 name: 'AK-47',
                 category: EquipmentCategory::Permanent,
                 effect: 'Optionally add +4 Brute to your next roll. If you do, add 4 alert',
-                cost: 7,
             ),
             self::card(
                 code: 'EEP014',
@@ -185,14 +176,12 @@ class EquipmentCardBlueprint
                 name: 'Portable computer',
                 category: EquipmentCategory::Permanent,
                 effect: 'Gain +2 accesses',
-                cost: 5,
             ),
             self::card(
                 code: 'EES004',
                 name: 'Mini-hospital',
                 category: EquipmentCategory::SingleUse,
                 effect: '-1 die for next roll. Heal 1 wound',
-                cost: 5,
             ),
             self::card(
                 code: 'EES005',
@@ -200,7 +189,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::SingleUse,
                 effect: 'Upon encountering an Active protection, you may discard this to '
                     .'immediately leave your run without consequences.',
-                cost: 2,
             ),
             self::card(
                 code: 'EES025',
@@ -208,7 +196,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::SingleUse,
                 effect: 'Destroy a protection card. Each runner in the group rolls their Brute. '
                     .'For each failure, take 1 wound.',
-                cost: 10,
             ),
             self::card(
                 code: 'EES026',
@@ -216,7 +203,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::SingleUse,
                 effect: 'When accessing a facility, forgo an access to instead reveal all '
                     .'research cards in this facility',
-                cost: 3,
             ),
             self::card(
                 code: 'EES027',
@@ -225,7 +211,6 @@ class EquipmentCardBlueprint
                 effect: 'Forgo all accesses to instead access a card in another facility of the '
                     .'same type owned by this corporation. You may use a Technology access '
                     .'card for this access if you have one. Must be used as first access.',
-                cost: 8,
             ),
             self::card(
                 code: 'EET006',
@@ -233,7 +218,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::ThisRun,
                 effect: 'Every protection encountered requires one lower level on its challenge '
                     .'for the duration of this run.',
-                cost: 10,
             ),
             self::card(
                 code: 'EET007',
@@ -241,7 +225,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::ThisRun,
                 effect: 'Gain +4 Brute for the duration of this run. Take 2 wounds when the run '
                     .'concludes.',
-                cost: 4,
             ),
             self::card(
                 code: 'EET008',
@@ -249,7 +232,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::ThisRun,
                 effect: 'Gain +4 Hack for the duration of this run. Take 2 wounds when the run '
                     .'concludes.',
-                cost: 4,
             ),
             self::card(
                 code: 'ERP001',
@@ -283,7 +265,6 @@ class EquipmentCardBlueprint
                 name: 'Cai Shen',
                 category: EquipmentCategory::Permanent,
                 effect: 'On a successful run, gain four credits.',
-                cost: 10,
             ),
             self::card(
                 code: 'ERP012',
@@ -291,7 +272,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::Permanent,
                 effect: 'If you would have to End the Run, pay three credits to ignore that '
                     .'consequence.',
-                cost: 14,
             ),
             self::card(
                 code: 'ERP013',
@@ -319,7 +299,6 @@ class EquipmentCardBlueprint
                 name: 'Dobhar-chú',
                 category: EquipmentCategory::SingleUse,
                 effect: 'Ignore all wounds from this consequence',
-                cost: 4,
             ),
             self::card(
                 code: 'ERS006',
@@ -405,7 +384,6 @@ class EquipmentCardBlueprint
                 name: '5LOW-R0LL',
                 category: EquipmentCategory::SingleUse,
                 effect: 'The current 5LOW-R0LL effect is applied',
-                cost: 3,
             ),
             self::card(
                 code: 'ERS025',
@@ -413,7 +391,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::SingleUse,
                 effect: 'The Run Leader must pass Brute (4). If they fail, they take a wound and '
                     .'a tag and the access is lost',
-                cost: 5,
             ),
             self::card(
                 code: 'ERS026',
@@ -421,7 +398,6 @@ class EquipmentCardBlueprint
                 category: EquipmentCategory::SingleUse,
                 effect: 'The Run Leader must pass Hack (4). If they fail, they take a wound and a '
                     .'tag and the access is lost',
-                cost: 5,
             ),
             self::card(
                 code: 'ERS028',
@@ -438,28 +414,24 @@ class EquipmentCardBlueprint
                 effect: 'Before encountering any Active protection, you may temporarily swap its '
                     .'position with any other installed protection, including inactive '
                     .'protections.',
-                cost: 7,
             ),
             self::card(
                 code: 'ESP001',
                 name: 'Armour',
                 category: EquipmentCategory::Permanent,
                 effect: 'Add +1 to one of your dice',
-                cost: 6,
             ),
             self::card(
                 code: 'ESP003',
                 name: 'Shiv',
                 category: EquipmentCategory::Permanent,
                 effect: '+1 Brute',
-                cost: 3,
             ),
             self::card(
                 code: 'ESP004',
                 name: 'PDA',
                 category: EquipmentCategory::Permanent,
                 effect: '+1 Hack',
-                cost: 3,
             ),
             self::card(
                 code: 'ESP013',
@@ -468,98 +440,84 @@ class EquipmentCardBlueprint
                 effect: 'If you are on a successful run, gain credits equal to the number of tags '
                     .'you have. Increase the number of tags you have by half that number '
                     .'(rounding up)',
-                cost: 5,
             ),
             self::card(
                 code: 'ESS002',
                 name: 'Blood tinge',
                 category: EquipmentCategory::SingleUse,
                 effect: 'Roll d8 for Brute',
-                cost: 5,
             ),
             self::card(
                 code: 'ESS006',
                 name: 'Boost',
                 category: EquipmentCategory::SingleUse,
                 effect: '+1 die for next roll',
-                cost: 3,
             ),
             self::card(
                 code: 'ESS007',
                 name: 'Super boost',
                 category: EquipmentCategory::SingleUse,
                 effect: '+2 die for next roll',
-                cost: 5,
             ),
             self::card(
                 code: 'ESS008',
                 name: 'Flare',
                 category: EquipmentCategory::SingleUse,
                 effect: 'Prevent a tag',
-                cost: 3,
             ),
             self::card(
                 code: 'ESS009',
                 name: 'H4ck1ng 4 Dummi3s',
                 category: EquipmentCategory::SingleUse,
                 effect: '+2 Hack for the duration of this run',
-                cost: 3,
             ),
             self::card(
                 code: 'ESS010',
                 name: 'Punching for dummies',
                 category: EquipmentCategory::SingleUse,
                 effect: '+2 Brute for the duration of this run',
-                cost: 3,
             ),
             self::card(
                 code: 'ESS011',
                 name: 'Surge',
                 category: EquipmentCategory::SingleUse,
                 effect: 'The next time you roll dice, roll d8s',
-                cost: 5,
             ),
             self::card(
                 code: 'ESS014',
                 name: 'Adrenaline Shot',
                 category: EquipmentCategory::SingleUse,
                 effect: 'Gain +3 dice for this roll but -1 dice for the next one',
-                cost: 6,
             ),
             self::card(
                 code: 'ESS015',
                 name: 'High powered USB',
                 category: EquipmentCategory::SingleUse,
                 effect: 'Gain +1 access',
-                cost: 1,
             ),
             self::card(
                 code: 'ESS016',
                 name: 'Data transfer window',
                 category: EquipmentCategory::SingleUse,
                 effect: 'Gain +2 accesses',
-                cost: 2,
             ),
             self::card(
                 code: 'EST005',
                 name: 'First aid',
                 category: EquipmentCategory::ThisRun,
                 effect: '-1 wound for the duration of this run',
-                cost: 3,
             ),
             self::card(
                 code: 'EST012',
                 name: 'Shake It Off',
                 category: EquipmentCategory::ThisRun,
                 effect: 'Prevent two tags this run',
-                cost: 4,
             ),
             self::card(
                 code: 'EXP003',
                 name: 'AIdol',
                 category: EquipmentCategory::Permanent,
                 effect: 'If a runner accesses this card, they receive 2 tags. Return to control.',
-                cost: 3,
             ),
             self::card(
                 code: 'EXS001',
@@ -584,7 +542,6 @@ class EquipmentCardBlueprint
      *     name: string,
      *     category: EquipmentCategory,
      *     effect: string,
-     *     cost: int|null,
      * }
      */
     private static function card(
@@ -592,14 +549,12 @@ class EquipmentCardBlueprint
         string $name,
         EquipmentCategory $category,
         string $effect,
-        ?int $cost = null,
     ): array {
         return [
             'code' => $code,
             'name' => $name,
             'category' => $category,
             'effect' => $effect,
-            'cost' => $cost,
         ];
     }
 }

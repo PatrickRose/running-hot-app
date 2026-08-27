@@ -363,8 +363,11 @@ export default function ControlFacilities({
                         <CardTitle>Protection Card catalogue</CardTitle>
                         <CardDescription>
                             What Security can buy, what is rumoured, and what
-                            only research will unlock. Installing is free; the
-                            cost here is what the shop charges.
+                            only research will unlock. Installing costs no
+                            Credits — it costs a copy of the card. The list
+                            carries no prices: the shop is its own piece of
+                            work, so a cost here is only what Control chooses to
+                            charge.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

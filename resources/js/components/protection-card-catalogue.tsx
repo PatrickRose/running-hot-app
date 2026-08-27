@@ -64,8 +64,9 @@ export function ProtectionCardCatalogue({
                                     {card.kind_label}
                                 </td>
                                 <td className="py-2 pr-4 text-right font-mono tabular-nums">
-                                    {/* A card nobody can buy yet has no price,
-                                        which is not the same as being free. */}
+                                    {/* The seeded cards carry no price: the shop
+                                        does not work the way the card sheet's
+                                        cost column suggests. */}
                                     {card.cost ?? '—'}
                                 </td>
                                 <td className="max-w-48 py-2 pr-4 text-muted-foreground">
@@ -170,8 +171,13 @@ export function ProtectionCardCatalogue({
                                 name="cost"
                                 type="number"
                                 min={0}
-                                placeholder="Not for sale"
+                                placeholder="Unpriced"
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Optional. The card list carries no prices — the
+                                shop is a separate piece of work — so this is
+                                only what Control chooses to charge.
+                            </p>
                             <InputError message={errors.cost} />
                         </div>
 
