@@ -1,5 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { CardFace } from '@/components/card-face';
+import { GameIcon } from '@/components/game-icon';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -132,9 +133,15 @@ export default function Facilities({ game, board }: Props) {
                                                 key={stack.kind}
                                                 className="flex flex-col gap-1"
                                             >
-                                                <p className="text-sm font-medium">
-                                                    {stack.kind_label}{' '}
-                                                    <span className="text-muted-foreground">
+                                                <p className="flex items-center gap-1.5 text-sm font-medium">
+                                                    <GameIcon
+                                                        glyph={stack.kind_glyph}
+                                                        label={stack.kind_label}
+                                                    />
+                                                    <span aria-hidden="true">
+                                                        {stack.kind_label}
+                                                    </span>
+                                                    <span className="font-normal text-muted-foreground">
                                                         {stack.cards.length}/
                                                         {stack.slots}
                                                     </span>

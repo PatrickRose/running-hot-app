@@ -1,4 +1,5 @@
 import { Form, router } from '@inertiajs/react';
+import { GameIcon } from '@/components/game-icon';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -61,7 +62,15 @@ export function ProtectionCardCatalogue({
                                     ) : null}
                                 </td>
                                 <td className="py-2 pr-4 text-muted-foreground">
-                                    {card.kind_label}
+                                    <span className="flex items-center gap-1.5">
+                                        <GameIcon
+                                            glyph={card.kind_glyph}
+                                            label={card.kind_label}
+                                        />
+                                        <span aria-hidden="true">
+                                            {card.kind_label}
+                                        </span>
+                                    </span>
                                 </td>
                                 <td className="py-2 pr-4 text-right font-mono tabular-nums">
                                     {/* The seeded cards carry no price: the shop

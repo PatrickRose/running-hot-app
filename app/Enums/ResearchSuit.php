@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\IconFont;
+
 /**
  * The four types of Research Point a technology is priced in (rulebook 3.2.2).
  *
@@ -38,26 +40,15 @@ enum ResearchSuit: string
     }
 
     /**
-     * The character that draws this suit's icon in the game's own icon font.
-     *
-     * The font maps each icon onto an ASCII letter rather than onto a symbol
-     * codepoint, so a suit's "glyph" is a plain capital letter and only means
-     * anything while the font is loaded. Which is why every caller pairs it with
-     * the label: a browser that has not got the font shows a bare "B", and a
-     * screen reader would read one out.
-     *
-     * The four suits are the first four letters, in the order the designer drew
-     * them - A is the calculator, B the brain, C the leaf, D the cog. The font
-     * carries about thirty more icons on the remaining letters and digits, none
-     * of which this application has a use for yet.
+     * The character that draws this suit's icon (see App\Support\IconFont).
      */
     public function glyph(): string
     {
         return match ($this) {
-            self::Maths => 'A',
-            self::Brain => 'B',
-            self::Leaf => 'C',
-            self::Cog => 'D',
+            self::Maths => IconFont::MATHS,
+            self::Brain => IconFont::BRAIN,
+            self::Leaf => IconFont::LEAF,
+            self::Cog => IconFont::COG,
         };
     }
 

@@ -135,6 +135,7 @@ export default function ControlCards({
                                     {
                                         label: 'Type',
                                         value: card.category_label,
+                                        glyph: card.category_glyph,
                                     },
                                     { label: '', value: card.effect },
                                 ]}

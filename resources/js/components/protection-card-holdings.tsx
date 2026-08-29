@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { GameIcon } from '@/components/game-icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,7 +106,15 @@ function CorporationHoldings({
                                         ) : null}
                                     </td>
                                     <td className="py-2 pr-4 text-muted-foreground">
-                                        {card.kind_label}
+                                        <span className="flex items-center gap-1.5">
+                                            <GameIcon
+                                                glyph={card.kind_glyph}
+                                                label={card.kind_label}
+                                            />
+                                            <span aria-hidden="true">
+                                                {card.kind_label}
+                                            </span>
+                                        </span>
                                     </td>
                                     <td className="py-2 pr-4 text-right font-mono tabular-nums">
                                         {card.copies_in_hand}

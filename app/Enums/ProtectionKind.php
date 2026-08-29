@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\IconFont;
+
 /**
  * The two Protection Card stacks a Facility keeps (rulebook 3.3.2).
  *
@@ -21,6 +23,17 @@ enum ProtectionKind: string
         return match ($this) {
             self::Physical => 'Physical',
             self::Cyber => 'Cyber',
+        };
+    }
+
+    /**
+     * The character that draws this kind's icon (see App\Support\IconFont).
+     */
+    public function glyph(): string
+    {
+        return match ($this) {
+            self::Physical => IconFont::PHYSICAL,
+            self::Cyber => IconFont::CYBER,
         };
     }
 

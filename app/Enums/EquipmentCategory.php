@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\IconFont;
+
 /**
  * The three kinds of item a Runner can carry (rulebook 3.4.1).
  *
@@ -37,6 +39,20 @@ enum EquipmentCategory: string
             self::Permanent => 'Permanent',
             self::ThisRun => 'This run',
             self::SingleUse => 'Single use',
+        };
+    }
+
+    /**
+     * The character that draws this category's icon (see App\Support\IconFont).
+     *
+     * The font draws all three.
+     */
+    public function glyph(): string
+    {
+        return match ($this) {
+            self::Permanent => IconFont::PERMANENT,
+            self::SingleUse => IconFont::SINGLE_USE,
+            self::ThisRun => IconFont::THIS_RUN,
         };
     }
 

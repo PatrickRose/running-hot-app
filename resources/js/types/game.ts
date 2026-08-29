@@ -152,6 +152,7 @@ export type CardHolding = {
     name: string;
     kind: ProtectionKind;
     kind_label: string;
+    kind_glyph: string;
     /** Uninstalled copies. Installing moves one of these into a Facility. */
     copies_in_hand: number;
     /** Copies sitting in this Corporation's Facilities. */
@@ -172,6 +173,8 @@ export type EquipmentCardSummary = {
     name: string;
     category: 'permanent' | 'this-run' | 'single-use';
     category_label: string;
+    /** The character that draws this category's icon in the game's own font. */
+    category_glyph: string;
     effect: string;
     /** Null where the market does not sell it. */
     cost: number | null;
@@ -230,6 +233,8 @@ export type ProtectionCardSummary = {
     name: string;
     kind: ProtectionKind;
     kind_label: string;
+    /** The character that draws this kind's icon in the game's own font. */
+    kind_glyph: string;
     /** Null for a card nobody can buy yet, which is not a card that is free. */
     cost: number | null;
     /**
@@ -264,6 +269,7 @@ export type InstalledProtectionCard = {
 export type ProtectionStack = {
     kind: ProtectionKind;
     kind_label: string;
+    kind_glyph: string;
     slots: number;
     cards: InstalledProtectionCard[];
 };

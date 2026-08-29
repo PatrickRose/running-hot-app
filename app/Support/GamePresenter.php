@@ -487,6 +487,7 @@ class GamePresenter
                 'name' => $card->name,
                 'category' => $card->category->value,
                 'category_label' => $card->category->label(),
+                'category_glyph' => $card->category->glyph(),
                 'effect' => $card->effect,
                 'cost' => $card->cost,
                 'notes' => $card->notes,
@@ -537,6 +538,7 @@ class GamePresenter
             'name' => $cardType->name,
             'kind' => $cardType->kind->value,
             'kind_label' => $cardType->kind->label(),
+            'kind_glyph' => $cardType->kind->glyph(),
             'copies_in_hand' => $inHand,
             'installed' => $installed,
         ];
@@ -561,6 +563,7 @@ class GamePresenter
                 'name' => $card->name,
                 'kind' => $card->kind->value,
                 'kind_label' => $card->kind->label(),
+                'kind_glyph' => $card->kind->glyph(),
                 'cost' => $card->cost,
                 'challenge' => $card->challenge,
                 'consequence' => $card->consequence,
@@ -647,6 +650,7 @@ class GamePresenter
                 fn (ProtectionKind $kind): array => [
                     'kind' => $kind->value,
                     'kind_label' => $kind->label(),
+                    'kind_glyph' => $kind->glyph(),
                     'slots' => $kind === ProtectionKind::Physical
                         ? $totals['physical_slots']
                         : $totals['cyber_slots'],

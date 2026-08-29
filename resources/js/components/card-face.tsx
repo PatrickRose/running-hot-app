@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GameIcon } from '@/components/game-icon';
 import {
     Tooltip,
     TooltipContent,
@@ -6,8 +7,17 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-/** The card's own words, in the order they are printed. */
-type CardLine = { label: string; value: string | null };
+/**
+ * One of the card's own lines, in the order it is printed.
+ *
+ * A line may carry an icon from the game's font — an Equipment card's category
+ * is drawn as well as named — in which case the icon leads and the words follow.
+ */
+type CardLine = {
+    label: string;
+    value: string | null;
+    glyph?: string | null;
+};
 
 /**
  * A card, shown as its printed artwork where there is any and as a card-shaped
@@ -66,6 +76,13 @@ export function CardFace({
                         key={`${index}-${line.label}`}
                         className="text-xs leading-snug"
                     >
+                        {line.glyph ? (
+                            <GameIcon
+                                glyph={line.glyph}
+                                label={line.label}
+                                className="mr-1 font-icons text-sm leading-none not-italic"
+                            />
+                        ) : null}
                         <span className="text-muted-foreground">
                             {line.label}
                         </span>{' '}

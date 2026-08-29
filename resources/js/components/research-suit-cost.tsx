@@ -1,8 +1,4 @@
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { GameIcon, GameIconWithTooltip } from '@/components/game-icon';
 import type { ResearchSuitSummary } from '@/types/game';
 
 /**
@@ -37,31 +33,25 @@ export function ResearchSuitCost({
     return (
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {priced.map((suit) => (
-                <Tooltip key={suit.value}>
-                    {/* asChild rather than the default button: this table runs
-                        to a hundred and forty rows, and a tab stop per suit per
-                        row would drown the page. The name is in the sr-only
-                        span inside, so nothing depends on reaching the
-                        tooltip. */}
-                    <TooltipTrigger asChild>
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                            <span className="font-mono tabular-nums">
-                                {cost[suit.value]}
-                            </span>
-                            <ResearchSuitIcon suit={suit} />
-                        </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        {cost[suit.value]} {suit.label}
-                    </TooltipContent>
-                </Tooltip>
+                <span
+                    key={suit.value}
+                    className="flex items-center gap-1 whitespace-nowrap"
+                >
+                    <span aria-hidden="true" className="font-mono tabular-nums">
+                        {cost[suit.value]}
+                    </span>
+                    <GameIconWithTooltip
+                        glyph={suit.glyph}
+                        label={`${cost[suit.value]} ${suit.label}`}
+                    />
+                </span>
             ))}
         </span>
     );
 }
 
 /**
- * One suit's icon, with its name for anything that cannot see it.
+ * One suit's icon, for the legend that teaches the four.
  */
 export function ResearchSuitIcon({
     suit,
@@ -71,16 +61,6 @@ export function ResearchSuitIcon({
     className?: string;
 }) {
     return (
-        <>
-            <span
-                aria-hidden="true"
-                className={
-                    className ?? 'font-icons text-base leading-none not-italic'
-                }
-            >
-                {suit.glyph}
-            </span>
-            <span className="sr-only">{suit.label}</span>
-        </>
+        <GameIcon glyph={suit.glyph} label={suit.label} className={className} />
     );
 }
