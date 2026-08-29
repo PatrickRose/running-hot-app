@@ -6,6 +6,7 @@ use App\Enums\ProtectionKind;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\Game;
+use App\Models\ProtectionCardHolding;
 use App\Models\ProtectionCardType;
 use App\Services\FacilityDefenceService;
 use Illuminate\Support\Collection;
@@ -233,18 +234,21 @@ class CreateDefaultFacilities
         /** @var Collection<int, int> $alreadyHere */
         $alreadyHere = $facility->protectionCards()->pluck('protection_card_type_id');
 
+        $held = ProtectionCardHolding::query()
+            ->where('corporation_id', $facility->corporation_id);
+
         /** @var ProtectionCardType|null $cardType */
         $cardType = ProtectionCardType::query()
-            ->whereIn('id', $facility->corporation->protectionCardHoldings()
+            ->whereIn('id', (clone $held)
                 ->where('copies', '>', 0)
                 ->select('protection_card_type_id'))
             ->where('kind', $kind)
             ->whereNotIn('id', $alreadyHere)
-            ->orderByDesc(
-                $facility->corporation->protectionCardHoldings()
-                    ->whereColumn('protection_card_type_id', 'protection_card_types.id')
-                    ->select('copies')
-            )
+            // Deepest hand first, so the load spreads across the cards a
+            // Corporation holds rather than emptying one of them.
+            ->orderByDesc((clone $held)
+                ->whereColumn('protection_card_type_id', 'protection_card_types.id')
+                ->select('copies'))
             // Ties broken by code so a game's starting position is the same
             // every time it is built.
             ->orderBy('code')
