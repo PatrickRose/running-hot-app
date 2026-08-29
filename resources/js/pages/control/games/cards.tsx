@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
+import { CardFacesDialog } from '@/components/card-faces-dialog';
 import Heading from '@/components/heading';
 import {
     ResearchSuitCost,
@@ -191,6 +192,11 @@ export default function ControlCards({
                                 <thead>
                                     <tr className="border-b text-left text-muted-foreground">
                                         <th className="py-2 pr-4 font-medium">
+                                            <span className="sr-only">
+                                                Card
+                                            </span>
+                                        </th>
+                                        <th className="py-2 pr-4 font-medium">
                                             Technology
                                         </th>
                                         <th className="py-2 pr-4 font-medium">
@@ -219,6 +225,20 @@ export default function ControlCards({
                                             key={technology.id}
                                             className="border-b align-top last:border-0"
                                         >
+                                            <td className="py-2 pr-4">
+                                                {technology.image_path ? (
+                                                    <CardFacesDialog
+                                                        name={technology.name}
+                                                        code={technology.code}
+                                                        frontPath={
+                                                            technology.image_path
+                                                        }
+                                                        backPath={
+                                                            technology.back_image_path
+                                                        }
+                                                    />
+                                                ) : null}
+                                            </td>
                                             <td className="py-2 pr-4 font-medium">
                                                 {technology.name}
                                                 {technology.code ? (
@@ -276,7 +296,7 @@ export default function ControlCards({
                                     {shownTechnologies.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={7}
+                                                colSpan={8}
                                                 className="py-4 text-muted-foreground"
                                             >
                                                 No technology matches that.

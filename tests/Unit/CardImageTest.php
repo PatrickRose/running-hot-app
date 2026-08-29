@@ -124,15 +124,28 @@ class CardImageTest extends TestCase
      */
     public function test_a_card_can_have_a_second_face(): void
     {
-        $this->writeArtwork('ZZ010.webp');
-        $this->writeArtwork('ZZ010-BACK.webp');
+        $this->writeArtwork('ZZ010_F.webp');
+        $this->writeArtwork('ZZ010_B.webp');
 
-        $this->assertSame('/images/cards/ZZ010.webp', CardImage::pathFor('ZZ010'));
+        $this->assertSame('/images/cards/ZZ010_F.webp', CardImage::pathFor('ZZ010'));
         $this->assertSame(
-            '/images/cards/ZZ010-BACK.webp',
+            '/images/cards/ZZ010_B.webp',
             CardImage::pathFor('ZZ010', CardImage::BACK),
         );
         $this->assertTrue(CardImage::hasBack('ZZ010'));
+    }
+
+    /**
+     * A single-sided card may be filed with the face suffix or without it, so
+     * both resolve and the suffixed one wins where a card has both.
+     */
+    public function test_a_front_resolves_with_or_without_the_face_suffix(): void
+    {
+        $this->writeArtwork('ZZ013.webp');
+        $this->assertSame('/images/cards/ZZ013.webp', CardImage::pathFor('ZZ013'));
+
+        $this->writeArtwork('ZZ013_F.webp');
+        $this->assertSame('/images/cards/ZZ013_F.webp', CardImage::pathFor('ZZ013'));
     }
 
     /**
@@ -142,11 +155,24 @@ class CardImageTest extends TestCase
      */
     public function test_a_one_sided_card_has_no_back(): void
     {
-        $this->writeArtwork('ZZ011.webp');
+        $this->writeArtwork('ZZ011_F.webp');
 
         $this->assertNotNull(CardImage::pathFor('ZZ011'));
         $this->assertNull(CardImage::pathFor('ZZ011', CardImage::BACK));
         $this->assertFalse(CardImage::hasBack('ZZ011'));
+    }
+
+    /**
+     * A file with no face suffix is the front of a one-sided card, never the
+     * back of anything - otherwise every card would report a back it has not
+     * got, and the flip would show the same picture twice.
+     */
+    public function test_an_unsuffixed_file_is_never_taken_for_a_back(): void
+    {
+        $this->writeArtwork('ZZ014.webp');
+
+        $this->assertFalse(CardImage::hasBack('ZZ014'));
+        $this->assertNull(CardImage::pathFor('ZZ014', CardImage::BACK));
     }
 
     /**
@@ -155,11 +181,11 @@ class CardImageTest extends TestCase
      */
     public function test_a_back_is_not_a_card_of_its_own(): void
     {
-        $this->writeArtwork('ZZ012-BACK.webp');
+        $this->writeArtwork('ZZ012_B.webp');
 
         $this->assertNull(CardImage::pathFor('ZZ012'));
         $this->assertSame(
-            '/images/cards/ZZ012-BACK.webp',
+            '/images/cards/ZZ012_B.webp',
             CardImage::pathFor('ZZ012', CardImage::BACK),
         );
     }

@@ -8,10 +8,13 @@ use App\Actions\SeedTechnologies;
 use App\Enums\EquipmentCategory;
 use App\Models\Game;
 use App\Models\User;
+use App\Support\CardImage;
 use App\Support\EquipmentCardBlueprint;
+use App\Support\GamePresenter;
 use App\Support\ProtectionCardBlueprint;
 use App\Support\TechnologyBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 /**
@@ -246,6 +249,48 @@ class CardCatalogueTest extends TestCase
         foreach ($common as $technology) {
             $this->assertTrue($technology->isCommon());
             $this->assertNull($technology->corporation_id);
+        }
+    }
+
+    /**
+     * A research card is printed proposal side up and flipped over once it has
+     * been researched (rulebook 3.2.2), so it has two faces filed as _F and _B.
+     * Both are public, so both reach the page.
+     */
+    public function test_a_technology_carries_both_of_its_faces(): void
+    {
+        $game = Game::factory()->create();
+
+        $directory = public_path(CardImage::DIRECTORY);
+        File::ensureDirectoryExists($directory);
+
+        $written = [];
+
+        foreach (['RSR001_F.webp', 'RSR001_B.webp'] as $file) {
+            $written[] = $path = $directory.'/'.$file;
+            File::put($path, 'not really an image');
+        }
+
+        CardImage::flush();
+
+        try {
+            $technologies = app(GamePresenter::class)->technologyTypes($game);
+
+            $deerHorns = collect($technologies)->firstWhere('code', 'RSR001');
+
+            $this->assertSame('/images/cards/RSR001_F.webp', $deerHorns['image_path']);
+            $this->assertSame('/images/cards/RSR001_B.webp', $deerHorns['back_image_path']);
+
+            // Every other card is one-sided, so it reports no back rather than
+            // repeating its front.
+            $other = collect($technologies)->firstWhere('code', 'RSR002');
+            $this->assertNull($other['back_image_path']);
+        } finally {
+            foreach ($written as $path) {
+                File::delete($path);
+            }
+
+            CardImage::flush();
         }
     }
 

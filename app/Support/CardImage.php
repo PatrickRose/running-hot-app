@@ -37,12 +37,12 @@ class CardImage
     public const DIRECTORY = 'images/cards';
 
     /**
-     * The face of a card that is filed under the bare code.
+     * The face of a card that is printed upwards.
      */
     public const FRONT = 'front';
 
     /**
-     * The other face, filed under the code with this appended.
+     * The other face.
      *
      * Only research cards have one. A technology is printed proposal side up -
      * its name, what it is for, and the Research Points it costs - and
@@ -56,6 +56,18 @@ class CardImage
      * is the effect with its copy and destroy strengths.
      */
     public const BACK = 'back';
+
+    /**
+     * What the artwork files append to a code to say which face they are.
+     *
+     * A two-faced card is filed as RSR001_F and RSR001_B. A card with one face
+     * may be filed either as PS009_F or as plain PS009, so the front falls back
+     * to the bare code - which also means a card Control adds artwork for by
+     * hand does not have to know about the suffix at all.
+     */
+    public const FRONT_SUFFIX = '_F';
+
+    public const BACK_SUFFIX = '_B';
 
     /**
      * The extensions looked for, in the order they win.
@@ -96,7 +108,15 @@ class CardImage
             return null;
         }
 
-        return self::manifest()[self::key($code, $side)] ?? null;
+        $manifest = self::manifest();
+
+        foreach (self::keys($code, $side) as $key) {
+            if (isset($manifest[$key])) {
+                return $manifest[$key];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -188,14 +208,22 @@ class CardImage
     }
 
     /**
-     * How one face of a card is filed: the bare code for the front, and the code
-     * with "-BACK" for the other.
+     * The names one face of a card might be filed under, best first.
+     *
+     * The back has exactly one, because a file with no face suffix is the front
+     * of a single-sided card rather than the back of anything - falling back
+     * there would make every card report a back it does not have, and a flip
+     * that showed the same picture twice would look broken.
+     *
+     * @return array<int, string>
      */
-    private static function key(string $code, string $side): string
+    private static function keys(string $code, string $side): array
     {
         $code = self::normalise($code);
 
-        return $side === self::BACK ? $code.'-BACK' : $code;
+        return $side === self::BACK
+            ? [$code.self::BACK_SUFFIX]
+            : [$code.self::FRONT_SUFFIX, $code];
     }
 
     /**
