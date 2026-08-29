@@ -2,11 +2,13 @@ import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import { CardFacesDialog } from '@/components/card-faces-dialog';
+import { EquipmentCardForm } from '@/components/equipment-card-form';
 import Heading from '@/components/heading';
 import {
     ResearchSuitCost,
     ResearchSuitIcon,
 } from '@/components/research-suit-cost';
+import { TechnologyForm } from '@/components/technology-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,13 +19,17 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { destroy as destroyEquipment } from '@/routes/control/equipment-cards';
 import { index, show } from '@/routes/control/games';
+import { destroy as destroyTechnology } from '@/routes/control/technologies';
 import type {
     EquipmentCardSummary,
+    FacilityTypeSummary,
     GameSummary,
     ProtectionCardSummary,
     ResearchSuitSummary,
     TechnologySummary,
+    TechnologyTreeSummary,
 } from '@/types/game';
 
 type Props = {
@@ -32,6 +38,8 @@ type Props = {
     equipment: EquipmentCardSummary[];
     technologies: TechnologySummary[];
     researchSuits: ResearchSuitSummary[];
+    technologyTrees: TechnologyTreeSummary[];
+    facilityTypes: FacilityTypeSummary[];
     hasArtwork: boolean;
 };
 
@@ -52,6 +60,8 @@ export default function ControlCards({
     equipment,
     technologies,
     researchSuits,
+    technologyTrees,
+    facilityTypes,
     hasArtwork,
 }: Props) {
     const [query, setQuery] = useState('');
@@ -194,33 +204,57 @@ export default function ControlCards({
                             the card sheet's cost column suggests.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="flex flex-wrap gap-3">
-                        {shownEquipment.map((card) => (
-                            <CardFace
-                                key={card.id}
-                                name={card.name}
-                                code={card.code}
-                                imagePath={card.image_path}
-                                lines={[
-                                    {
-                                        label: 'Type',
-                                        value: card.category_label,
-                                        glyph: card.category_glyph,
-                                    },
-                                    { label: '', value: card.effect },
-                                ]}
-                                footer={
-                                    card.cost === null
-                                        ? null
-                                        : `${card.cost} Credits`
-                                }
-                            />
-                        ))}
-                        {shownEquipment.length === 0 && (
-                            <p className="text-sm text-muted-foreground">
-                                No Equipment card matches that.
-                            </p>
-                        )}
+                    <CardContent className="flex flex-col gap-6">
+                        <div className="flex flex-wrap gap-3">
+                            {shownEquipment.map((card) => (
+                                <div
+                                    key={card.id}
+                                    className="flex flex-col items-start gap-1"
+                                >
+                                    <CardFace
+                                        name={card.name}
+                                        code={card.code}
+                                        imagePath={card.image_path}
+                                        lines={[
+                                            {
+                                                label: 'Type',
+                                                value: card.category_label,
+                                                glyph: card.category_glyph,
+                                            },
+                                            { label: '', value: card.effect },
+                                        ]}
+                                        footer={
+                                            card.cost === null
+                                                ? null
+                                                : `${card.cost} Credits`
+                                        }
+                                    />
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-destructive"
+                                        onClick={() =>
+                                            router.delete(
+                                                destroyEquipment.url({
+                                                    game: game.id,
+                                                    equipmentCard: card.id,
+                                                }),
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        Remove
+                                    </Button>
+                                </div>
+                            ))}
+                            {shownEquipment.length === 0 && (
+                                <p className="text-sm text-muted-foreground">
+                                    No Equipment card matches that.
+                                </p>
+                            )}
+                        </div>
+
+                        <EquipmentCardForm gameId={game.id} />
                     </CardContent>
                 </Card>
 
@@ -257,7 +291,7 @@ export default function ControlCards({
                             ))}
                         </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="flex flex-col gap-6">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
@@ -285,8 +319,13 @@ export default function ControlCards({
                                         <th className="py-2 pr-4 font-medium">
                                             Housed in
                                         </th>
-                                        <th className="py-2 font-medium">
+                                        <th className="py-2 pr-4 font-medium">
                                             Copy / destroy
+                                        </th>
+                                        <th className="py-2 font-medium">
+                                            <span className="sr-only">
+                                                Remove
+                                            </span>
                                         </th>
                                     </tr>
                                 </thead>
@@ -358,18 +397,41 @@ export default function ControlCards({
                                                 {technology.required_facility_type ??
                                                     'Anywhere'}
                                             </td>
-                                            <td className="py-2 font-mono text-xs text-muted-foreground tabular-nums">
+                                            <td className="py-2 pr-4 font-mono text-xs text-muted-foreground tabular-nums">
                                                 {technology.copy_strength ===
                                                 null
                                                     ? '—'
                                                     : `${technology.copy_strength} / ${technology.destroy_strength}`}
+                                            </td>
+                                            <td className="py-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="text-destructive"
+                                                    onClick={() =>
+                                                        router.delete(
+                                                            destroyTechnology.url(
+                                                                {
+                                                                    game: game.id,
+                                                                    technology:
+                                                                        technology.id,
+                                                                },
+                                                            ),
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Remove
+                                                </Button>
                                             </td>
                                         </tr>
                                     ))}
                                     {shownTechnologies.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={8}
+                                                colSpan={9}
                                                 className="py-4 text-muted-foreground"
                                             >
                                                 No technology matches that.
@@ -379,6 +441,13 @@ export default function ControlCards({
                                 </tbody>
                             </table>
                         </div>
+
+                        <TechnologyForm
+                            gameId={game.id}
+                            trees={technologyTrees}
+                            facilityTypes={facilityTypes}
+                            suits={researchSuits}
+                        />
                     </CardContent>
                 </Card>
             </div>

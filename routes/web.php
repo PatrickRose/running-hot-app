@@ -4,12 +4,14 @@ use App\Http\Controllers\Auth\DiscordController;
 use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\DiscordGuildController;
+use App\Http\Controllers\Control\EquipmentCardTypeController;
 use App\Http\Controllers\Control\FacilityController;
 use App\Http\Controllers\Control\FacilityTypeController;
 use App\Http\Controllers\Control\GameController;
 use App\Http\Controllers\Control\PhaseController;
 use App\Http\Controllers\Control\ProtectionCardHoldingController;
 use App\Http\Controllers\Control\ProtectionCardTypeController;
+use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacilityBoardController;
@@ -102,10 +104,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::patch('games/{game}/protection-card-holdings', [ProtectionCardHoldingController::class, 'update'])
                 ->name('protection-card-holdings.update');
 
-            // The Equipment and technology catalogues, read-only: the market and
-            // the research game that spend them are not built yet.
+            // All three card lists to look at, and the two that are not edited
+            // beside the Facilities to change.
             Route::get('games/{game}/cards', [CardCatalogueController::class, 'index'])
                 ->name('cards.index');
+
+            // Control adds Equipment during play: a DTC technology invents a
+            // bypass card that was never printed.
+            Route::post('games/{game}/equipment-cards', [EquipmentCardTypeController::class, 'store'])
+                ->name('equipment-cards.store');
+            Route::patch('games/{game}/equipment-cards/{equipmentCard}', [EquipmentCardTypeController::class, 'update'])
+                ->name('equipment-cards.update');
+            Route::delete('games/{game}/equipment-cards/{equipmentCard}', [EquipmentCardTypeController::class, 'destroy'])
+                ->name('equipment-cards.destroy');
+
+            // And technologies, because rulebook 3.2.4 has players writing
+            // research proposals that Research Control prices on the night.
+            Route::post('games/{game}/technologies', [TechnologyTypeController::class, 'store'])
+                ->name('technologies.store');
+            Route::patch('games/{game}/technologies/{technology}', [TechnologyTypeController::class, 'update'])
+                ->name('technologies.update');
+            Route::delete('games/{game}/technologies/{technology}', [TechnologyTypeController::class, 'destroy'])
+                ->name('technologies.destroy');
 
             Route::post('games/{game}/protection-cards', [ProtectionCardTypeController::class, 'store'])
                 ->name('protection-cards.store');

@@ -23,6 +23,7 @@ use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
 use App\Support\Discord\GuildBlueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -450,6 +451,40 @@ class GamePresenter
                     'cards' => $cards,
                 ];
             })->all();
+    }
+
+    /**
+     * The tech trees a technology can be put on.
+     *
+     * The set from the card sheet, plus whichever Corporations this game has -
+     * Control may have built a roster of their own, and a technology they write
+     * during play belongs to one of those rather than to a name from the sheet.
+     *
+     * @return array<int, array{tree: string, label: string, corporation_id: int|null}>
+     */
+    public function technologyTrees(Game $game): array
+    {
+        $corporations = $game->corporations()->orderBy('name')->get();
+        $names = TechnologyBlueprint::corporationNames();
+
+        $trees = [[
+            'tree' => TechnologyBlueprint::COMMON,
+            'label' => 'Common to every Corporation',
+            'corporation_id' => null,
+        ]];
+
+        foreach ($corporations as $corporation) {
+            $trees[] = [
+                // A Corporation the card sheet knows keeps that key, so a
+                // technology Control writes files with the seeded ones.
+                'tree' => array_search($corporation->name, $names, true)
+                    ?: Str::slug($corporation->name),
+                'label' => $corporation->name,
+                'corporation_id' => $corporation->id,
+            ];
+        }
+
+        return $trees;
     }
 
     /**

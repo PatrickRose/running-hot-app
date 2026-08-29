@@ -181,6 +181,14 @@ export type EquipmentCardSummary = {
     notes: string | null;
 };
 
+/** A tech tree a technology can sit on: one Corporation's, or the common set. */
+export type TechnologyTreeSummary = {
+    tree: string;
+    label: string;
+    /** Null for the technologies common to every Corporation. */
+    corporation_id: number | null;
+};
+
 /**
  * One of the four Research Point suits, with the character that draws its icon
  * in the game's own font.

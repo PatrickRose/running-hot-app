@@ -31,6 +31,10 @@ class CardCatalogueController extends Controller
             'equipment' => $presenter->equipmentCardTypes($game),
             'technologies' => $presenter->technologyTypes($game),
             'researchSuits' => $presenter->researchSuits(),
+            // For the forms that add a card: which trees a technology may sit
+            // on, and which Facility types it may require.
+            'technologyTrees' => $presenter->technologyTrees($game),
+            'facilityTypes' => $presenter->facilityTypes($game),
             // So the page can say the artwork is missing rather than showing
             // rows of text boxes as though every card were one Control invented.
             'hasArtwork' => CardImage::anyOnRecord(),
