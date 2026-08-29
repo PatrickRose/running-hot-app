@@ -248,6 +248,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | The three card lists | `App\Support\ProtectionCardBlueprint`, `EquipmentCardBlueprint`, `TechnologyBlueprint` |
 | Seeding them into a game | `App\Actions\SeedProtectionCards`, `SeedEquipmentCards`, `SeedTechnologies`, `SeedProtectionCardHoldings` |
 | Finding a card's artwork from its code | `App\Support\CardImage` |
+| What each icon in the game's font means | `App\Support\IconFont` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -377,6 +378,12 @@ Three card families, all real data from the game's own card sheet, all seeded pe
 
 **Cards are found by code, and a card with no artwork is normal.** `App\Support\CardImage` resolves `public/images/cards/<CODE>.{webp,png,jpg}` and answers null when there is nothing there. Control invents cards mid-game — the rulebook has research proposals priced and added to the tree during play, and DTC's "Unfortunate Malfunction" hands out a bypass card named after whichever Protection Card it counters — and those have never been printed. The `CardFace` React component shows artwork where there is any and a card-shaped box of the card's own text where there is not, so the text box is the other normal case rather than a fallback.
 
+**A research card has two faces, filed `<CODE>_F` and `<CODE>_B`.** A technology is printed proposal side up and flipped over once researched (3.2.2), and both faces are public — a technology is not secret, only which Facility is storing it is. The two need no columns: they are the fields the application already has, split the way the card splits them, with the front the name, description, suit costs, prerequisites and required Facility type and the back the effect with its copy and destroy strengths. A single-sided card resolves from `<CODE>_F` or from the bare `<CODE>`; the back has no such fallback, because an unsuffixed file is the front of a one-sided card and treating it as a back would have every card offering a flip that showed the same picture twice. Either face may be the one that is missing — sixteen technologies have a back and no front — so anything showing a card takes whichever it has.
+
+**The three families are not the same shape.** Equipment is printed portrait at 600×817 and both the Protection and research cards landscape at 600×440, so nothing may impose one aspect ratio: cards take a width and find their own height, and the table thumbnail is held to a height instead. Card artwork lives under `public/` because it is referenced from an `img` tag at runtime and the page is served by Laravel — the opposite of the icon font below.
+
+**The artwork directory is read once per request, not once per card.** Three hundred cards against four extensions is the better part of a thousand `stat` calls a page, and worst on a checkout with no artwork at all. `CardImage` lists the directory once and answers from memory, which also makes lower-case file names resolve and lets a `webp` supersede a `png` by extension rather than by directory order. Tests that write artwork must call `CardImage::flush()` — `TestCase` does it for every test — and must never write over a real code: the game's artwork is committed, so a test cleaning up after itself would delete it. One did.
+
 **Owning copies is modelled; buying them is not.** `protection_card_holdings` is a count per Corporation per card, and it is what caps how far a card stretches: one copy per Facility, so four copies of Security Team defend four Facilities and no more. `FacilityDefenceService::install()` is the only place a copy leaves a hand and `remove()` the only place one comes back — a copy in a Facility is a row in `facility_protection_cards`, so the hand plus the installed copies is still the briefing's count. Installing with none left is refused; Control raises the count first.
 
 Control sets any count outright via `ProtectionCardHoldingController`. The Corporation shop, auctions, research grants and Security players trading between themselves all happen at the table, so the application records where a count ended up rather than replaying how it got there. **Buying from the shop is a follow-up.**
@@ -389,8 +396,21 @@ Control sets any count outright via `ProtectionCardHoldingController`. The Corpo
 
 **Not modelled, deliberately:** the Corporation shop, auctions, research grants, trading copies between Security players, and who owns which Equipment card. Each is a conversation with Control, who then sets the count.
 
+## The icon font
+
+The rulebook prints the four Research Point suits as icons and never names them in its body text, which is why they do not survive `pdftotext` and why issue #6 says to read the PDF for §3.2. The game's own font draws them, and it is committed at `resources/fonts/RunningHot-Font.ttf`.
+
+**It is an icon font: every icon is drawn by an ASCII capital.** So a "glyph" is a plain letter — Physical is `E`, Brain is `B` — and it only reads as a picture while the font is loaded. Two consequences, both load-bearing:
+
+- **A screen reader left to itself says "E" where the page means Physical.** So the glyph is always `aria-hidden` with its name in an `sr-only` span beside it, and nothing renders a glyph directly: it goes through the `GameIcon` React component, which is what stops the pairing being forgotten at the next call site.
+- **A missing glyph fails quietly**, rendering a bare capital rather than nothing, which reads as a styling bug. `tests/Unit/IconFontTest.php` therefore parses the font's own `cmap` table and asserts every icon in use is really in the file. `N` is the one capital the font has no icon for, which makes it the canary that keeps that test from passing vacuously.
+
+**What each icon means is recorded in `App\Support\IconFont`, and nowhere else.** The glyph names inside the font are only the letters, so nothing in the file says what any of them is — working it out again means rendering the font and looking at it. The three enums that draw themselves (`ProtectionKind`, `EquipmentCategory`, `ResearchSuit`) take their glyphs from there. `G` (Boost) and `Y` (a research wildcard) are drawn and recorded but unused, because Runs and the research game are not built.
+
+**The font is loaded through Vite, not from `public/`.** `laravel-vite-plugin` sets Vite's `publicDir` to `false`, and in development the stylesheet is served from the Vite origin — so a root-relative `url('/fonts/…')` asks the dev server for a directory it does not serve, 404s, and the icons silently degrade to bare letters for everybody running `composer run dev` while working perfectly once built. Anything referenced from CSS has to live under `resources/` and be referenced relatively. Card artwork is the opposite case and belongs in `public/`.
+
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — and the game's three real card lists with the Protection Card inventory.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — and the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.
