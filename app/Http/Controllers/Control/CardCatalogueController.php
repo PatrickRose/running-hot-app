@@ -10,15 +10,16 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The two card lists this application holds but does not yet play with: the
- * Equipment Runners carry (rulebook 3.4.1) and the technologies on the
- * Corporations' tech trees (3.2.2).
+ * All three of the game's card lists, as printed.
  *
- * Read-only, and deliberately so. The market that sells equipment and the
- * research game that spends Research Points are both unbuilt, so there is
- * nothing here for the application to enforce - what Control needs is to be able
- * to look a card up while ruling on it at the table, which is what a printed
- * card list would have been for.
+ * Read-only, and deliberately so: what Control needs here is to look a card up
+ * while ruling on it at the table, which is what a printed card list would have
+ * been for. Protection Cards are the ones that gets asked of most often, since a
+ * Run turns on a challenge and its consequence.
+ *
+ * The Protection Card catalogue is editable, but on the Facility Defence page
+ * rather than this one - it belongs beside installing, which is the thing that
+ * makes a card matter. This is the same list to look at rather than to change.
  */
 class CardCatalogueController extends Controller
 {
@@ -26,6 +27,7 @@ class CardCatalogueController extends Controller
     {
         return Inertia::render('control/games/cards', [
             'game' => $presenter->summary($game),
+            'protectionCards' => $presenter->protectionCardTypes($game),
             'equipment' => $presenter->equipmentCardTypes($game),
             'technologies' => $presenter->technologyTypes($game),
             'researchSuits' => $presenter->researchSuits(),

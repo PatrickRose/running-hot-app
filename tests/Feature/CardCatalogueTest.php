@@ -16,6 +16,7 @@ use App\Support\ProtectionCardBlueprint;
 use App\Support\TechnologyBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Inertia\Testing\AssertableInertia as Assert;
 use SplFileInfo;
 use Tests\TestCase;
 
@@ -366,6 +367,28 @@ class CardCatalogueTest extends TestCase
         $this->actingAs($this->control())
             ->get("/control/games/{$game->id}/cards")
             ->assertOk();
+    }
+
+    /**
+     * All three families are on the card list page. Protection Cards are edited
+     * on the Facility Defence page rather than this one, but a page called
+     * "card lists" that leaves out a third of the cards is a trap.
+     */
+    public function test_the_card_list_page_carries_all_three_families(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}/cards")
+            ->assertOk()
+            ->assertInertia(
+                fn (Assert $page) => $page
+                    ->component('control/games/cards')
+                    ->has('protectionCards', count(ProtectionCardBlueprint::defaults()))
+                    ->has('equipment', count(EquipmentCardBlueprint::defaults()))
+                    ->has('technologies', count(TechnologyBlueprint::defaults()))
+                    ->has('researchSuits', 4),
+            );
     }
 
     public function test_a_player_cannot_read_the_card_lists(): void

@@ -21,12 +21,14 @@ import { index, show } from '@/routes/control/games';
 import type {
     EquipmentCardSummary,
     GameSummary,
+    ProtectionCardSummary,
     ResearchSuitSummary,
     TechnologySummary,
 } from '@/types/game';
 
 type Props = {
     game: GameSummary;
+    protectionCards: ProtectionCardSummary[];
     equipment: EquipmentCardSummary[];
     technologies: TechnologySummary[];
     researchSuits: ResearchSuitSummary[];
@@ -34,15 +36,19 @@ type Props = {
 };
 
 /**
- * The Equipment and technology card lists.
+ * All three of the game's card lists.
  *
- * Read-only. The market that sells equipment and the research game that spends
- * Research Points are both unbuilt, so there is nothing here to enforce - what
- * this replaces is Control leafing through a printed card list while ruling on
- * something at the table.
+ * Read-only. What this replaces is Control leafing through a printed card list
+ * while ruling on something at the table, which is why the Protection Cards lead:
+ * a Run turns on a challenge and its consequence, and that is the thing most
+ * likely to be looked up in a hurry.
+ *
+ * The Protection Card catalogue is editable on the Facility Defence page
+ * instead, beside installing - the thing that makes a card matter.
  */
 export default function ControlCards({
     game,
+    protectionCards,
     equipment,
     technologies,
     researchSuits,
@@ -54,6 +60,16 @@ export default function ControlCards({
     const matches = (haystack: Array<string | null>) =>
         needle === '' ||
         haystack.some((value) => value?.toLowerCase().includes(needle));
+
+    const shownProtection = protectionCards.filter((card) =>
+        matches([
+            card.name,
+            card.code,
+            card.challenge,
+            card.consequence,
+            card.kind_label,
+        ]),
+    );
 
     const shownEquipment = equipment.filter((card) =>
         matches([card.name, card.code, card.effect, card.category_label]),
@@ -78,7 +94,7 @@ export default function ControlCards({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title="Card lists"
-                        description="The Equipment Runners carry, and the technologies on the tech trees."
+                        description="Every card in the game, as printed. Read-only — the Protection Card catalogue is edited on the Facility Defence page."
                     />
                     <Button
                         variant="ghost"
@@ -106,6 +122,60 @@ export default function ControlCards({
                     placeholder="Search by name, code or effect…"
                     className="max-w-md"
                 />
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>
+                            Protection Cards
+                            <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                {shownProtection.length} of{' '}
+                                {protectionCards.length}
+                            </span>
+                        </CardTitle>
+                        <CardDescription>
+                            What Security installs in a Facility, and what
+                            Runners have to get past. The challenge is the
+                            sentence the card prints rather than a skill and a
+                            number, because a good many of them are not — the
+                            Runners may choose the skill, or the strength counts
+                            something only known once the card is met.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap gap-3">
+                        {shownProtection.map((card) => (
+                            <CardFace
+                                key={card.id}
+                                name={card.name}
+                                code={card.code}
+                                imagePath={card.image_path}
+                                lines={[
+                                    {
+                                        label: 'Kind',
+                                        value: card.kind_label,
+                                        glyph: card.kind_glyph,
+                                    },
+                                    {
+                                        label: 'Challenge',
+                                        value: card.challenge,
+                                    },
+                                    { label: '', value: card.consequence },
+                                    {
+                                        label: 'Charge',
+                                        value: card.charge_consequence
+                                            ? `${card.charge_cost}cr — ${card.charge_consequence}`
+                                            : null,
+                                    },
+                                ]}
+                                footer={card.availability_label}
+                            />
+                        ))}
+                        {shownProtection.length === 0 && (
+                            <p className="text-sm text-muted-foreground">
+                                No Protection Card matches that.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
 
                 <Card>
                     <CardHeader>
