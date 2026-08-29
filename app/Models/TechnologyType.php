@@ -145,4 +145,17 @@ class TechnologyType extends Model
     {
         return CardImage::pathFor($this->code);
     }
+
+    /**
+     * The other face of the card.
+     *
+     * A research card is printed proposal side up and is flipped over when the
+     * Corporation researches it (rulebook 3.2.2), so it has two. Both are
+     * public - a technology is not secret, only which Facility is storing it is
+     * - so nothing here decides who may see which side.
+     */
+    public function backImagePath(): ?string
+    {
+        return CardImage::pathFor($this->code, CardImage::BACK);
+    }
 }

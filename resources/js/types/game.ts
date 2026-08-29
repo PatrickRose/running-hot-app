@@ -197,6 +197,11 @@ export type TechnologySummary = {
     id: number;
     code: string | null;
     image_path: string | null;
+    /**
+     * The other face. A research card is printed proposal side up and flipped
+     * over when it is researched, so it has two — and both are public.
+     */
+    back_image_path: string | null;
     name: string;
     /** The Corporation's own key, or "standard" for the common set. */
     tree: string;

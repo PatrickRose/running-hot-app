@@ -37,6 +37,27 @@ class CardImage
     public const DIRECTORY = 'images/cards';
 
     /**
+     * The face of a card that is filed under the bare code.
+     */
+    public const FRONT = 'front';
+
+    /**
+     * The other face, filed under the code with this appended.
+     *
+     * Only research cards have one. A technology is printed proposal side up -
+     * its name, what it is for, and the Research Points it costs - and
+     * researching it is described as flipping the card over (rulebook 3.2.2), so
+     * the back is what the Corporation actually got. Both faces are public: a
+     * technology is not secret, only where it is stored is.
+     *
+     * The two sides need no columns of their own, because the application
+     * already holds what each says: the front is name, description, the four
+     * suit costs, the prerequisites and the required Facility type, and the back
+     * is the effect with its copy and destroy strengths.
+     */
+    public const BACK = 'back';
+
+    /**
      * The extensions looked for, in the order they win.
      *
      * The artwork is high resolution, so webp is preferred where a card has both
@@ -59,9 +80,9 @@ class CardImage
      * behind whatever host the game is served on. Callers that need an absolute
      * URL - a Discord embed would - pass it through url().
      */
-    public static function pathFor(?string $code): ?string
+    public static function pathFor(?string $code, string $side = self::FRONT): ?string
     {
-        $file = self::fileFor($code);
+        $file = self::fileFor($code, $side);
 
         return $file === null ? null : '/'.self::DIRECTORY.'/'.$file;
     }
@@ -69,13 +90,25 @@ class CardImage
     /**
      * The artwork file name for a code, or null where there is none.
      */
-    public static function fileFor(?string $code): ?string
+    public static function fileFor(?string $code, string $side = self::FRONT): ?string
     {
         if ($code === null || trim($code) === '') {
             return null;
         }
 
-        return self::manifest()[self::normalise($code)] ?? null;
+        return self::manifest()[self::key($code, $side)] ?? null;
+    }
+
+    /**
+     * Whether this card has a second face on record.
+     *
+     * Asked rather than assumed from the kind of card: a research card with only
+     * one file on record shows the one it has, rather than offering a flip to
+     * nothing.
+     */
+    public static function hasBack(?string $code): bool
+    {
+        return self::fileFor($code, self::BACK) !== null;
     }
 
     /**
@@ -152,6 +185,17 @@ class CardImage
         }
 
         return self::$manifest = $manifest;
+    }
+
+    /**
+     * How one face of a card is filed: the bare code for the front, and the code
+     * with "-BACK" for the other.
+     */
+    private static function key(string $code, string $side): string
+    {
+        $code = self::normalise($code);
+
+        return $side === self::BACK ? $code.'-BACK' : $code;
     }
 
     /**

@@ -119,6 +119,52 @@ class CardImageTest extends TestCase
     }
 
     /**
+     * A research card is printed proposal side up and flipped over when it is
+     * researched (rulebook 3.2.2), so it has two faces. Both are public.
+     */
+    public function test_a_card_can_have_a_second_face(): void
+    {
+        $this->writeArtwork('ZZ010.webp');
+        $this->writeArtwork('ZZ010-BACK.webp');
+
+        $this->assertSame('/images/cards/ZZ010.webp', CardImage::pathFor('ZZ010'));
+        $this->assertSame(
+            '/images/cards/ZZ010-BACK.webp',
+            CardImage::pathFor('ZZ010', CardImage::BACK),
+        );
+        $this->assertTrue(CardImage::hasBack('ZZ010'));
+    }
+
+    /**
+     * Most cards have one face, so asking for a back has to come back empty
+     * rather than falling through to the front - a card showing its front twice
+     * would look like a flip that did nothing.
+     */
+    public function test_a_one_sided_card_has_no_back(): void
+    {
+        $this->writeArtwork('ZZ011.webp');
+
+        $this->assertNotNull(CardImage::pathFor('ZZ011'));
+        $this->assertNull(CardImage::pathFor('ZZ011', CardImage::BACK));
+        $this->assertFalse(CardImage::hasBack('ZZ011'));
+    }
+
+    /**
+     * The back is filed under the front's code, so it must not be mistaken for a
+     * card in its own right.
+     */
+    public function test_a_back_is_not_a_card_of_its_own(): void
+    {
+        $this->writeArtwork('ZZ012-BACK.webp');
+
+        $this->assertNull(CardImage::pathFor('ZZ012'));
+        $this->assertSame(
+            '/images/cards/ZZ012-BACK.webp',
+            CardImage::pathFor('ZZ012', CardImage::BACK),
+        );
+    }
+
+    /**
      * A code is used to build a file path, so it must not be able to reach out
      * of the artwork directory.
      */

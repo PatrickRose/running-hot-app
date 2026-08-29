@@ -509,6 +509,7 @@ class GamePresenter
                 'id' => $technology->id,
                 'code' => $technology->code,
                 'image_path' => $technology->imagePath(),
+                'back_image_path' => $technology->backImagePath(),
                 'name' => $technology->name,
                 'tree' => $technology->tree,
                 'corporation' => $technology->corporation?->name,
