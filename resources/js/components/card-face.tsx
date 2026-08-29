@@ -35,6 +35,18 @@ const SHAPES = {
 export type CardShape = keyof typeof SHAPES;
 
 /**
+ * The fade over the last of a text card's words.
+ *
+ * A card is the size of a card, so a wordy one runs past the bottom of its box
+ * - and a hard cut through a half-drawn line reads as a bug rather than as more
+ * text. Fading the last few millimetres says there is more, and the tooltip and
+ * the screen-reader text carry all of it. Nothing is faded when the words fit:
+ * the gradient falls on empty card.
+ */
+const OVERFLOW_FADE =
+    'linear-gradient(to bottom, black calc(100% - 0.75rem), transparent)';
+
+/**
  * A card, shown as its printed artwork where there is any and as a card-shaped
  * box of its own text where there is not.
  *
@@ -116,37 +128,53 @@ export function CardFace({
                     ) : (
                         <div
                             className={cn(
-                                'flex flex-col gap-1.5 overflow-hidden rounded-lg border bg-card p-3 text-card-foreground shadow-xs',
+                                // overflow-hidden holds the box to the aspect ratio:
+                                // without it the ratio is only a
+                                // preferred size and a wordy card
+                                // grows past the artwork beside it.
+                                'flex flex-col overflow-hidden rounded-lg border bg-card p-3 text-card-foreground shadow-xs',
                                 SHAPES[shape],
                             )}
                         >
-                            {code ? (
-                                <span className="self-end font-mono text-[10px] text-muted-foreground">
-                                    {code}
-                                </span>
-                            ) : null}
+                            {/* The words fade where they run past the card;
+                                the footer sits below the fade, because what a
+                                card is - a Charge, research-only - is worth
+                                more at a glance than one more line of prose. */}
+                            <div
+                                className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden"
+                                style={{
+                                    maskImage: OVERFLOW_FADE,
+                                    WebkitMaskImage: OVERFLOW_FADE,
+                                }}
+                            >
+                                {code ? (
+                                    <span className="self-end font-mono text-[10px] text-muted-foreground">
+                                        {code}
+                                    </span>
+                                ) : null}
 
-                            {printed(lines).map((line, index) => (
-                                <p
-                                    key={`${index}-${line.label}`}
-                                    className="text-xs leading-snug"
-                                >
-                                    {line.glyph ? (
-                                        <GameIcon
-                                            glyph={line.glyph}
-                                            label={line.label}
-                                            className="mr-1 font-icons text-sm leading-none not-italic"
-                                        />
-                                    ) : null}
-                                    <span className="text-muted-foreground">
-                                        {line.label}
-                                    </span>{' '}
-                                    {line.value}
-                                </p>
-                            ))}
+                                {printed(lines).map((line, index) => (
+                                    <p
+                                        key={`${index}-${line.label}`}
+                                        className="text-xs leading-snug"
+                                    >
+                                        {line.glyph ? (
+                                            <GameIcon
+                                                glyph={line.glyph}
+                                                label={line.label}
+                                                className="mr-1 font-icons text-sm leading-none not-italic"
+                                            />
+                                        ) : null}
+                                        <span className="text-muted-foreground">
+                                            {line.label}
+                                        </span>{' '}
+                                        {line.value}
+                                    </p>
+                                ))}
+                            </div>
 
                             {footer ? (
-                                <span className="mt-auto text-[10px] text-muted-foreground">
+                                <span className="shrink-0 pt-1 text-[10px] text-muted-foreground">
                                     {footer}
                                 </span>
                             ) : null}
