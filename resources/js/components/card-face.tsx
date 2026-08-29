@@ -20,6 +20,21 @@ type CardLine = {
 };
 
 /**
+ * The two sizes the game's cards are printed at.
+ *
+ * Every piece of artwork is one or the other: 600x440 for the Protection and
+ * research cards, 600x817 for Equipment. Holding a card to its family's shape is
+ * what lets a card with no artwork sit in a row beside cards that have some
+ * without being visibly the odd one out.
+ */
+const SHAPES = {
+    landscape: 'aspect-[600/440]',
+    portrait: 'aspect-[600/817]',
+} as const;
+
+export type CardShape = keyof typeof SHAPES;
+
+/**
  * A card, shown as its printed artwork where there is any and as a card-shaped
  * box of its own text where there is not.
  *
@@ -27,21 +42,25 @@ type CardLine = {
  * invents cards during play - the rulebook has research proposals priced and
  * added to the tree mid-game, and a DTC technology hands out a bypass card named
  * after whichever Protection Card it counters - and those have never been
- * printed. They still have to read as cards.
+ * printed. They still have to read as cards, which means being the size of one:
+ * both faces are the same width and the same shape, so a list of one family
+ * lines up whether or not the artwork has been drawn yet.
+ *
+ * The shape is the family's rather than the image's, because the families are
+ * not printed alike - Equipment portrait, the Protection and research cards
+ * landscape - and forcing one ratio across all three would crop two thirds of
+ * the game.
  *
  * The artwork is high resolution and a stack view can show a dozen at once, so
  * images are lazy and decode off the main thread. An image that fails to load
  * falls back to the text, which also covers a checkout that does not have the
  * artwork committed.
  *
- * Cards are given a width and left to find their own height, because the three
- * families are not the same shape: Equipment is printed portrait, and the
- * Protection and research cards landscape.
- *
- * A card showing its artwork carries its text on hover, because the artwork is
- * the one case where the words are not on screen: at this size the printing on a
- * card is not legible, and Control ruling on a challenge needs to read it. The
- * text box needs no tooltip - it is already the text.
+ * Every card carries its text on hover, because at this size neither face
+ * reliably shows it: the printing on the artwork is not legible, and a wordy
+ * card can outrun its box. Control ruling on a challenge needs to read it, so
+ * the same words are also always in the page for a screen reader rather than
+ * behind a hover.
  */
 export function CardFace({
     name,
@@ -49,6 +68,7 @@ export function CardFace({
     imagePath,
     lines,
     footer,
+    shape = 'landscape',
     className,
 }: {
     name: string;
@@ -56,48 +76,11 @@ export function CardFace({
     imagePath?: string | null;
     lines?: CardLine[];
     footer?: string | null;
+    shape?: CardShape;
     className?: string;
 }) {
     const [imageFailed, setImageFailed] = useState(false);
     const showImage = Boolean(imagePath) && !imageFailed;
-
-    if (!showImage) {
-        return (
-            <article
-                className={cn(
-                    'flex w-40 shrink-0 flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-xs sm:w-48',
-                    className,
-                )}
-            >
-                <CardHeading name={name} code={code} />
-
-                {printed(lines).map((line, index) => (
-                    <p
-                        key={`${index}-${line.label}`}
-                        className="text-xs leading-snug"
-                    >
-                        {line.glyph ? (
-                            <GameIcon
-                                glyph={line.glyph}
-                                label={line.label}
-                                className="mr-1 font-icons text-sm leading-none not-italic"
-                            />
-                        ) : null}
-                        <span className="text-muted-foreground">
-                            {line.label}
-                        </span>{' '}
-                        {line.value}
-                    </p>
-                ))}
-
-                {footer ? (
-                    <footer className="mt-auto text-[10px] text-muted-foreground">
-                        {footer}
-                    </footer>
-                ) : null}
-            </article>
-        );
-    }
 
     return (
         <Tooltip>
@@ -114,18 +97,62 @@ export function CardFace({
                         className,
                     )}
                 >
-                    <img
-                        src={imagePath as string}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        onError={() => setImageFailed(true)}
-                        // No fixed aspect: the families are not the same
-                        // shape. Equipment is printed portrait and both the
-                        // Protection and research cards landscape, so forcing
-                        // one ratio would crop two thirds of the game.
-                        className="h-auto w-full rounded-lg border bg-muted"
-                    />
+                    {showImage ? (
+                        <img
+                            src={imagePath as string}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => setImageFailed(true)}
+                            // The shape is declared rather than waited for, so
+                            // a page of lazy images does not reflow as they
+                            // arrive. object-contain keeps a card that was
+                            // scanned at some other ratio whole.
+                            className={cn(
+                                'w-full rounded-lg border bg-muted object-contain',
+                                SHAPES[shape],
+                            )}
+                        />
+                    ) : (
+                        <div
+                            className={cn(
+                                'flex flex-col gap-1.5 overflow-hidden rounded-lg border bg-card p-3 text-card-foreground shadow-xs',
+                                SHAPES[shape],
+                            )}
+                        >
+                            {code ? (
+                                <span className="self-end font-mono text-[10px] text-muted-foreground">
+                                    {code}
+                                </span>
+                            ) : null}
+
+                            {printed(lines).map((line, index) => (
+                                <p
+                                    key={`${index}-${line.label}`}
+                                    className="text-xs leading-snug"
+                                >
+                                    {line.glyph ? (
+                                        <GameIcon
+                                            glyph={line.glyph}
+                                            label={line.label}
+                                            className="mr-1 font-icons text-sm leading-none not-italic"
+                                        />
+                                    ) : null}
+                                    <span className="text-muted-foreground">
+                                        {line.label}
+                                    </span>{' '}
+                                    {line.value}
+                                </p>
+                            ))}
+
+                            {footer ? (
+                                <span className="mt-auto text-[10px] text-muted-foreground">
+                                    {footer}
+                                </span>
+                            ) : null}
+                        </div>
+                    )}
+
                     <figcaption className="truncate text-xs text-muted-foreground">
                         {name}
                     </figcaption>
@@ -192,19 +219,6 @@ function CardWords({
 
             {footer ? <span className="opacity-70">{footer}</span> : null}
         </span>
-    );
-}
-
-function CardHeading({ name, code }: { name: string; code?: string | null }) {
-    return (
-        <header className="flex items-baseline justify-between gap-2">
-            <h4 className="text-sm leading-tight font-medium">{name}</h4>
-            {code ? (
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    {code}
-                </span>
-            ) : null}
-        </header>
     );
 }
 

@@ -158,6 +158,7 @@ export default function ControlCards({
                                 name={card.name}
                                 code={card.code}
                                 imagePath={card.image_path}
+                                shape="landscape"
                                 lines={[
                                     {
                                         label: 'Kind',
@@ -215,6 +216,7 @@ export default function ControlCards({
                                         name={card.name}
                                         code={card.code}
                                         imagePath={card.image_path}
+                                        shape="portrait"
                                         lines={[
                                             {
                                                 label: 'Type',

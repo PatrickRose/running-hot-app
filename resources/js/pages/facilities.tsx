@@ -154,6 +154,7 @@ export default function Facilities({ game, board }: Props) {
                                                     {stack.cards.map((card) => (
                                                         <li key={card.id}>
                                                             <CardFace
+                                                                shape="landscape"
                                                                 name={card.name}
                                                                 code={card.code}
                                                                 imagePath={
