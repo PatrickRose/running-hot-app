@@ -16,8 +16,11 @@ import {
  * not secret, only which Facility is storing it is. So this shows the two side
  * by side rather than making anyone flip between them.
  *
- * A card with one face shows that one and says nothing about a back, which is
- * every card that is not a technology.
+ * A card with one face shows that one and says nothing about the other, which
+ * is every card that is not a technology - and also a fair few that are, since
+ * the artwork does not run to both faces of everything. Either face may be the
+ * one that is missing, so the thumbnail is whichever exists rather than always
+ * the front.
  *
  * The thumbnail is a real button, unlike the tooltips elsewhere on this page: it
  * opens something, so it has to be reachable from the keyboard, and there is one
@@ -31,31 +34,44 @@ export function CardFacesDialog({
 }: {
     name: string;
     code?: string | null;
-    frontPath: string;
+    frontPath?: string | null;
     backPath?: string | null;
 }) {
-    const [frontFailed, setFrontFailed] = useState(false);
-    const [backFailed, setBackFailed] = useState(false);
+    const [failed, setFailed] = useState<string[]>([]);
 
-    if (frontFailed) {
+    const faces = [
+        { label: 'Front', path: frontPath },
+        { label: 'Back', path: backPath },
+    ].filter(
+        (face): face is { label: string; path: string } =>
+            Boolean(face.path) && !failed.includes(face.path as string),
+    );
+
+    if (faces.length === 0) {
         return null;
     }
 
-    const showBack = Boolean(backPath) && !backFailed;
+    // Whichever face there is. Sixteen technologies have a back on record and
+    // no front, so always reaching for the front would hide them entirely.
+    const [thumbnail] = faces;
+    const bothFaces = faces.length > 1;
 
     return (
         <Dialog>
             <DialogTrigger className="rounded ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none">
                 <img
-                    src={frontPath}
+                    src={thumbnail.path}
                     alt=""
                     loading="lazy"
                     decoding="async"
-                    onError={() => setFrontFailed(true)}
-                    className="aspect-[5/7] w-12 rounded border bg-muted object-cover transition-opacity hover:opacity-80"
+                    onError={() => setFailed((was) => [...was, thumbnail.path])}
+                    // Held to a height rather than a width, so a landscape
+                    // research card and a portrait Equipment card still line
+                    // the rows up.
+                    className="h-12 w-auto rounded border bg-muted transition-opacity hover:opacity-80"
                 />
                 <span className="sr-only">
-                    {showBack
+                    {bothFaces
                         ? `Show both faces of ${name}`
                         : `Show ${name} full size`}
                 </span>
@@ -72,21 +88,23 @@ export function CardFacesDialog({
                         ) : null}
                     </DialogTitle>
                     <DialogDescription>
-                        {showBack
+                        {bothFaces
                             ? 'Printed proposal side up and flipped over once it has been researched. Both faces are public.'
-                            : 'The card as it is printed.'}
+                            : `Only the ${thumbnail.label.toLowerCase()} of this card has been drawn.`}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-wrap justify-center gap-4">
-                    <Face path={frontPath} label="Front" />
-                    {showBack ? (
+                    {faces.map((face) => (
                         <Face
-                            path={backPath as string}
-                            label="Back"
-                            onError={() => setBackFailed(true)}
+                            key={face.label}
+                            path={face.path}
+                            label={face.label}
+                            onError={() =>
+                                setFailed((was) => [...was, face.path])
+                            }
                         />
-                    ) : null}
+                    ))}
                 </div>
             </DialogContent>
         </Dialog>

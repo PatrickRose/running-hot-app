@@ -226,18 +226,20 @@ export default function ControlCards({
                                             className="border-b align-top last:border-0"
                                         >
                                             <td className="py-2 pr-4">
-                                                {technology.image_path ? (
-                                                    <CardFacesDialog
-                                                        name={technology.name}
-                                                        code={technology.code}
-                                                        frontPath={
-                                                            technology.image_path
-                                                        }
-                                                        backPath={
-                                                            technology.back_image_path
-                                                        }
-                                                    />
-                                                ) : null}
+                                                {/* Renders nothing when neither
+                                                    face has been drawn, and
+                                                    whichever one there is
+                                                    otherwise. */}
+                                                <CardFacesDialog
+                                                    name={technology.name}
+                                                    code={technology.code}
+                                                    frontPath={
+                                                        technology.image_path
+                                                    }
+                                                    backPath={
+                                                        technology.back_image_path
+                                                    }
+                                                />
                                             </td>
                                             <td className="py-2 pr-4 font-medium">
                                                 {technology.name}

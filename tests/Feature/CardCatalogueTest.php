@@ -7,6 +7,7 @@ use App\Actions\SeedProtectionCards;
 use App\Actions\SeedTechnologies;
 use App\Enums\EquipmentCategory;
 use App\Models\Game;
+use App\Models\TechnologyType;
 use App\Models\User;
 use App\Support\CardImage;
 use App\Support\EquipmentCardBlueprint;
@@ -15,6 +16,7 @@ use App\Support\ProtectionCardBlueprint;
 use App\Support\TechnologyBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use SplFileInfo;
 use Tests\TestCase;
 
 /**
@@ -29,9 +31,49 @@ class CardCatalogueTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** @var array<int, string> */
+    private array $written = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->written as $path) {
+            File::delete($path);
+        }
+
+        $this->written = [];
+        CardImage::flush();
+
+        parent::tearDown();
+    }
+
     protected function control(): User
     {
         return User::factory()->control()->create();
+    }
+
+    /**
+     * Put a file in the artwork directory for the duration of one test.
+     *
+     * Refuses to write over something already there. The game's real artwork is
+     * committed to this repository, so a test that overwrote a real file would
+     * delete it again on the way out - which is exactly what happened once.
+     */
+    private function writeArtwork(string $file): void
+    {
+        $directory = public_path(CardImage::DIRECTORY);
+        File::ensureDirectoryExists($directory);
+
+        $path = $directory.'/'.$file;
+
+        $this->assertFileDoesNotExist(
+            $path,
+            $file.' is real artwork. Use a code no card has.',
+        );
+
+        File::put($path, 'not really an image');
+        $this->written[] = $path;
+
+        CardImage::flush();
     }
 
     public function test_a_new_game_gets_all_three_card_lists(): void
@@ -256,42 +298,65 @@ class CardCatalogueTest extends TestCase
      * A research card is printed proposal side up and flipped over once it has
      * been researched (rulebook 3.2.2), so it has two faces filed as _F and _B.
      * Both are public, so both reach the page.
+     *
+     * Written against a code no real card uses. The game's own artwork is
+     * committed, so a test writing over a real code would delete that artwork
+     * when it cleaned up after itself.
      */
     public function test_a_technology_carries_both_of_its_faces(): void
     {
         $game = Game::factory()->create();
 
-        $directory = public_path(CardImage::DIRECTORY);
-        File::ensureDirectoryExists($directory);
+        TechnologyType::factory()->for($game)->create(['code' => 'ZZ901', 'name' => 'Two faced']);
+        TechnologyType::factory()->for($game)->create(['code' => 'ZZ902', 'name' => 'One faced']);
 
-        $written = [];
+        $this->writeArtwork('ZZ901_F.webp');
+        $this->writeArtwork('ZZ901_B.webp');
+        $this->writeArtwork('ZZ902_F.webp');
 
-        foreach (['RSR001_F.webp', 'RSR001_B.webp'] as $file) {
-            $written[] = $path = $directory.'/'.$file;
-            File::put($path, 'not really an image');
-        }
+        $technologies = collect(app(GamePresenter::class)->technologyTypes($game));
 
-        CardImage::flush();
+        $both = $technologies->firstWhere('code', 'ZZ901');
+        $this->assertSame('/images/cards/ZZ901_F.webp', $both['image_path']);
+        $this->assertSame('/images/cards/ZZ901_B.webp', $both['back_image_path']);
 
-        try {
-            $technologies = app(GamePresenter::class)->technologyTypes($game);
+        // A card with one face reports no back rather than repeating its front,
+        // or the interface would offer a flip that changed nothing.
+        $one = $technologies->firstWhere('code', 'ZZ902');
+        $this->assertSame('/images/cards/ZZ902_F.webp', $one['image_path']);
+        $this->assertNull($one['back_image_path']);
+    }
 
-            $deerHorns = collect($technologies)->firstWhere('code', 'RSR001');
+    /**
+     * Every file in the artwork directory belongs to a card the catalogue
+     * seeds, so a picture filed under a mistyped code is noticed rather than
+     * silently never shown.
+     */
+    public function test_the_committed_artwork_all_belongs_to_a_card(): void
+    {
+        $game = Game::factory()->create();
 
-            $this->assertSame('/images/cards/RSR001_F.webp', $deerHorns['image_path']);
-            $this->assertSame('/images/cards/RSR001_B.webp', $deerHorns['back_image_path']);
+        $claimed = collect()
+            ->concat($game->protectionCardTypes()->pluck('code'))
+            ->concat($game->equipmentCardTypes()->pluck('code'))
+            ->concat($game->technologyTypes()->pluck('code'))
+            ->filter()
+            ->flatMap(fn (string $code): array => [
+                CardImage::fileFor($code),
+                CardImage::fileFor($code, CardImage::BACK),
+            ])
+            ->filter()
+            ->unique();
 
-            // Every other card is one-sided, so it reports no back rather than
-            // repeating its front.
-            $other = collect($technologies)->firstWhere('code', 'RSR002');
-            $this->assertNull($other['back_image_path']);
-        } finally {
-            foreach ($written as $path) {
-                File::delete($path);
-            }
+        $onDisk = collect(File::files(public_path(CardImage::DIRECTORY)))
+            ->map(fn (SplFileInfo $file): string => $file->getFilename())
+            ->reject(fn (string $file): bool => str_starts_with($file, '.'));
 
-            CardImage::flush();
-        }
+        $this->assertSame(
+            [],
+            $onDisk->diff($claimed)->values()->all(),
+            'Artwork is filed under a code no card in the catalogue has.',
+        );
     }
 
     public function test_control_can_read_the_card_lists(): void

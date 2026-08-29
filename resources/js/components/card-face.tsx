@@ -24,6 +24,10 @@ type CardLine = { label: string; value: string | null };
  * falls back to the text, which also covers a checkout that does not have the
  * artwork committed.
  *
+ * Cards are given a width and left to find their own height, because the three
+ * families are not the same shape: Equipment is printed portrait, and the
+ * Protection and research cards landscape.
+ *
  * A card showing its artwork carries its text on hover, because the artwork is
  * the one case where the words are not on screen: at this size the printing on a
  * card is not legible, and Control ruling on a challenge needs to read it. The
@@ -99,7 +103,11 @@ export function CardFace({
                         loading="lazy"
                         decoding="async"
                         onError={() => setImageFailed(true)}
-                        className="aspect-[5/7] w-full rounded-lg border bg-muted object-cover"
+                        // No fixed aspect: the families are not the same
+                        // shape. Equipment is printed portrait and both the
+                        // Protection and research cards landscape, so forcing
+                        // one ratio would crop two thirds of the game.
+                        className="h-auto w-full rounded-lg border bg-muted"
                     />
                     <figcaption className="truncate text-xs text-muted-foreground">
                         {name}
