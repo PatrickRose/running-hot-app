@@ -31,6 +31,7 @@ import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import { CardFace } from '@/components/card-face';
 import { GameIcon } from '@/components/game-icon';
+import { StackEnd } from '@/components/stack-end';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -489,9 +490,10 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
                         {own.card_move_discount > 0 &&
                             ` · ${own.card_move_discount} Credit discount on moving cards`}
                         <br />
-                        Position 1 is the card Runners meet first. Dragging
-                        within a stack costs 1 Credit for every card that has to
-                        move, and nothing is charged until you confirm it.
+                        Runners come in at the top of a stack and work down.
+                        Dragging within a stack costs 1 Credit for every card
+                        that has to move, and nothing is charged until you
+                        confirm it.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
@@ -790,14 +792,18 @@ function StackPanel({
                 </span>
             </p>
 
+            {/* Which end the Runners come in at. The stack is drawn in the
+                order they are met - a stack is a stack, and reading down it is
+                reading the order the cards are met in - so naming both ends
+                turns a column of cards into the corridor it represents, which
+                is the one thing "Met 1st" on a card cannot say by itself. */}
+            <StackEnd label="Runners arrive" />
+
             <SortableContext
                 id={key}
                 items={cards.map((card) => `card-${card.id}`)}
                 strategy={verticalListSortingStrategy}
             >
-                {/* Top to bottom in the order Runners meet them: a stack is a
-                    stack, and reading down it is reading the order the cards
-                    are met in. */}
                 <ol
                     ref={setNodeRef}
                     aria-label={`${stack.kind_label} stack of ${facility.name}`}
@@ -828,6 +834,8 @@ function StackPanel({
                     )}
                 </ol>
             </SortableContext>
+
+            <StackEnd label={`into ${facility.name}`} />
 
             {arranged && (
                 <ArrangementBar

@@ -3,6 +3,7 @@ import { CardFace } from '@/components/card-face';
 import { FacilityDefenceBoard } from '@/components/facility-defence-board';
 import { GameIcon } from '@/components/game-icon';
 import Heading from '@/components/heading';
+import { StackEnd } from '@/components/stack-end';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -81,9 +82,9 @@ export default function Facilities({ game, board }: Props) {
                                 {own.card_move_discount > 0 &&
                                     ` · ${own.card_move_discount} Credit discount on moving cards`}
                                 <br />
-                                Position 1 is the card Runners meet first.
-                                Arranging these is your Security player's job,
-                                or Control's.
+                                Runners come in at the top of a stack and work
+                                down. Arranging these is your Security player's
+                                job, or Control's.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4">
@@ -151,11 +152,11 @@ export default function Facilities({ game, board }: Props) {
                                                     </span>
                                                 </p>
                                                 {/* Top to bottom in the
-                                                    order Runners meet them: a
-                                                    stack is a stack, and
-                                                    reading down it is reading
-                                                    the order they are met
-                                                    in. */}
+                                                    order Runners meet them,
+                                                    with both ends named so the
+                                                    column reads as the
+                                                    corridor it represents. */}
+                                                <StackEnd label="Runners arrive" />
                                                 <ol className="flex flex-col gap-3">
                                                     {stack.cards.map((card) => (
                                                         <li key={card.id}>
@@ -195,6 +196,9 @@ export default function Facilities({ game, board }: Props) {
                                                         </li>
                                                     )}
                                                 </ol>
+                                                <StackEnd
+                                                    label={`into ${facility.name}`}
+                                                />
                                             </div>
                                         ))}
                                     </div>
