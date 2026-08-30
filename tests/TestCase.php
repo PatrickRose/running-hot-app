@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Support\CardImage;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Http;
 use Laravel\Fortify\Features;
@@ -22,6 +23,11 @@ abstract class TestCase extends BaseTestCase
         // again with its own expectations.
         Http::preventStrayRequests();
         Http::fake();
+
+        // The card artwork directory is listed once per process. A test that
+        // writes artwork has to be seen by whatever reads it next, so the
+        // listing starts empty for every test.
+        CardImage::flush();
     }
 
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void

@@ -9,6 +9,7 @@ use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\FacilityTurnState;
 use App\Models\FacilityType;
+use App\Models\ProtectionCardHolding;
 use App\Models\ProtectionCardType;
 use App\Models\Turn;
 use App\Models\User;
@@ -110,8 +111,14 @@ class FacilityDefenceService
     /**
      * Install a card at the outermost slot of its own stack (rulebook 3.3.4).
      *
-     * Installing is free. What it costs is the card itself, bought from the
-     * Corporation shop or granted by research, which happens away from here.
+     * Installing costs no Credits. What it costs is a copy of the card: the
+     * Corporation hands one out of its holdings, which is what caps how many
+     * Facilities a card can defend at once. Buying the copy in the first place
+     * happens away from here, at the table with Control.
+     *
+     * Free of charge is not the same as free of consequence, so this is the one
+     * place a copy leaves a Corporation's hand. remove() is the only place one
+     * comes back.
      */
     public function install(Facility $facility, ProtectionCardType $cardType): FacilityProtectionCard
     {
@@ -151,6 +158,8 @@ class FacilityDefenceService
                     ),
                 ]);
             }
+
+            $this->takeCopy($facility, $cardType);
 
             $card = $facility->protectionCards()->create([
                 'protection_card_type_id' => $cardType->id,
@@ -251,7 +260,10 @@ class FacilityDefenceService
             $state?->increment('cards_removed');
 
             $kind = $card->kind;
+            $cardTypeId = $card->protection_card_type_id;
             $card->delete();
+
+            $this->returnCopy($facility->corporation, $cardTypeId);
 
             $this->resequence($facility, $kind, $this->stack($facility, $kind)->pluck('id')->all());
 
@@ -452,6 +464,90 @@ class FacilityDefenceService
                 ->where('kind', $kind)
                 ->update(['position' => $offset + 1]);
         }
+    }
+
+    /**
+     * How many uninstalled copies of a card a Corporation has left.
+     */
+    public function copiesInHand(Corporation $corporation, ProtectionCardType $cardType): int
+    {
+        return (int) ($corporation->protectionCardHoldings()
+            ->where('protection_card_type_id', $cardType->id)
+            ->value('copies') ?? 0);
+    }
+
+    /**
+     * Set how many copies of a card a Corporation holds.
+     *
+     * Control's, and only Control's. The shop, the auctions and the research
+     * grants that would move this number all happen at the table, so the
+     * application does not try to model them - it holds the number Control
+     * writes down. Installed copies are untouched: this is the hand, not the
+     * total.
+     */
+    public function setCopiesInHand(
+        Corporation $corporation,
+        ProtectionCardType $cardType,
+        int $copies,
+    ): ProtectionCardHolding {
+        if ($copies < 0) {
+            throw ValidationException::withMessages([
+                'copies' => 'A Corporation cannot hold fewer than no copies of a card.',
+            ]);
+        }
+
+        /** @var ProtectionCardHolding $holding */
+        $holding = $corporation->protectionCardHoldings()->updateOrCreate(
+            ['protection_card_type_id' => $cardType->id],
+            ['copies' => $copies],
+        );
+
+        return $holding;
+    }
+
+    /**
+     * Take one copy out of the Corporation's hand, refusing if it has none.
+     *
+     * A Corporation with no row for a card holds none of it, which is the same
+     * as holding zero: it was never in the briefing and nobody has bought one.
+     * Control raises the count first, exactly as they would move Credits before
+     * a purchase the rules would otherwise refuse.
+     */
+    protected function takeCopy(Facility $facility, ProtectionCardType $cardType): void
+    {
+        $corporation = $facility->corporation;
+
+        $taken = $corporation->protectionCardHoldings()
+            ->where('protection_card_type_id', $cardType->id)
+            ->where('copies', '>', 0)
+            ->decrement('copies');
+
+        if ($taken === 0) {
+            throw ValidationException::withMessages([
+                'protection_card_type_id' => sprintf(
+                    '%s has no copies of %s left to install.',
+                    $corporation->name,
+                    $cardType->name,
+                ),
+            ]);
+        }
+    }
+
+    /**
+     * Put a copy back into the Corporation's hand.
+     *
+     * A card that came off a Facility is a card the Corporation has again, so
+     * this creates the row where there was none - a card Control installed
+     * without the Corporation ever holding one still returns somewhere.
+     */
+    protected function returnCopy(Corporation $corporation, int $cardTypeId): void
+    {
+        $holding = $corporation->protectionCardHoldings()->firstOrCreate(
+            ['protection_card_type_id' => $cardTypeId],
+            ['copies' => 0],
+        );
+
+        $holding->increment('copies');
     }
 
     /**

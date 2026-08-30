@@ -35,8 +35,7 @@ class ProtectionCardCatalogueTest extends TestCase
             'name' => 'Reinforced Bulkhead',
             'kind' => 'physical',
             'cost' => 4,
-            'challenge_skill' => 'brawn',
-            'challenge_strength' => 3,
+            'challenge' => 'Brute (3)',
             'consequence' => 'One Wound.',
             'availability' => 'available',
             ...$overrides,
@@ -52,13 +51,17 @@ class ProtectionCardCatalogueTest extends TestCase
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        $card = $game->protectionCardTypes()->sole();
+        $card = $game->protectionCardTypes()->where('name', 'Reinforced Bulkhead')->sole();
 
-        $this->assertSame('Reinforced Bulkhead', $card->name);
         $this->assertSame(ProtectionKind::Physical, $card->kind);
         $this->assertSame(4, $card->cost);
-        $this->assertSame(3, $card->challenge_strength);
+        // Held as the card prints it, rather than as a skill and a number.
+        $this->assertSame('Brute (3)', $card->challenge);
         $this->assertFalse($card->hasCharge());
+        // Control's own card has no code, so it has no artwork either and is
+        // shown as its text.
+        $this->assertNull($card->code);
+        $this->assertNull($card->imagePath());
     }
 
     public function test_a_card_can_carry_a_charge(): void
@@ -72,7 +75,9 @@ class ProtectionCardCatalogueTest extends TestCase
             ]))
             ->assertSessionHasNoErrors();
 
-        $this->assertTrue($game->protectionCardTypes()->sole()->hasCharge());
+        $this->assertTrue(
+            $game->protectionCardTypes()->where('name', 'Reinforced Bulkhead')->sole()->hasCharge(),
+        );
     }
 
     public function test_a_charge_cost_without_a_consequence_is_refused(): void
@@ -97,14 +102,44 @@ class ProtectionCardCatalogueTest extends TestCase
             ->assertSessionHasErrors('charge_cost');
     }
 
-    public function test_a_card_title_is_unique_within_a_game(): void
+    public function test_a_card_code_is_unique_within_a_game(): void
     {
         $game = Game::factory()->create();
-        ProtectionCardType::factory()->for($game)->create(['name' => 'Reinforced Bulkhead']);
+        ProtectionCardType::factory()->for($game)->create(['code' => 'PZ001']);
 
         $this->actingAs($this->control())
-            ->post("/control/games/{$game->id}/protection-cards", $this->cardPayload())
-            ->assertSessionHasErrors('name');
+            ->post("/control/games/{$game->id}/protection-cards", $this->cardPayload([
+                'code' => 'PZ001',
+            ]))
+            ->assertSessionHasErrors('code');
+    }
+
+    /**
+     * Doppleganger is PX011 in the physical stack and PX012 in the cyber one:
+     * two different cards that share a title. So a repeated title has to be
+     * allowed, and the code is what may not repeat.
+     */
+    public function test_two_cards_may_share_a_title(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/protection-cards", $this->cardPayload([
+                'code' => 'PZ001',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$game->id}/protection-cards", $this->cardPayload([
+                'code' => 'PZ002',
+                'kind' => 'cyber',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            2,
+            $game->protectionCardTypes()->where('name', 'Reinforced Bulkhead')->count(),
+        );
     }
 
     public function test_control_can_promote_a_rumoured_card(): void
@@ -114,6 +149,7 @@ class ProtectionCardCatalogueTest extends TestCase
 
         $this->actingAs($this->control())
             ->patch("/control/games/{$game->id}/protection-cards/{$card->id}", $this->cardPayload([
+                'code' => $card->code,
                 'name' => $card->name,
                 'availability' => 'available',
             ]))
@@ -130,12 +166,13 @@ class ProtectionCardCatalogueTest extends TestCase
         /** @var FacilityType $type */
         $type = $game->facilityTypes()->where('key', FacilityTypeBlueprint::RESEARCH)->sole();
         $facility = Facility::factory()->for($corporation)->for($type)->create();
-        $card = ProtectionCardType::factory()->for($game)->create();
+        $card = ProtectionCardType::factory()->for($game)->heldBy($corporation->id)->create();
 
         app(FacilityDefenceService::class)->install($facility, $card);
 
         $this->actingAs($this->control())
             ->patch("/control/games/{$game->id}/protection-cards/{$card->id}", $this->cardPayload([
+                'code' => $card->code,
                 'name' => $card->name,
                 'kind' => 'cyber',
             ]))
@@ -149,7 +186,7 @@ class ProtectionCardCatalogueTest extends TestCase
         /** @var FacilityType $type */
         $type = $game->facilityTypes()->where('key', FacilityTypeBlueprint::RESEARCH)->sole();
         $facility = Facility::factory()->for($corporation)->for($type)->create();
-        $card = ProtectionCardType::factory()->for($game)->create();
+        $card = ProtectionCardType::factory()->for($game)->heldBy($corporation->id)->create();
 
         app(FacilityDefenceService::class)->install($facility, $card);
 

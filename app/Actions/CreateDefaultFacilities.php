@@ -2,29 +2,36 @@
 
 namespace App\Actions;
 
-use App\Enums\ProtectionCardAvailability;
 use App\Enums\ProtectionKind;
-use App\Enums\RunnerSkill;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\Game;
+use App\Models\ProtectionCardHolding;
 use App\Models\ProtectionCardType;
 use App\Services\FacilityDefenceService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Gives a new game its Protection Card catalogue and every Corporation the
- * Facilities it opens with, as configured in config/running_hot.php.
+ * Gives every Corporation the Facilities and the Protection Cards it opens with,
+ * as configured in config/running_hot.php.
  *
  * "Each Corporation will begin with a number of Facilities and some basic
  * Protection Cards" (rulebook 3.3), and until they exist there is nothing for
  * Runners to run against and nothing for Security to install into.
  *
- * Runs after {@see CreateDefaultRoster}, because Facilities belong to
- * Corporations. Like that action this only ever writes a starting position, so
- * the Facilities are built free and the cards installed free: there is no
- * before state for the ledger to record, and no CEO signed anything off.
+ * The card catalogue itself is not written here - a game gets that when it is
+ * created, along with the Facility types and the other two card lists, because
+ * none of them depend on the roster. What this adds is the part that does: which
+ * Corporation owns which Facilities, and which cards each Corporation was given.
+ *
+ * Runs after {@see CreateDefaultRoster}, because Facilities and holdings both
+ * belong to Corporations. Like that action this only ever writes a starting
+ * position, so the Facilities are built free and the cards installed free: there
+ * is no before state for the ledger to record, and no CEO signed anything off.
+ * The cards installed are still taken out of the Corporation's holdings, because
+ * that is a card moving rather than a cost.
  *
  * A game that already has Facilities is left alone, so applying it twice cannot
  * hand a Corporation a second Armoury and quietly widen every stack in the
@@ -32,19 +39,29 @@ use Illuminate\Support\Str;
  */
 class CreateDefaultFacilities
 {
-    public function __construct(private readonly FacilityDefenceService $defence) {}
+    public function __construct(
+        private readonly FacilityDefenceService $defence,
+        private readonly SeedProtectionCardHoldings $holdings,
+        private readonly SeedTechnologies $technologies,
+    ) {}
 
     /**
-     * @return array{facilities: int, card_types: int, installed: int, skipped: bool}
+     * @return array{facilities: int, holdings: int, installed: int, skipped: bool}
      */
     public function handle(Game $game): array
     {
         if ($game->facilities()->exists()) {
-            return ['facilities' => 0, 'card_types' => 0, 'installed' => 0, 'skipped' => true];
+            return ['facilities' => 0, 'holdings' => 0, 'installed' => 0, 'skipped' => true];
         }
 
         return DB::transaction(function () use ($game): array {
-            $cardTypes = $this->createCatalogue($game);
+            // The trees were written when the game was created, before there
+            // were Corporations to attach them to. Now there are.
+            $this->technologies->handle($game);
+
+            // Before any Facility opens, because opening one hands cards out of
+            // these holdings.
+            $holdings = $this->holdings->handle($game);
 
             $facilities = 0;
             $installed = 0;
@@ -58,44 +75,11 @@ class CreateDefaultFacilities
 
             return [
                 'facilities' => $facilities,
-                'card_types' => $cardTypes,
+                'holdings' => $holdings['holdings'],
                 'installed' => $installed,
                 'skipped' => false,
             ];
         });
-    }
-
-    /**
-     * Write the catalogue Security players are handed at the start of the game
-     * (rulebook 3.3.3).
-     *
-     * Existing entries are left as they are: Control may already have edited a
-     * card, and the catalogue is theirs once the game exists.
-     */
-    private function createCatalogue(Game $game): int
-    {
-        $created = 0;
-
-        foreach ($this->configuredList('running_hot.protection_cards') as $card) {
-            $name = (string) $card['name'];
-            unset($card['name']);
-
-            $cardType = $game->protectionCardTypes()->firstOrCreate(
-                ['name' => $name],
-                [
-                    'kind' => ProtectionKind::Physical,
-                    'challenge_skill' => RunnerSkill::Brawn,
-                    'availability' => ProtectionCardAvailability::Available,
-                    ...$card,
-                ],
-            );
-
-            if ($cardType->wasRecentlyCreated) {
-                $created++;
-            }
-        }
-
-        return $created;
     }
 
     /**
@@ -180,32 +164,97 @@ class CreateDefaultFacilities
     }
 
     /**
-     * Install the basic cards every Facility opens with.
+     * Install the basic cards this Facility opens with (rulebook 3.3).
      *
-     * Installed in configured order, and installing puts each card in front of
-     * the one before it, so the last name in the list is the one Runners meet
-     * first.
+     * Drawn from what the Corporation actually holds, which is the whole point:
+     * ANT's Facilities open with ANT's own cards, and no Facility opens with a
+     * card its Corporation was never given.
+     *
+     * The card with the most copies left goes in first. A Corporation holds four
+     * copies of its commonest card and opens with four or five Facilities, so no
+     * single card can cover them all - spreading across the cards it holds is
+     * what lets every Facility open defended, and it satisfies the
+     * one-copy-per-Facility rule of 3.3.4 without having to think about it.
+     *
+     * Running out is not an error. A Corporation whose briefing gave it fewer
+     * cards than its Facilities need simply opens some of them thinner, which is
+     * a starting position Control can see and top up.
      */
     private function installBasicCards(Facility $facility): int
     {
         $installed = 0;
 
-        /** @var array<int, string> $names */
-        $names = config('running_hot.installed_in_each', []);
+        foreach ($this->configuredStack() as $kind => $wanted) {
+            for ($slot = 0; $slot < $wanted; $slot++) {
+                $cardType = $this->deepestHolding($facility, $kind);
 
-        foreach ($names as $name) {
-            /** @var ProtectionCardType|null $cardType */
-            $cardType = $facility->game->protectionCardTypes()->where('name', $name)->first();
+                if ($cardType === null) {
+                    break;
+                }
 
-            if ($cardType === null) {
-                continue;
+                $this->defence->install($facility, $cardType);
+                $installed++;
             }
-
-            $this->defence->install($facility, $cardType);
-            $installed++;
         }
 
         return $installed;
+    }
+
+    /**
+     * How many cards of each kind a starting Facility opens with.
+     *
+     * @return array<string, int>
+     */
+    private function configuredStack(): array
+    {
+        /** @var array<string, int> $stack */
+        $stack = config('running_hot.installed_in_each', []);
+
+        $ordered = [];
+
+        // In encounter order, so a Facility with room for only some of them
+        // opens with the ones Runners meet first.
+        foreach (ProtectionKind::encounterOrder() as $kind) {
+            $wanted = (int) ($stack[$kind->value] ?? 0);
+
+            if ($wanted > 0) {
+                $ordered[$kind->value] = $wanted;
+            }
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * The card of one kind this Corporation has most copies of and has not
+     * already put in this Facility.
+     */
+    private function deepestHolding(Facility $facility, string $kind): ?ProtectionCardType
+    {
+        /** @var Collection<int, int> $alreadyHere */
+        $alreadyHere = $facility->protectionCards()->pluck('protection_card_type_id');
+
+        $held = ProtectionCardHolding::query()
+            ->where('corporation_id', $facility->corporation_id);
+
+        /** @var ProtectionCardType|null $cardType */
+        $cardType = ProtectionCardType::query()
+            ->whereIn('id', (clone $held)
+                ->where('copies', '>', 0)
+                ->select('protection_card_type_id'))
+            ->where('kind', $kind)
+            ->whereNotIn('id', $alreadyHere)
+            // Deepest hand first, so the load spreads across the cards a
+            // Corporation holds rather than emptying one of them.
+            ->orderByDesc((clone $held)
+                ->whereColumn('protection_card_type_id', 'protection_card_types.id')
+                ->select('copies'))
+            // Ties broken by code so a game's starting position is the same
+            // every time it is built.
+            ->orderBy('code')
+            ->first();
+
+        return $cardType;
     }
 
     /**

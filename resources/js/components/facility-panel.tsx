@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { GameIcon } from '@/components/game-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -192,9 +193,10 @@ function Stack({
 
     return (
         <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium">
-                {stack.kind_label}{' '}
-                <span className="text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+                <GameIcon glyph={stack.kind_glyph} label={stack.kind_label} />
+                <span aria-hidden="true">{stack.kind_label}</span>
+                <span className="font-normal text-muted-foreground">
                     {stack.cards.length}/{stack.slots}
                 </span>
             </p>
@@ -303,8 +305,7 @@ function InstallCard({
                 <option value="">Install a card…</option>
                 {options.map((card) => (
                     <option key={card.id} value={card.id}>
-                        {card.name} ({card.challenge_skill_label}{' '}
-                        {card.challenge_strength})
+                        {card.name} — {card.challenge}
                     </option>
                 ))}
             </select>

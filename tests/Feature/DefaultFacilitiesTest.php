@@ -11,6 +11,7 @@ use App\Models\Game;
 use App\Models\User;
 use App\Services\FacilityDefenceService;
 use App\Support\FacilityTypeBlueprint;
+use App\Support\ProtectionCardBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -229,36 +230,107 @@ class DefaultFacilitiesTest extends TestCase
         $this->assertSame(0, $corporation->facilities()->count());
     }
 
-    public function test_the_card_catalogue_is_written(): void
+    /**
+     * The catalogue comes with the game rather than with the Facilities: it
+     * depends on nothing in the roster, so a game has it from the moment it is
+     * created.
+     */
+    public function test_a_game_opens_with_the_whole_card_catalogue(): void
     {
-        $game = $this->setUpGame();
-
-        $result = app(CreateDefaultFacilities::class)->handle($game);
+        $game = Game::factory()->create();
 
         $this->assertSame(
-            count(config('running_hot.protection_cards')),
+            count(ProtectionCardBlueprint::defaults()),
             $game->protectionCardTypes()->count(),
         );
-        $this->assertSame($game->protectionCardTypes()->count(), $result['card_types']);
     }
 
-    public function test_every_starting_facility_opens_with_the_basic_cards(): void
+    /**
+     * Every Corporation is given the copies its briefing lists, and the copies
+     * are what cap how many Facilities a card can defend.
+     */
+    public function test_every_corporation_is_given_the_cards_from_its_briefing(): void
     {
         $game = $this->setUpGame();
 
         app(CreateDefaultFacilities::class)->handle($game);
 
-        /** @var array<int, string> $basic */
-        $basic = config('running_hot.installed_in_each');
+        /** @var array<int, array<string, mixed>> $configured */
+        $configured = config('running_hot.corporations');
 
-        foreach ($game->facilities as $facility) {
-            $installed = $facility->protectionCards()
-                ->with('cardType')
-                ->get()
-                ->map(fn ($card): string => $card->cardType->name)
+        foreach ($configured as $entry) {
+            /** @var array<string, int> $briefed */
+            $briefed = $entry['protection_cards'] ?? [];
+            $corporation = $game->corporations()->where('name', $entry['name'])->sole();
+
+            foreach ($briefed as $code => $copies) {
+                $cardType = $game->protectionCardTypes()->where('code', $code)->sole();
+
+                $inHand = (int) $corporation->protectionCardHoldings()
+                    ->where('protection_card_type_id', $cardType->id)
+                    ->value('copies');
+
+                $installed = $cardType->installations()
+                    ->whereIn('facility_id', $corporation->facilities()->select('id'))
+                    ->count();
+
+                // Installing moves a copy from the hand into a Facility, so the
+                // two together are still the briefing's count.
+                $this->assertSame(
+                    $copies,
+                    $inHand + $installed,
+                    $entry['name'].' should still hold '.$copies.' copies of '.$code.'.',
+                );
+            }
+        }
+    }
+
+    /**
+     * ANT holds its own five cards rather than the five the other Corporations
+     * do, so its Facilities cannot open with Security team.
+     */
+    public function test_a_facility_only_opens_with_cards_its_corporation_owns(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        foreach ($game->corporations as $corporation) {
+            $owned = $corporation->protectionCardHoldings()
+                ->pluck('protection_card_type_id')
                 ->all();
 
-            $this->assertEqualsCanonicalizing($basic, $installed);
+            foreach ($corporation->facilities as $facility) {
+                foreach ($facility->protectionCards as $card) {
+                    $this->assertContains(
+                        $card->protection_card_type_id,
+                        $owned,
+                        $facility->name.' opened with a card '.$corporation->name.' was never given.',
+                    );
+                }
+            }
+        }
+    }
+
+    public function test_every_starting_facility_opens_with_one_card_of_each_kind(): void
+    {
+        $game = $this->setUpGame();
+
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        /** @var array<string, int> $basic */
+        $basic = config('running_hot.installed_in_each');
+
+        $this->assertNotEmpty($game->facilities);
+
+        foreach ($game->facilities as $facility) {
+            foreach (ProtectionKind::cases() as $kind) {
+                $this->assertSame(
+                    $basic[$kind->value] ?? 0,
+                    $facility->protectionCards()->where('kind', $kind)->count(),
+                    $facility->name.' should open with its '.$kind->label().' cards.',
+                );
+            }
         }
     }
 
@@ -303,14 +375,16 @@ class DefaultFacilitiesTest extends TestCase
         $this->assertSame($count, $game->facilities()->count());
     }
 
-    public function test_a_game_with_no_corporations_gets_the_catalogue_and_no_facilities(): void
+    public function test_a_game_with_no_corporations_gets_no_facilities(): void
     {
         $game = Game::factory()->create();
 
         $result = app(CreateDefaultFacilities::class)->handle($game);
 
         $this->assertSame(0, $result['facilities']);
-        $this->assertGreaterThan(0, $result['card_types']);
+        $this->assertSame(0, $result['holdings']);
+        // The catalogue does not depend on the roster, so it is already there.
+        $this->assertGreaterThan(0, $game->protectionCardTypes()->count());
     }
 
     public function test_a_missing_facility_type_is_skipped_rather_than_invented(): void
@@ -354,6 +428,9 @@ class DefaultFacilitiesTest extends TestCase
         $game = Game::query()->latest('id')->firstOrFail();
 
         $this->assertSame(0, $game->facilities()->count());
-        $this->assertSame(0, $game->protectionCardTypes()->count());
+        $this->assertSame(0, $game->corporations()->count());
+        // The catalogue is not part of the roster, so skipping the roster still
+        // leaves Control a full card list to build a game out of.
+        $this->assertGreaterThan(0, $game->protectionCardTypes()->count());
     }
 }

@@ -4,6 +4,7 @@ import { FacilityTypeCatalogue } from '@/components/facility-type-catalogue';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { ProtectionCardCatalogue } from '@/components/protection-card-catalogue';
+import { ProtectionCardHoldings } from '@/components/protection-card-holdings';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -17,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { publishList, store } from '@/routes/control/facilities';
 import { index, show } from '@/routes/control/games';
 import type {
+    CorporationCardHoldings,
     CorporationFacilities,
     FacilityListState,
     FacilityTypeSummary,
@@ -29,6 +31,7 @@ type Props = {
     facilities: CorporationFacilities[];
     facilityTypes: FacilityTypeSummary[];
     protectionCards: ProtectionCardSummary[];
+    cardHoldings: CorporationCardHoldings[];
     facilityList: FacilityListState;
 };
 
@@ -40,6 +43,7 @@ export default function ControlFacilities({
     facilities,
     facilityTypes,
     protectionCards,
+    cardHoldings,
     facilityList,
 }: Props) {
     // Security is placing cards while Control watches, and the clock moving is
@@ -50,6 +54,7 @@ export default function ControlFacilities({
             'facilities',
             'facilityTypes',
             'protectionCards',
+            'cardHoldings',
             'facilityList',
         ],
     });
@@ -331,11 +336,38 @@ export default function ControlFacilities({
 
                 <Card>
                     <CardHeader>
+                        <CardTitle>Cards each Corporation owns</CardTitle>
+                        <CardDescription>
+                            One copy of a card may defend one Facility, so the
+                            count here is what caps how far a card can stretch.
+                            Installing takes a copy out of the hand and removing
+                            one puts it back.
+                            <br />
+                            Set outright: the shop, the auctions, the research
+                            grants and any trade between Security players all
+                            happen at the table, so this is where Control writes
+                            down where they ended up.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ProtectionCardHoldings
+                            gameId={game.id}
+                            holdings={cardHoldings}
+                            cards={protectionCards}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
                         <CardTitle>Protection Card catalogue</CardTitle>
                         <CardDescription>
                             What Security can buy, what is rumoured, and what
-                            only research will unlock. Installing is free; the
-                            cost here is what the shop charges.
+                            only research will unlock. Installing costs no
+                            Credits — it costs a copy of the card. The list
+                            carries no prices: the shop is its own piece of
+                            work, so a cost here is only what Control chooses to
+                            charge.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

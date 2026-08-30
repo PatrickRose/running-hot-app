@@ -145,16 +145,112 @@ export type FacilityTypeSummary = {
     in_use: boolean;
 };
 
-/** An entry in the game's Protection Card catalogue (rulebook 3.3.2). */
-export type ProtectionCardSummary = {
-    id: number;
+/** One Corporation's stake in one Protection Card (rulebook 3.3.4). */
+export type CardHolding = {
+    card_type_id: number;
+    code: string | null;
     name: string;
     kind: ProtectionKind;
     kind_label: string;
-    cost: number;
-    challenge_skill: 'brawn' | 'hack';
-    challenge_skill_label: string;
-    challenge_strength: number;
+    kind_glyph: string;
+    /** Uninstalled copies. Installing moves one of these into a Facility. */
+    copies_in_hand: number;
+    /** Copies sitting in this Corporation's Facilities. */
+    installed: number;
+};
+
+export type CorporationCardHoldings = {
+    corporation_id: number;
+    corporation: string;
+    cards: CardHolding[];
+};
+
+/** A card Runners carry into a Run (rulebook 3.4.1). */
+export type EquipmentCardSummary = {
+    id: number;
+    code: string | null;
+    image_path: string | null;
+    name: string;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    /** The character that draws this category's icon in the game's own font. */
+    category_glyph: string;
+    effect: string;
+    /** Null where the market does not sell it. */
+    cost: number | null;
+    notes: string | null;
+};
+
+/** A tech tree a technology can sit on: one Corporation's, or the common set. */
+export type TechnologyTreeSummary = {
+    tree: string;
+    label: string;
+    /** Null for the technologies common to every Corporation. */
+    corporation_id: number | null;
+};
+
+/**
+ * One of the four Research Point suits, with the character that draws its icon
+ * in the game's own font.
+ *
+ * The glyph is a bare capital letter — the font maps icons onto ASCII — so it
+ * only reads as an icon while the font is loaded, and the label always travels
+ * with it.
+ */
+export type ResearchSuitSummary = {
+    value: string;
+    label: string;
+    glyph: string;
+};
+
+/** A technology on a Corporation's tech tree (rulebook 3.2.2). */
+export type TechnologySummary = {
+    id: number;
+    code: string | null;
+    image_path: string | null;
+    /**
+     * The other face. A research card is printed proposal side up and flipped
+     * over when it is researched, so it has two — and both are public.
+     */
+    back_image_path: string | null;
+    name: string;
+    /** The Corporation's own key, or "standard" for the common set. */
+    tree: string;
+    corporation: string | null;
+    description: string | null;
+    effect: string | null;
+    /** The price in each of the four Research Point suits. */
+    cost: Record<string, number>;
+    is_free: boolean;
+    prerequisites: string[];
+    required_facility_type: string | null;
+    copy_strength: number | null;
+    destroy_strength: number | null;
+};
+
+/** An entry in the game's Protection Card catalogue (rulebook 3.3.2). */
+export type ProtectionCardSummary = {
+    id: number;
+    /**
+     * The code printed on the card, and how its artwork is found. Null for a
+     * card Control invented mid-game, which has neither.
+     */
+    code: string | null;
+    /** Where the artwork lives, or null when there is none on record. */
+    image_path: string | null;
+    name: string;
+    kind: ProtectionKind;
+    kind_label: string;
+    /** The character that draws this kind's icon in the game's own font. */
+    kind_glyph: string;
+    /** Null for a card nobody can buy yet, which is not a card that is free. */
+    cost: number | null;
+    /**
+     * The challenge as the card prints it - "Brute (6)", or "Hack (4+N) - where
+     * N is the number of cards underneath this". Not a skill and a number,
+     * because the real cards are not.
+     */
+    challenge: string;
     consequence: string;
     charge_cost: number | null;
     charge_consequence: string | null;
@@ -169,6 +265,8 @@ export type InstalledProtectionCard = {
     /** 1 is the card Runners meet first. */
     position: number;
     card_type_id: number;
+    code: string | null;
+    image_path: string | null;
     name: string;
     challenge: string;
     consequence: string;
@@ -179,6 +277,7 @@ export type InstalledProtectionCard = {
 export type ProtectionStack = {
     kind: ProtectionKind;
     kind_label: string;
+    kind_glyph: string;
     slots: number;
     cards: InstalledProtectionCard[];
 };

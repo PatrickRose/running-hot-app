@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Actions\SeedEquipmentCards;
 use App\Actions\SeedFacilityTypes;
+use App\Actions\SeedProtectionCards;
+use App\Actions\SeedTechnologies;
 use App\Enums\DiscordProvisionStatus;
 use App\Enums\GameStatus;
 use Database\Factories\GameFactory;
@@ -44,16 +47,25 @@ class Game extends Model
     use HasFactory;
 
     /**
-     * Give every new game the starting Facility type catalogue.
+     * Give every new game the catalogues it is played out of: the Facility
+     * types, and the three card lists.
      *
      * A hook rather than a call in the controller so that every route into a
      * game - Control creating one, a seeder, a factory in a test - ends up with
-     * a catalogue. Control extends or edits it from there.
+     * them. Control extends or edits them from there.
+     *
+     * None of these depend on the roster, so they are safe this early. The
+     * technologies are the near miss: each tree belongs to a Corporation, and
+     * there are none yet, so they are written unattached here and attached once
+     * the roster exists. App\Actions\SeedTechnologies runs happily either way.
      */
     protected static function booted(): void
     {
         static::created(function (Game $game): void {
             app(SeedFacilityTypes::class)->handle($game);
+            app(SeedProtectionCards::class)->handle($game);
+            app(SeedEquipmentCards::class)->handle($game);
+            app(SeedTechnologies::class)->handle($game);
         });
     }
 
@@ -98,6 +110,18 @@ class Game extends Model
     public function protectionCardTypes(): HasMany
     {
         return $this->hasMany(ProtectionCardType::class);
+    }
+
+    /** @return HasMany<EquipmentCardType, $this> */
+    public function equipmentCardTypes(): HasMany
+    {
+        return $this->hasMany(EquipmentCardType::class);
+    }
+
+    /** @return HasMany<TechnologyType, $this> */
+    public function technologyTypes(): HasMany
+    {
+        return $this->hasMany(TechnologyType::class);
     }
 
     /** @return HasMany<Gang, $this> */
