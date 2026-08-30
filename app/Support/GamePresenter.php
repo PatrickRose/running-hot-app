@@ -288,7 +288,16 @@ class GamePresenter
             ->orderBy('name')
             ->get();
 
-        $own = $user === null ? null : $this->ownCorporation($game, $user);
+        // Worked out together, because both answers need the same user and the
+        // second one needs the first: whether they may defend is a question
+        // about the Corporation they turn out to sit in.
+        $own = null;
+        $mayDefend = false;
+
+        if ($user !== null) {
+            $own = $this->ownCorporation($game, $user);
+            $mayDefend = $own !== null && $this->mayDefend($game, $user, $own);
+        }
 
         return [
             'turn' => $turnNumber,
@@ -306,9 +315,9 @@ class GamePresenter
                         'available_from_turn' => $facility->available_from_turn,
                     ])->all(),
             ])->all(),
-            'own' => $own === null || $user === null
+            'own' => $own === null
                 ? null
-                : $this->ownDefences($own, $game, $user, $turn, $turnNumber, $defence),
+                : $this->ownDefences($own, $mayDefend, $turn, $turnNumber, $defence),
         ];
     }
 
@@ -399,14 +408,12 @@ class GamePresenter
      */
     private function ownDefences(
         Corporation $corporation,
-        Game $game,
-        User $user,
+        bool $mayDefend,
         ?Turn $turn,
         ?int $turnNumber,
         FacilityDefenceService $defence,
     ): array {
         $totals = $defence->derivedTotals($corporation);
-        $mayDefend = $this->mayDefend($game, $user, $corporation);
 
         $facilities = $corporation->facilities()
             ->with(['facilityType', 'protectionCards.cardType', 'turnStates' => fn ($query) => $query->where('turn_id', $turn?->id)])
