@@ -178,6 +178,50 @@ class FacilityDefenceService
     }
 
     /**
+     * What a proposed order would cost, without charging for it
+     * (rulebook 3.3.4).
+     *
+     * Security arranges a stack by dragging, so the page has to say what the
+     * arrangement will cost before they commit to it. That question is answered
+     * here rather than in the browser: the rule is a longest-ascending-run over
+     * the old positions, which is exactly the kind of thing that drifts once it
+     * is written down twice. reorder() quotes itself from this method, so the
+     * number on screen and the number charged cannot disagree.
+     *
+     * @param  array<int, int>  $orderedCardIds  installed card ids, outermost first
+     * @return array{moved: int, discount: int, cost: int, affordable: bool}
+     */
+    public function quoteReorder(Facility $facility, ProtectionKind $kind, array $orderedCardIds): array
+    {
+        $current = $this->stack($facility, $kind)->pluck('id')->all();
+        $requested = array_values(array_map('intval', $orderedCardIds));
+
+        // A reorder has to name the whole stack, so that a card cannot be
+        // dropped out of a Facility without paying the removal cost.
+        $requestedSorted = $requested;
+        $currentSorted = $current;
+        sort($requestedSorted);
+        sort($currentSorted);
+
+        if ($requestedSorted !== $currentSorted) {
+            throw ValidationException::withMessages([
+                'order' => 'That is not the full set of '.$kind->label().' cards in this Facility.',
+            ]);
+        }
+
+        $moved = $this->moveCost($current, $requested);
+        $discount = min($moved, $this->cardMoveDiscount($facility->corporation));
+        $cost = $moved - $discount;
+
+        return [
+            'moved' => $moved,
+            'discount' => $discount,
+            'cost' => $cost,
+            'affordable' => $facility->corporation->credits >= $cost,
+        ];
+    }
+
+    /**
      * Reorder one stack, charging 1 Credit for each card that had to move
      * (rulebook 3.3.4).
      *
@@ -191,33 +235,15 @@ class FacilityDefenceService
         ?User $actor = null,
     ): int {
         return DB::transaction(function () use ($facility, $kind, $orderedCardIds, $actor): int {
-            $current = $this->stack($facility, $kind)->pluck('id')->all();
-            $requested = array_values(array_map('intval', $orderedCardIds));
+            $quote = $this->quoteReorder($facility, $kind, $orderedCardIds);
 
-            // A reorder has to name the whole stack, so that a card cannot be
-            // dropped out of a Facility without paying the removal cost.
-            $requestedSorted = $requested;
-            $currentSorted = $current;
-            sort($requestedSorted);
-            sort($currentSorted);
-
-            if ($requestedSorted !== $currentSorted) {
-                throw ValidationException::withMessages([
-                    'order' => 'That is not the full set of '.$kind->label().' cards in this Facility.',
-                ]);
-            }
-
-            $moved = $this->moveCost($current, $requested);
-            $discount = min($moved, $this->cardMoveDiscount($facility->corporation));
-            $cost = $moved - $discount;
-
-            if ($cost > 0) {
+            if ($quote['cost'] > 0) {
                 $this->charge(
                     $facility,
-                    $cost,
+                    $quote['cost'],
                     sprintf(
                         'Moved %d %s card(s) in %s',
-                        $moved,
+                        $quote['moved'],
                         $kind->label(),
                         $facility->name,
                     ),
@@ -225,9 +251,9 @@ class FacilityDefenceService
                 );
             }
 
-            $this->resequence($facility, $kind, $requested);
+            $this->resequence($facility, $kind, array_values(array_map('intval', $orderedCardIds)));
 
-            return $cost;
+            return $quote['cost'];
         });
     }
 

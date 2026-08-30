@@ -15,6 +15,7 @@ use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacilityBoardController;
+use App\Http\Controllers\FacilityDefenceController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -30,6 +31,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Players' own view of the Facilities: the public list everyone may see,
     // plus their own Corporation's defences in full.
     Route::get('facilities', FacilityBoardController::class)->name('facilities');
+
+    // Security arranging their own Facilities. Guarded by the FacilityPolicy
+    // rather than by a role middleware, because the question is not "is this a
+    // Security player" but "is this Facility theirs".
+    Route::post('facilities/{facility}/cards', [FacilityDefenceController::class, 'install'])
+        ->name('facilities.cards.install');
+    Route::post('facilities/{facility}/cards/order', [FacilityDefenceController::class, 'reorder'])
+        ->name('facilities.cards.reorder');
+    // A GET, because asking what an arrangement would cost is a question
+    // rather than a change - and a question needs no CSRF token, so the board
+    // can ask it with a plain fetch as the cards move.
+    Route::get('facilities/{facility}/cards/order/quote', [FacilityDefenceController::class, 'quote'])
+        ->name('facilities.cards.quote');
+    Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
+        ->name('facilities.cards.remove');
 
     Route::middleware('can:control')
         ->prefix('control')

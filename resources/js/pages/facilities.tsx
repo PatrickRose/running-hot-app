@@ -1,5 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { CardFace } from '@/components/card-face';
+import { FacilityDefenceBoard } from '@/components/facility-defence-board';
 import { GameIcon } from '@/components/game-icon';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
@@ -65,7 +66,9 @@ export default function Facilities({ game, board }: Props) {
                     }
                 />
 
-                {own && (
+                {own?.can_defend && <FacilityDefenceBoard own={own} />}
+
+                {own && !own.can_defend && (
                     <Card>
                         <CardHeader>
                             <CardTitle>{own.name} — your defences</CardTitle>
@@ -78,8 +81,9 @@ export default function Facilities({ game, board }: Props) {
                                 {own.card_move_discount > 0 &&
                                     ` · ${own.card_move_discount} Credit discount on moving cards`}
                                 <br />
-                                Position 1 is the card Runners meet first. Ask
-                                Control to install, reorder or remove a card.
+                                Position 1 is the card Runners meet first.
+                                Arranging these is your Security player's job,
+                                or Control's.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4">
