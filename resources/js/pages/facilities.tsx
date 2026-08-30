@@ -150,11 +150,13 @@ export default function Facilities({ game, board }: Props) {
                                                         {stack.slots}
                                                     </span>
                                                 </p>
-                                                {/* Left to right in the
-                                                    order Runners meet them, so
-                                                    the stack reads the way it
-                                                    sits on the table. */}
-                                                <ol className="flex gap-3 overflow-x-auto pb-2">
+                                                {/* Top to bottom in the
+                                                    order Runners meet them: a
+                                                    stack is a stack, and
+                                                    reading down it is reading
+                                                    the order they are met
+                                                    in. */}
+                                                <ol className="flex flex-col gap-3">
                                                     {stack.cards.map((card) => (
                                                         <li key={card.id}>
                                                             <CardFace

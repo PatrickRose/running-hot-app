@@ -1,6 +1,8 @@
 import {
     closestCenter,
     DndContext,
+    pointerWithin,
+    rectIntersection,
     DragOverlay,
     KeyboardSensor,
     PointerSensor,
@@ -11,19 +13,21 @@ import {
 } from '@dnd-kit/core';
 import type {
     Announcements,
+    CollisionDetection,
     DragEndEvent,
     DragStartEvent,
 } from '@dnd-kit/core';
 import {
     arrayMove,
-    horizontalListSortingStrategy,
     SortableContext,
     sortableKeyboardCoordinates,
     useSortable,
+    verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { router } from '@inertiajs/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import { CardFace } from '@/components/card-face';
 import { GameIcon } from '@/components/game-icon';
@@ -144,6 +148,57 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
         {},
     );
     const [dragging, setDragging] = useState<DragData | null>(null);
+
+    const handNode = useRef<HTMLDivElement | null>(null);
+
+    /**
+     * Which drop target a card is over.
+     *
+     * The hand is measured here rather than taken from dnd-kit, and both halves
+     * of that matter.
+     *
+     * dnd-kit measures every target when a drag begins and then shifts those
+     * rectangles by however far the page has scrolled since. That is right for
+     * everything on this page except the hand, which is pinned and so does not
+     * move when the page does - so the moment a drag auto-scrolls, the hand's
+     * believed position walks off the screen it is still sitting on, and cards
+     * dropped squarely into it land in whatever Facility is scrolled underneath.
+     * Its own rectangle, read at the moment of the question, is never wrong.
+     *
+     * And the hand wins outright when the pointer is inside it, rather than
+     * competing on distance: it floats over the page, so a drop that looks like
+     * it landed in the hand did land in the hand. closestCenter would not agree
+     * - it measures to the centre of each target, and the hand is a wide bar
+     * whose centre is a long way from its own left-hand end.
+     *
+     * The passes below are the keyboard's, which has no pointer. Keyboard users
+     * take a card off with the Remove button rather than by aiming at the hand.
+     */
+    const collisionDetection = useCallback<CollisionDetection>((args) => {
+        const pointer = args.pointerCoordinates;
+        const hand = handNode.current?.getBoundingClientRect();
+
+        if (
+            pointer &&
+            hand &&
+            pointer.x >= hand.left &&
+            pointer.x <= hand.right &&
+            pointer.y >= hand.top &&
+            pointer.y <= hand.bottom
+        ) {
+            return [{ id: HAND }];
+        }
+
+        const underPointer = pointerWithin(args);
+
+        if (underPointer.length > 0) {
+            return underPointer;
+        }
+
+        const overlapping = rectIntersection(args);
+
+        return overlapping.length > 0 ? overlapping : closestCenter(args);
+    }, []);
 
     const sensors = useSensors(
         // A small distance so that a tap to open a card's tooltip is not read
@@ -415,13 +470,13 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
     return (
         <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={collisionDetection}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragCancel={() => setDragging(null)}
             accessibility={{ announcements }}
         >
-            <Hand cards={own.hand} />
+            <Hand cards={own.hand} nodeRef={handNode} />
 
             <Card>
                 <CardHeader>
@@ -485,11 +540,26 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
  * and why it says so: dragging a card out of a Facility and back into your hand
  * is exactly what taking it off the wall looks like.
  */
-function Hand({ cards }: { cards: HandCard[] }) {
+function Hand({
+    cards,
+    nodeRef,
+}: {
+    cards: HandCard[];
+    nodeRef: RefObject<HTMLDivElement | null>;
+}) {
+    const [open, setOpen] = useState(true);
     const { setNodeRef, isOver } = useDroppable({
         id: HAND,
         data: { container: HAND },
     });
+
+    // Held for the board as well as for dnd-kit: the board measures this
+    // element itself while a card is in the air, for the reason in
+    // collisionDetection below.
+    const ref = (node: HTMLDivElement | null) => {
+        setNodeRef(node);
+        nodeRef.current = node;
+    };
 
     // A kind with nothing in it is simply absent, rather than an empty row.
     const kinds = (['physical', 'cyber'] as const)
@@ -500,57 +570,81 @@ function Hand({ cards }: { cards: HandCard[] }) {
         .filter(({ held }) => held.length > 0);
 
     return (
-        <Card>
-            <CardHeader>
+        // Pinned, because the hand is one end of every gesture on this page:
+        // a Facility you have scrolled to is no use if the cards are three
+        // screens up, and neither is a hand you have to scroll back to in
+        // order to take a card off. Both ends have to be on screen at once.
+        <Card
+            ref={ref}
+            className={`sticky top-0 z-20 gap-3 py-3 shadow-md transition-colors ${
+                isOver ? 'border-primary bg-primary/10' : ''
+            }`}
+        >
+            <CardHeader className="flex flex-row flex-wrap items-baseline gap-x-3 gap-y-1">
                 <CardTitle>Your cards</CardTitle>
-                <CardDescription>
-                    Drag a card onto one of your Facilities to install it at the
-                    outermost slot. Drag an installed card back here to take it
-                    off — the first removal from a Facility each turn is free,
-                    and the rest cost a Credit each.
+                <CardDescription className="flex-1">
+                    Drag onto a Facility to install at the outermost slot; drag
+                    back here to take a card off.
                 </CardDescription>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setOpen((was) => !was)}
+                    aria-expanded={open}
+                >
+                    {open ? 'Hide' : `Show (${cards.length})`}
+                </Button>
             </CardHeader>
-            <CardContent
-                ref={setNodeRef}
-                className={`flex flex-col gap-4 rounded-md border border-dashed p-3 transition-colors ${
-                    isOver
-                        ? 'border-primary bg-primary/5'
-                        : 'border-transparent'
-                }`}
-            >
-                {/* Grouped by kind rather than shown as one row. A physical
-                    card cannot go in a cyber stack, and at this size the
-                    artwork does not say which it is - so the heading says it
-                    once for every card underneath it. */}
-                {kinds.map(({ kind, held }) => (
-                    <div key={kind} className="flex flex-col gap-1">
-                        <p className="flex items-center gap-1.5 text-sm font-medium">
-                            <GameIcon
-                                glyph={held[0].kind_glyph}
-                                label={held[0].kind_label}
-                            />
-                            <span aria-hidden="true">{held[0].kind_label}</span>
-                        </p>
-                        <ul
-                            aria-label={`${held[0].kind_label} cards in your hand`}
-                            className="flex gap-3 overflow-x-auto pb-1"
-                        >
-                            {held.map((card) => (
-                                <HandCardItem
-                                    key={card.card_type_id}
-                                    card={card}
+
+            {/* Collapsed, the hand is still a drop target: it becomes a slim
+                bar to drop a card onto when what you want is the room to see
+                your Facilities rather than your hand. */}
+            {open ? (
+                <CardContent className="grid grid-cols-2 gap-4">
+                    {/* Grouped by kind rather than shown as one row. A physical
+                        card cannot go in a cyber stack, and at this size the
+                        artwork does not say which it is - so the heading says
+                        it once for every card underneath it. Side by side
+                        rather than stacked, so the whole hand is one card tall
+                        and pinning it costs the Facilities little room. */}
+                    {kinds.map(({ kind, held }) => (
+                        <div key={kind} className="flex min-w-0 flex-col gap-1">
+                            <p className="flex items-center gap-1.5 text-sm font-medium">
+                                <GameIcon
+                                    glyph={held[0].kind_glyph}
+                                    label={held[0].kind_label}
                                 />
-                            ))}
-                        </ul>
-                    </div>
-                ))}
-                {cards.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                        Every copy you hold is installed. Control sets what your
-                        Corporation owns.
-                    </p>
-                )}
-            </CardContent>
+                                <span aria-hidden="true">
+                                    {held[0].kind_label}
+                                </span>
+                            </p>
+                            <ul
+                                aria-label={`${held[0].kind_label} cards in your hand`}
+                                className="flex gap-3 overflow-x-auto pb-1"
+                            >
+                                {held.map((card) => (
+                                    <HandCardItem
+                                        key={card.card_type_id}
+                                        card={card}
+                                    />
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                    {cards.length === 0 && (
+                        <p className="col-span-2 text-sm text-muted-foreground">
+                            Every copy you hold is installed. Control sets what
+                            your Corporation owns.
+                        </p>
+                    )}
+                </CardContent>
+            ) : (
+                <CardContent className="text-sm text-muted-foreground">
+                    {cards.length === 0
+                        ? 'Every copy you hold is installed.'
+                        : `${cards.length} card(s) hidden. Drop a card here to take it off a Facility.`}
+                </CardContent>
+            )}
         </Card>
     );
 }
@@ -699,14 +793,15 @@ function StackPanel({
             <SortableContext
                 id={key}
                 items={cards.map((card) => `card-${card.id}`)}
-                strategy={horizontalListSortingStrategy}
+                strategy={verticalListSortingStrategy}
             >
-                {/* Left to right in the order Runners meet them, so the stack
-                    reads the way it sits on the table. */}
+                {/* Top to bottom in the order Runners meet them: a stack is a
+                    stack, and reading down it is reading the order the cards
+                    are met in. */}
                 <ol
                     ref={setNodeRef}
                     aria-label={`${stack.kind_label} stack of ${facility.name}`}
-                    className={`flex min-h-12 gap-3 overflow-x-auto rounded-md border border-dashed p-2 pb-3 transition-colors ${
+                    className={`flex min-h-12 flex-col gap-3 rounded-md border border-dashed p-2 transition-colors ${
                         isOver
                             ? 'border-primary bg-primary/5'
                             : 'border-transparent'
@@ -840,7 +935,7 @@ function InstalledCardItem({
                 transition,
                 opacity: isDragging ? 0.4 : undefined,
             }}
-            className="flex shrink-0 flex-col items-start gap-1"
+            className="flex shrink-0 items-center gap-2"
         >
             <div
                 className="cursor-grab touch-none rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
