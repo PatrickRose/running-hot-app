@@ -42,11 +42,13 @@ class SyncDiscordRoles implements ShouldQueue
         $games = Game::query()
             ->whereNotNull('discord_guild_id')
             ->where('status', '!=', GameStatus::Finished)
-            // Either they hold a character in it, or they are Control, who
-            // belong in every game's server.
-            ->when(! $user->isControl(), fn ($query) => $query->whereHas(
-                'characters',
-                fn ($characters) => $characters->where('user_id', $user->id),
+            // Either they hold a character in it, or a seat on its Control
+            // team. Control of everything belongs in every game's server, so
+            // that account is not filtered at all.
+            ->unless($user->isControlEverywhere(), fn ($query) => $query->where(
+                fn ($game) => $game
+                    ->whereHas('characters', fn ($characters) => $characters->where('user_id', $user->id))
+                    ->orWhereHas('controlMembers', fn ($members) => $members->where('user_id', $user->id)),
             ))
             ->get();
 

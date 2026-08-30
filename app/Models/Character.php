@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CharacterRole;
+use App\Support\DiscordHandle;
 use Database\Factories\CharacterFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -98,18 +99,10 @@ class Character extends Model
 
     /**
      * Reduce a Discord handle to the form claims are matched on.
-     *
-     * Control types these off a sign-up sheet, so they arrive with stray
-     * whitespace, a leading "@", and inconsistent case. Modern Discord handles
-     * are lowercase, but the legacy "Name#1234" form is preserved as typed
-     * beyond the case fold, since the discriminator is part of the handle.
      */
     public static function normaliseDiscordUsername(?string $handle): ?string
     {
-        $handle = mb_strtolower(trim((string) $handle));
-        $handle = ltrim($handle, '@');
-
-        return $handle === '' ? null : $handle;
+        return DiscordHandle::normalise($handle);
     }
 
     /**

@@ -136,6 +136,16 @@ class Game extends Model
         return $this->hasMany(Character::class);
     }
 
+    /**
+     * The people running this game (rather than playing in it).
+     *
+     * @return HasMany<ControlMember, $this>
+     */
+    public function controlMembers(): HasMany
+    {
+        return $this->hasMany(ControlMember::class);
+    }
+
     /** @return HasMany<TrackerAdjustment, $this> */
     public function trackerAdjustments(): HasMany
     {

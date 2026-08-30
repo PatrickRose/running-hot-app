@@ -66,7 +66,14 @@ class AppServiceProvider extends ServiceProvider
 
     protected function configureGates(): void
     {
+        // The Control area at all: the account-wide flag, or a seat on some
+        // game's Control team.
         Gate::define('control', fn (User $user): bool => $user->isControl());
+
+        // One game in it. Named on that game's Control team, or Control of
+        // everything. Every route carrying a {game} checks this, so a seat on
+        // Saturday's game is not a seat on somebody else's.
+        Gate::define('control-game', fn (User $user, Game $game): bool => $user->isControlFor($game));
     }
 
     /**

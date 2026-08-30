@@ -49,6 +49,14 @@ export type DiscordMemberSync = {
     synced_at: string | null;
 };
 
+/** A seat on a game's Control team, waiting on a handle or bound to an account. */
+export type ControlMember = {
+    id: number;
+    discord_username: string | null;
+    claimed_by: string | null;
+    is_you: boolean;
+};
+
 export type GameSummary = {
     id: number;
     name: string;

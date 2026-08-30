@@ -10,6 +10,7 @@ use App\Enums\DiscordSyncStatus;
 use App\Enums\GameStatus;
 use App\Jobs\SyncDiscordRoles;
 use App\Models\Character;
+use App\Models\ControlMember;
 use App\Models\Corporation;
 use App\Models\DiscordResource;
 use App\Models\Game;
@@ -140,6 +141,47 @@ class DiscordRoleSyncTest extends TestCase
         app(SyncDiscordRolesForUser::class)->handle($game, $user);
 
         $this->assertSame([$this->roleId($game, GuildBlueprint::ROLE_CONTROL)], $guild->members['4004']);
+    }
+
+    public function test_a_seat_on_the_control_team_gets_the_control_role(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = $this->provisionedGame($guild);
+
+        $user = User::factory()->create(['discord_id' => '4009']);
+        ControlMember::factory()->for($game)->create(['user_id' => $user->id]);
+        $guild->addMember('4009');
+
+        app(SyncDiscordRolesForUser::class)->handle($game, $user);
+
+        $this->assertSame([$this->roleId($game, GuildBlueprint::ROLE_CONTROL)], $guild->members['4009']);
+    }
+
+    public function test_the_job_syncs_the_games_someone_holds_a_seat_on(): void
+    {
+        config()->set('services.discord.bot_token', 'test-bot-token');
+
+        $seated = Game::factory()->running()->create(['discord_guild_id' => '9001']);
+        $other = Game::factory()->running()->create(['discord_guild_id' => '9002']);
+        $user = User::factory()->create(['discord_id' => '4010']);
+        ControlMember::factory()->for($seated)->create(['user_id' => $user->id]);
+
+        $synced = [];
+        $this->mock(SyncDiscordRolesForUser::class, function ($mock) use (&$synced) {
+            $mock->shouldReceive('handle')->andReturnUsing(function (Game $game) use (&$synced) {
+                $synced[] = $game->id;
+
+                return DiscordSyncStatus::Synced;
+            });
+        });
+
+        (new SyncDiscordRoles($user->id))->handle(
+            app(SyncDiscordRolesForUser::class),
+            app(DiscordApi::class),
+        );
+
+        $this->assertSame([$seated->id], $synced);
+        $this->assertNotContains($other->id, $synced);
     }
 
     public function test_a_player_who_has_not_joined_the_server_is_recorded_not_failed(): void

@@ -40,6 +40,12 @@ class User extends Authenticatable implements PasskeyUser
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     /**
+     * Memoised: isControl is asked on every Control request, often more than
+     * once, and the answer cannot change inside one.
+     */
+    private ?bool $controlAnywhere = null;
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -60,15 +66,45 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(Character::class);
     }
 
+    /** @return HasMany<ControlMember, $this> */
+    public function controlMemberships(): HasMany
+    {
+        return $this->hasMany(ControlMember::class);
+    }
+
     /**
      * Members of the Control team may drive the turn clock and edit trackers.
      *
-     * Deliberately not mass assignable: it is granted from the console.
+     * True for anyone Control anywhere: the account-wide flag, or a seat on
+     * some game's Control team. Which games they may actually touch is
+     * isControlFor, checked per game on the routes that name one.
      */
     public function isControl(): bool
+    {
+        return $this->controlAnywhere ??= $this->isControlEverywhere()
+            || $this->controlMemberships()->exists();
+    }
+
+    /**
+     * The account-wide flag, which is Control of every game there will ever be.
+     *
+     * Deliberately not mass assignable: it is granted from the console, and is
+     * for whoever owns the deployment. Everyone else running a game is named on
+     * that game's Control team instead.
+     */
+    public function isControlEverywhere(): bool
     {
         // Cast defensively: a freshly created model may not have the column
         // hydrated, in which case the attribute is missing rather than false.
         return (bool) $this->is_control;
+    }
+
+    /**
+     * Whether this account is Control of one particular game.
+     */
+    public function isControlFor(Game $game): bool
+    {
+        return $this->isControlEverywhere()
+            || $this->controlMemberships()->where('game_id', $game->id)->exists();
     }
 }
