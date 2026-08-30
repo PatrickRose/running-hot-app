@@ -667,7 +667,7 @@ function HandCardItem({ card }: { card: HandCard }) {
                 transform: CSS.Translate.toString(transform),
                 opacity: isDragging ? 0.4 : undefined,
             }}
-            className="flex shrink-0 cursor-grab touch-none flex-col items-start gap-1 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
+            className="relative flex shrink-0 cursor-grab touch-none flex-col items-start gap-1 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
             {...attributes}
             {...listeners}
         >
@@ -677,8 +677,18 @@ function HandCardItem({ card }: { card: HandCard }) {
                 code={card.code}
                 imagePath={card.image_path}
                 lines={cardLines(card)}
-                footer={`${card.copies_in_hand} in hand`}
             />
+            {/* How many you are holding, on the card rather than under it.
+                CardFace prints its footer only on a card it is drawing as text,
+                so a card with artwork said nothing about its count at all - and
+                the count is what tells you whether installing this one leaves
+                you any. It is not printed on the card either, so it belongs
+                here rather than in the card's own words. pointer-events off so
+                the badge cannot swallow the start of a drag. */}
+            <span className="pointer-events-none absolute top-1.5 left-1.5 rounded-md bg-background/90 px-1.5 py-0.5 text-xs font-medium tabular-nums shadow-sm ring-1 ring-border">
+                <span aria-hidden="true">&times;{card.copies_in_hand}</span>
+                <span className="sr-only">{card.copies_in_hand} in hand</span>
+            </span>
         </li>
     );
 }
