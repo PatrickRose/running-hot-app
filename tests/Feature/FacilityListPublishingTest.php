@@ -263,20 +263,27 @@ class FacilityListPublishingTest extends TestCase
     }
 
     /**
-     * The normal case for a checkout with no artwork, and for a Corporation
-     * Control invented mid-game: neither key at all rather than an empty one,
-     * which Discord would reject.
+     * What a Corporation Control invented mid-game gets: neither key at all
+     * rather than an empty one, which Discord would reject.
+     *
+     * The Corporation is made here with a name nothing in the game has, rather
+     * than one from the roster. Every real faction now has artwork committed,
+     * so asserting the absence of it against Gordon passed only while the
+     * repository had none - which is the whole class of test that breaks the
+     * day the artwork lands, and this one did.
      */
     public function test_a_corporation_with_no_logo_gets_no_picture(): void
     {
         $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Unbranded Combine']);
 
         $embeds = FacilityListEmbed::payload($game)['embeds'];
-        $gordon = collect($embeds)->firstWhere('title', 'Gordon');
+        $mine = collect($embeds)->firstWhere('title', 'Test Unbranded Combine');
 
-        $this->assertNotNull($gordon);
-        $this->assertArrayNotHasKey('thumbnail', $gordon);
-        $this->assertArrayNotHasKey('image', $gordon);
+        $this->assertNotNull($mine);
+        $this->assertNull(LogoImage::pathFor('Test Unbranded Combine'));
+        $this->assertArrayNotHasKey('thumbnail', $mine);
+        $this->assertArrayNotHasKey('image', $mine);
     }
 
     public function test_the_heading_and_the_timestamp_bracket_the_list(): void

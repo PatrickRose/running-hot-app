@@ -519,6 +519,14 @@ not: the logos are committed, so a test cleaning up after itself would delete on
 trusting the convention, and every name it uses is one nothing in the game has.
 `TestCase` calls `LogoImage::flush()` for every test.
 
+**Nor may a test assert that a real faction has *no* artwork.** That is the same
+mistake from the other end, and it is the one that actually happened: a test
+asserting Gordon's embed carried no picture passed for exactly as long as the
+repository had no logos in it, and failed on the commit that added them. A test
+about the missing case makes its own subject with a name nothing in the game has —
+`Corporation::factory()->create(['name' => 'Test Unbranded Combine'])` — so it goes
+on meaning what it says after every faction has been drawn.
+
 ## The icon font
 
 The rulebook prints the four Research Point suits as icons and never names them in its body text, which is why they do not survive `pdftotext` and why issue #6 says to read the PDF for §3.2. The game's own font draws them, and it is committed at `resources/fonts/RunningHot-Font.ttf`.
