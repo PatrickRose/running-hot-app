@@ -5,6 +5,7 @@ namespace App\Support\Discord;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\Game;
+use App\Support\FactionLogo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -14,7 +15,9 @@ use Illuminate\Support\Carbon;
  * returns a payload, touching neither Discord nor anything else. What players
  * are shown is therefore assertable in a unit test, which matters more here
  * than anywhere else in the application, because this is the one thing the
- * application shows to everyone at once.
+ * application shows to everyone at once. It reads the faction artwork directory
+ * through {@see FactionLogo} for a Corporation's thumbnail, which is still a
+ * read and still assertable - a test writes a logo and looks at the payload.
  *
  * WHAT MUST NOT GO IN HERE. The channel is visible to Runners, and rulebook
  * 3.4.2 says outright that "The number of Protection Cards that a Facility
@@ -41,7 +44,8 @@ class FacilityListEmbed
 
     /**
      * One embed per Corporation, coloured to match the Discord role its players
-     * already wear, so a Corporation is the same colour everywhere.
+     * already wear and carrying its logo, so a Corporation is the same colour
+     * and the same badge everywhere.
      *
      * An embed each rather than one embed of fields because a Corporation with
      * five Facilities is a block of text either way, and separating them gives
@@ -88,11 +92,24 @@ class FacilityListEmbed
      */
     private static function corporationEmbed(Corporation $corporation, ?int $turnNumber): array
     {
-        return [
+        $embed = [
             'title' => $corporation->name,
             'color' => GuildBlueprint::colourFor($corporation->name),
             'description' => self::facilityLines($corporation, $turnNumber),
         ];
+
+        // A logo where there is one. Absolute, because Discord fetches the
+        // image itself rather than resolving it against anything, and omitted
+        // rather than empty where there is none: a Corporation Control invented
+        // mid-game has no artwork, and neither does a checkout that has not had
+        // the logos added to it.
+        $logo = FactionLogo::urlFor($corporation->name);
+
+        if ($logo !== null) {
+            $embed['thumbnail'] = ['url' => $logo];
+        }
+
+        return $embed;
     }
 
     /**

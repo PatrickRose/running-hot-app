@@ -248,6 +248,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | The three card lists | `App\Support\ProtectionCardBlueprint`, `EquipmentCardBlueprint`, `TechnologyBlueprint` |
 | Seeding them into a game | `App\Actions\SeedProtectionCards`, `SeedEquipmentCards`, `SeedTechnologies`, `SeedProtectionCardHoldings` |
 | Finding a card's artwork from its code | `App\Support\CardImage` |
+| Finding a faction's logo from its name | `App\Support\FactionLogo` |
+| A faction's logo and colour in one payload | `App\Support\FactionBadge`, `resources/js/components/faction-badge.tsx` |
 | What each icon in the game's font means | `App\Support\IconFont` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
@@ -368,7 +370,7 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 **The `#facility-list` embed is the one thing the application shows everyone at once**, so what it leaves out matters more than what it says. Facility names, their types and whether they are still building — and nothing else. Rulebook 3.4.2 makes the number of Protection Cards in a Facility Secret, and technology contents are secret so that reconnaissance costs something, so a stack size here would hand every Runner a free recon action. `FacilityListEmbed` is pure for exactly this reason: what players see is asserted in a test, including a guard that no card title ever reaches it.
 
-**One embed per Corporation**, coloured with `GuildBlueprint::colourFor()` so a Corporation matches the Discord role its players already wear. The cost is Discord's cap of ten embeds per message, against twenty-five fields had it been one embed of fields — a game with more Corporations than ten gets the first ten and a footer saying so. Two Corporations can still collide on a colour, because `colourFor` is a hash of the name across ten colours; that is true of the roles too.
+**One embed per Corporation**, coloured with `GuildBlueprint::colourFor()` and carrying its logo as a thumbnail, so a Corporation matches the Discord role its players already wear. The cost is Discord's cap of ten embeds per message, against twenty-five fields had it been one embed of fields — a game with more Corporations than ten gets the first ten and a footer saying so. Two Corporations can still collide on a colour, because `colourFor` is a hash of the name across ten colours; that is true of the roles too.
 
 **It is posted once and then rewritten.** A list that changes every time a Facility opens would otherwise leave the channel full of superseded copies, and a player reading the wrong one is worse than a player reading none. The message id is a `discord_resources` row (`message:facility-list`), so the reconcile pattern already covers it. This needs the *bot*, not the webhook: a webhook only posts to the channel it was made in.
 
@@ -437,6 +439,53 @@ Control sets any count outright via `ProtectionCardHoldingController`. The Corpo
 
 **Not modelled, deliberately:** the Corporation shop, auctions, research grants, trading copies between Security players, and who owns which Equipment card. Each is a conversation with Control, who then sets the count.
 
+## Faction logos
+
+**A faction's logo is identified by a slug of its name, and by nothing else.** The
+roster in `config/running_hot.php` is keyed by name, so `App\Support\FactionLogo`
+resolves `public/images/factions/<slug>.{webp,png,jpg,jpeg}` — Augmented Nucleotech
+from `augmented-nucleotech`, g33ks from `g33ks`. There is deliberately no
+`logo_path` column: nothing stores a path, so no path can drift from the faction it
+belongs to, and artwork committed after a game was created appears in that game
+immediately rather than waiting on a column to be backfilled. The directory is
+listed once per request, for the reason `CardImage` does the same.
+
+**A faction with no logo is the normal case, and a clean checkout is in it.** So
+every caller copes with null: the Discord embed carries no `thumbnail` key at all
+rather than an empty one, and the application's own pages draw the faction's
+initials on the colour `GuildBlueprint::colourFor()` gives it. That is also exactly
+what a Corporation Control invents mid-game gets, which is why the fallback is a
+first-class rendering rather than a placeholder — `FactionBadge` (the React one)
+draws both at the same size, so a row of nine lines up whether or not the artwork
+has been drawn.
+
+**No SVG, even though the browser would draw one perfectly well.** Discord does not
+render svg in an embed, so a faction whose only file was vector would look right on
+the page and silently have no thumbnail in the channel. One resolver answering the
+same for both consumers is worth more than vector artwork at 80×80.
+
+**The logo and the colour travel together, because the second is the fallback for
+the first.** `App\Support\FactionBadge::for()` returns the name, the logo path and
+the colour as CSS, and it is spread into every payload that describes a faction —
+so `name`, `logo_path` and `colour` mean the same thing on the Control panel, the
+dashboard, the Facilities page and the card holdings, and the browser takes one
+shape instead of one per page. The colour is shaped server-side because it is
+derived from an md5 of the name, and a second implementation of that in TypeScript
+would be a hash function written twice to agree on a swatch. Two factions can
+collide on a colour — `colourFor` hashes across ten — which is already true of the
+Discord roles, and the logo is what tells them apart.
+
+**Discord fetches an embed's image itself**, so `FactionLogo::urlFor()` is absolute
+where `pathFor()` is rooted. That also means Discord cannot see a logo on a dev
+server it cannot reach: the thumbnail is quietly absent rather than broken. There
+is a line about this in the README, beside the file names.
+
+**A test must never write over a faction's real artwork**, for the reason the card
+tests must not: the logos are committed, so a test cleaning up after itself would
+delete one. `FactionLogoTest::writeLogo()` asserts the file does not already exist
+rather than trusting the convention, and every name it uses is one no faction has.
+`TestCase` calls `FactionLogo::flush()` for every test.
+
 ## The icon font
 
 The rulebook prints the four Research Point suits as icons and never names them in its body text, which is why they do not survive `pdftotext` and why issue #6 says to read the PDF for §3.2. The game's own font draws them, and it is committed at `resources/fonts/RunningHot-Font.ttf`.
@@ -452,6 +501,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, and the drag-and-drop board Security arranges their own defences on.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, and faction logos wherever the application names a team.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

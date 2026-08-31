@@ -1,6 +1,7 @@
 import { Form, Head, router, usePoll } from '@inertiajs/react';
 import { FacilityPanel } from '@/components/facility-panel';
 import { FacilityTypeCatalogue } from '@/components/facility-type-catalogue';
+import { FactionBadge } from '@/components/faction-badge';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { ProtectionCardCatalogue } from '@/components/protection-card-catalogue';
@@ -287,7 +288,10 @@ export default function ControlFacilities({
                 {facilities.map((corporation) => (
                     <Card key={corporation.id}>
                         <CardHeader>
-                            <CardTitle>{corporation.name}</CardTitle>
+                            <CardTitle className="flex items-center gap-2">
+                                <FactionBadge faction={corporation} />
+                                {corporation.name}
+                            </CardTitle>
                             <CardDescription>
                                 {corporation.credits} Credits &middot;{' '}
                                 {corporation.physical_slots} physical and{' '}

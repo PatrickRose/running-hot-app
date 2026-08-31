@@ -10,6 +10,7 @@ use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\User;
+use App\Support\FactionBadge;
 use App\Support\GamePresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -183,6 +184,29 @@ class FacilityBoardTest extends TestCase
         $mine = collect($board['public'])->where('is_yours', true)->pluck('name')->all();
 
         $this->assertSame(['Gordon'], $mine);
+    }
+
+    /**
+     * Every faction in a payload carries the same three fields, so the browser
+     * takes one shape everywhere instead of one per page. logo_path is null on
+     * a checkout with no artwork, which is the normal case and not an error.
+     */
+    public function test_every_corporation_carries_its_badge(): void
+    {
+        $board = $this->boardFor($this->playerFor('Gordon', CharacterRole::Security));
+
+        foreach ($board['public'] as $corporation) {
+            $this->assertArrayHasKey('logo_path', $corporation);
+            $this->assertSame(
+                FactionBadge::cssColour($corporation['name']),
+                $corporation['colour'],
+            );
+        }
+
+        $this->assertNotNull($board['own']);
+        $this->assertSame('Gordon', $board['own']['name']);
+        $this->assertSame(FactionBadge::cssColour('Gordon'), $board['own']['colour']);
+        $this->assertArrayHasKey('logo_path', $board['own']);
     }
 
     public function test_a_player_with_no_character_still_sees_the_public_list(): void

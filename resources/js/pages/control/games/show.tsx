@@ -1,6 +1,7 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
 import { ControlTeam } from '@/components/control-team';
 import { DiscordHandle } from '@/components/discord-handle';
+import { FactionBadge } from '@/components/faction-badge';
 import { GameDiscordPanel } from '@/components/game-discord';
 import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
@@ -628,7 +629,15 @@ function SubjectTable({
                             key={subject.subject_id}
                             className="border-b last:border-0"
                         >
-                            <td className="py-2 pr-4">{subject.name}</td>
+                            <td className="py-2 pr-4">
+                                <span className="flex items-center gap-2">
+                                    <FactionBadge
+                                        faction={subject}
+                                        size="small"
+                                    />
+                                    {subject.name}
+                                </span>
+                            </td>
                             {columns.map(([key, label]) => (
                                 <td key={key} className="py-2 pr-4">
                                     <TrackerValue

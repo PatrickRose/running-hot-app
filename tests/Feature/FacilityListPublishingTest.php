@@ -13,8 +13,10 @@ use App\Models\User;
 use App\Services\TurnEngine;
 use App\Support\Discord\FacilityListEmbed;
 use App\Support\Discord\GuildBlueprint;
+use App\Support\FactionLogo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -175,6 +177,53 @@ class FacilityListPublishingTest extends TestCase
 
         $this->assertNotNull($gordon);
         $this->assertSame(GuildBlueprint::colourFor('Gordon'), $gordon['color']);
+    }
+
+    /**
+     * A logo where there is one, absolute because Discord fetches the image
+     * itself. The name is one no faction has, so this never writes over the
+     * game's own artwork - which a test cleaning up after itself would delete.
+     */
+    public function test_an_embed_carries_its_corporations_logo_as_an_absolute_thumbnail(): void
+    {
+        $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Logo Combine']);
+
+        $directory = public_path(FactionLogo::DIRECTORY);
+        File::ensureDirectoryExists($directory);
+        $path = $directory.'/test-logo-combine.png';
+
+        $this->assertFileDoesNotExist($path, 'A test must never write over the game\'s own artwork.');
+
+        File::put($path, 'not really an image');
+        FactionLogo::flush();
+
+        try {
+            $embeds = FacilityListEmbed::payload($game)['embeds'];
+            $mine = collect($embeds)->firstWhere('title', 'Test Logo Combine');
+
+            $this->assertNotNull($mine);
+            $this->assertSame(url('/images/factions/test-logo-combine.png'), $mine['thumbnail']['url']);
+        } finally {
+            File::delete($path);
+            FactionLogo::flush();
+        }
+    }
+
+    /**
+     * The normal case for a checkout with no artwork, and for a Corporation
+     * Control invented mid-game: no thumbnail key at all rather than an empty
+     * one, which Discord would reject.
+     */
+    public function test_a_corporation_with_no_logo_gets_no_thumbnail(): void
+    {
+        $game = $this->gameWithChannel();
+
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
+        $gordon = collect($embeds)->firstWhere('title', 'Gordon');
+
+        $this->assertNotNull($gordon);
+        $this->assertArrayNotHasKey('thumbnail', $gordon);
     }
 
     public function test_the_heading_and_the_timestamp_bracket_the_list(): void

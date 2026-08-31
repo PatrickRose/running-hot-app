@@ -30,6 +30,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import { CardFace } from '@/components/card-face';
+import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import { StackEnd } from '@/components/stack-end';
 import { Badge } from '@/components/ui/badge';
@@ -481,7 +482,10 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>{own.name} — your Facilities</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                        <FactionBadge faction={own} />
+                        {own.name} — your Facilities
+                    </CardTitle>
                     <CardDescription>
                         {own.credits} Credits &middot; {own.physical_slots}{' '}
                         physical and {own.cyber_slots} cyber slots per Facility
