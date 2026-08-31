@@ -154,6 +154,118 @@ export function TechnologyForm({
                         </p>
                     </fieldset>
 
+                    <fieldset className="grid gap-3 lg:col-span-2">
+                        <legend className="mb-2 text-sm font-medium">
+                            Or: add a card to the deck instead
+                        </legend>
+                        <p className="text-xs text-muted-foreground">
+                            Deck customisation (rulebook 3.2.3) prices unlike
+                            anything else on the tree, because the suits are the
+                            player's choice — “4 in any suit”, “6 in any suit
+                            and 3 in another”. Fill in one amount per suit the
+                            player has to pay from; leave them all blank and
+                            this is an ordinary technology.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            {[0, 1, 2, 3].map((index) => (
+                                <div key={index} className="grid gap-1">
+                                    <Label
+                                        htmlFor={`technology-amount-${index}`}
+                                        className="text-xs"
+                                    >
+                                        {index === 0
+                                            ? 'Amount (card’s suit)'
+                                            : `Amount ${index + 1}`}
+                                    </Label>
+                                    <Input
+                                        id={`technology-amount-${index}`}
+                                        name="deck_grant[amounts][]"
+                                        type="number"
+                                        min={0}
+                                        placeholder="—"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div className="grid gap-1">
+                                <Label
+                                    htmlFor="technology-value-min"
+                                    className="text-xs"
+                                >
+                                    Lowest value
+                                </Label>
+                                <Input
+                                    id="technology-value-min"
+                                    name="deck_grant[value_min]"
+                                    type="number"
+                                    min={1}
+                                    placeholder="3"
+                                />
+                            </div>
+                            <div className="grid gap-1">
+                                <Label
+                                    htmlFor="technology-value-max"
+                                    className="text-xs"
+                                >
+                                    Highest value
+                                </Label>
+                                <Input
+                                    id="technology-value-max"
+                                    name="deck_grant[value_max]"
+                                    type="number"
+                                    min={1}
+                                    placeholder="5"
+                                />
+                            </div>
+                            <div className="grid gap-1">
+                                <Label
+                                    htmlFor="technology-research-facilities"
+                                    className="text-xs"
+                                >
+                                    Research Facilities needed
+                                </Label>
+                                <Input
+                                    id="technology-research-facilities"
+                                    name="deck_grant[requires_research_facilities]"
+                                    type="number"
+                                    min={0}
+                                    placeholder="0"
+                                />
+                            </div>
+                            <div className="grid gap-1">
+                                <Label
+                                    htmlFor="technology-restriction"
+                                    className="text-xs"
+                                >
+                                    Printed on the card
+                                </Label>
+                                <Input
+                                    id="technology-restriction"
+                                    name="deck_grant[restriction]"
+                                    placeholder="No single"
+                                />
+                            </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm">
+                            {/* A hidden 0 in front, so an unticked box still
+                                sends an answer rather than nothing. */}
+                            <input
+                                type="hidden"
+                                name="deck_grant[wild]"
+                                value="0"
+                            />
+                            <input
+                                type="checkbox"
+                                name="deck_grant[wild]"
+                                value="1"
+                                className="size-4"
+                            />
+                            The card is wild — it counts as any suit
+                        </label>
+                        <InputError message={errors['deck_grant.amounts']} />
+                    </fieldset>
+
                     <div className="grid gap-2">
                         <Label htmlFor="technology-prerequisites">
                             Prerequisites

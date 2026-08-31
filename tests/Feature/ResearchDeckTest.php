@@ -12,9 +12,11 @@ use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\ResearchCard;
 use App\Models\TechnologyType;
+use App\Models\User;
 use App\Services\ResearchTableService;
 use App\Services\TrackerService;
 use App\Support\FacilityTypeBlueprint;
+use App\Support\TechnologyBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -254,6 +256,76 @@ class ResearchDeckTest extends TestCase
         $this->assertSame(ResearchSuit::Brain, $card->refresh()->suit);
         $this->assertSame(8, $card->value);
         $this->assertSame('No single', $card->restriction);
+    }
+
+    public function test_control_writes_a_deck_customisation_row_of_its_own(): void
+    {
+        // 3.2.4 has Research Control pricing a player's own proposal and adding
+        // it to the tree, and a proposal may buy a research card.
+        $control = User::factory()->create(['is_control' => true]);
+
+        $this->actingAs($control)
+            ->post(route('control.technologies.store', $this->game), [
+                'name' => 'Bespoke deck card',
+                'tree' => TechnologyBlueprint::COMMON,
+                'cog_cost' => 0,
+                'brain_cost' => 0,
+                'leaf_cost' => 0,
+                'maths_cost' => 0,
+                'prerequisites' => '',
+                'deck_grant' => [
+                    'amounts' => ['6', '3', '', ''],
+                    'value_min' => '3',
+                    'value_max' => '5',
+                    'wild' => '0',
+                    'restriction' => 'No single',
+                    'requires_research_facilities' => '2',
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        /** @var TechnologyType $written */
+        $written = $this->game->technologyTypes()->where('name', 'Bespoke deck card')->sole();
+
+        $this->assertSame([
+            'amounts' => [6, 3],
+            'value_min' => 3,
+            'value_max' => 5,
+            'wild' => false,
+            'restriction' => 'No single',
+            'requires_research_facilities' => 2,
+        ], $written->deckGrant());
+    }
+
+    public function test_a_technology_written_with_no_amounts_is_an_ordinary_one(): void
+    {
+        // The form sends the whole block whether or not anybody filled it in,
+        // so a blank set of boxes has to read as "not deck customisation".
+        $this->actingAs(User::factory()->create(['is_control' => true]))
+            ->post(route('control.technologies.store', $this->game), [
+                'name' => 'Laser Porridge',
+                'tree' => TechnologyBlueprint::COMMON,
+                'cog_cost' => 0,
+                'brain_cost' => 4,
+                'leaf_cost' => 0,
+                'maths_cost' => 0,
+                'prerequisites' => '',
+                'deck_grant' => [
+                    'amounts' => ['', '', '', ''],
+                    'value_min' => '',
+                    'value_max' => '',
+                    'wild' => '0',
+                    'restriction' => '',
+                    'requires_research_facilities' => '',
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        /** @var TechnologyType $written */
+        $written = $this->game->technologyTypes()->where('name', 'Laser Porridge')->sole();
+
+        $this->assertNull($written->deckGrant());
+        $this->assertFalse($written->isDeckCustomisation());
     }
 
     public function test_a_technology_that_grants_nothing_is_not_deck_customisation(): void

@@ -533,9 +533,11 @@ column on `technology_types`: a list of amounts the player assigns to suits (all
 different), the value range, whether the card is wild, what it is printed with,
 and how many Research Facilities the row asks for. The card takes the suit of the
 first amount, which is those rows' own "in that suit" and "in the first suit".
-Upgrading an existing card is the other half of 3.2.3 and the tree prices it
-nowhere, so it is a custom proposal under 3.2.4: Control names a price, takes the
-points with the tracker controls, and edits the card.
+Control can write one of these rows during play like any other proposal (3.2.4);
+a blank set of amount boxes on that form is what says a proposal is an ordinary
+technology. Upgrading an existing card is the other half of 3.2.3 and the tree
+prices it nowhere, so it is a custom proposal too: Control names a price, takes
+the points with the tracker controls, and edits the card.
 
 **A technology has to be housed, and that is a bar on researching rather than a
 step afterwards.** Footnote 7 to 3.2.2: "If you do not have any Facilities that
