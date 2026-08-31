@@ -98,15 +98,23 @@ class FacilityListEmbed
             'description' => self::facilityLines($corporation, $turnNumber),
         ];
 
-        // A logo where there is one. Absolute, because Discord fetches the
-        // image itself rather than resolving it against anything, and omitted
-        // rather than empty where there is none: a Corporation Control invented
-        // mid-game has no artwork, and neither does a checkout that has not had
-        // the logos added to it.
-        $logo = FactionLogo::urlFor($corporation->name);
+        // The wide lockup where there is one, as the embed's image: it is the
+        // variant with room to be read, and this is the one place a Corporation
+        // gets the full width of a message to itself. It falls back to the
+        // square badge as a thumbnail, which is all the room an 80x80 has.
+        //
+        // Absolute either way, because Discord fetches the image itself rather
+        // than resolving it against anything - and the key is omitted rather
+        // than empty where there is no artwork at all: a Corporation Control
+        // invented mid-game has none, and neither does a checkout that has not
+        // had the logos added to it.
+        $wide = FactionLogo::urlFor($corporation->name, FactionLogo::WIDE);
+        $icon = FactionLogo::urlFor($corporation->name, FactionLogo::ICON);
 
-        if ($logo !== null) {
-            $embed['thumbnail'] = ['url' => $logo];
+        if ($wide !== null) {
+            $embed['image'] = ['url' => $wide];
+        } elseif ($icon !== null) {
+            $embed['thumbnail'] = ['url' => $icon];
         }
 
         return $embed;

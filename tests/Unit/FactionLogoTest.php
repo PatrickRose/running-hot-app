@@ -86,9 +86,95 @@ class FactionLogoTest extends TestCase
         $this->assertSame('gordon', FactionLogo::slug('Gordon'));
     }
 
+    /**
+     * Two files under the one slug, told apart by the suffix. The bare slug is
+     * the square badge, so a file already on record keeps meaning what it did.
+     */
+    public function test_the_two_variants_resolve_separately(): void
+    {
+        $this->writeLogo('test-two-variants.png');
+        $this->writeLogo('test-two-variants-wide.png');
+
+        $this->assertSame(
+            '/images/factions/test-two-variants.png',
+            FactionLogo::pathFor('Test Two Variants', FactionLogo::ICON),
+        );
+        $this->assertSame(
+            '/images/factions/test-two-variants-wide.png',
+            FactionLogo::pathFor('Test Two Variants', FactionLogo::WIDE),
+        );
+    }
+
+    /**
+     * The square badge is what a caller gets without asking, because it is what
+     * every one of the application's own surfaces wants.
+     */
+    public function test_the_icon_is_the_default_variant(): void
+    {
+        $this->writeLogo('test-default-variant.png');
+        $this->writeLogo('test-default-variant-wide.png');
+
+        $this->assertSame(
+            FactionLogo::pathFor('Test Default Variant', FactionLogo::ICON),
+            FactionLogo::pathFor('Test Default Variant'),
+        );
+    }
+
+    /**
+     * A lockup crushed into a 24-pixel square is an unreadable smudge, so it
+     * never stands in for the badge - the faction draws its initials instead.
+     */
+    public function test_a_wide_lockup_is_not_used_as_the_square_badge(): void
+    {
+        $this->writeLogo('test-lockup-only-wide.png');
+
+        $this->assertNull(FactionLogo::pathFor('Test Lockup Only'));
+        $this->assertFalse(FactionLogo::has('Test Lockup Only'));
+        $this->assertTrue(FactionLogo::has('Test Lockup Only', FactionLogo::WIDE));
+    }
+
+    /**
+     * Nor the other way round: a caller asking for the lockup is told there
+     * isn't one rather than being handed the badge to stretch.
+     */
+    public function test_the_square_badge_is_not_used_as_a_wide_lockup(): void
+    {
+        $this->writeLogo('test-badge-only.png');
+
+        $this->assertNull(FactionLogo::pathFor('Test Badge Only', FactionLogo::WIDE));
+        $this->assertTrue(FactionLogo::has('Test Badge Only'));
+    }
+
+    /**
+     * The suffix is only stripped when something is left over to be a faction,
+     * so a file called wide.png belongs to a faction named Wide.
+     */
+    public function test_a_bare_suffix_is_a_faction_rather_than_a_lockup(): void
+    {
+        $this->writeLogo('wide.png');
+
+        $this->assertSame('/images/factions/wide.png', FactionLogo::pathFor('Wide'));
+        $this->assertNull(FactionLogo::pathFor('Wide', FactionLogo::WIDE));
+    }
+
+    /**
+     * Str::slug folds an underscore to a hyphen, so a designer's export lands
+     * in the same place as the documented name.
+     */
+    public function test_an_underscore_suffix_is_the_same_lockup(): void
+    {
+        $this->writeLogo('test_underscore_suffix_wide.png');
+
+        $this->assertSame(
+            '/images/factions/test_underscore_suffix_wide.png',
+            FactionLogo::pathFor('Test Underscore Suffix', FactionLogo::WIDE),
+        );
+    }
+
     public function test_a_faction_with_no_logo_resolves_to_null(): void
     {
         $this->assertNull(FactionLogo::pathFor('Test Nothing Drawn Yet'));
+        $this->assertNull(FactionLogo::pathFor('Test Nothing Drawn Yet', FactionLogo::WIDE));
         $this->assertFalse(FactionLogo::has('Test Nothing Drawn Yet'));
     }
 
@@ -125,6 +211,25 @@ class FactionLogoTest extends TestCase
         $this->assertSame(
             '/images/factions/test-both-formats.webp',
             FactionLogo::pathFor('Test Both Formats'),
+        );
+    }
+
+    /**
+     * And the two variants rank independently, so a webp lockup does not
+     * supersede a png badge.
+     */
+    public function test_the_variants_rank_their_extensions_independently(): void
+    {
+        $this->writeLogo('test-mixed-formats.png');
+        $this->writeLogo('test-mixed-formats-wide.webp');
+
+        $this->assertSame(
+            '/images/factions/test-mixed-formats.png',
+            FactionLogo::pathFor('Test Mixed Formats'),
+        );
+        $this->assertSame(
+            '/images/factions/test-mixed-formats-wide.webp',
+            FactionLogo::pathFor('Test Mixed Formats', FactionLogo::WIDE),
         );
     }
 

@@ -370,7 +370,7 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 **The `#facility-list` embed is the one thing the application shows everyone at once**, so what it leaves out matters more than what it says. Facility names, their types and whether they are still building — and nothing else. Rulebook 3.4.2 makes the number of Protection Cards in a Facility Secret, and technology contents are secret so that reconnaissance costs something, so a stack size here would hand every Runner a free recon action. `FacilityListEmbed` is pure for exactly this reason: what players see is asserted in a test, including a guard that no card title ever reaches it.
 
-**One embed per Corporation**, coloured with `GuildBlueprint::colourFor()` and carrying its logo as a thumbnail, so a Corporation matches the Discord role its players already wear. The cost is Discord's cap of ten embeds per message, against twenty-five fields had it been one embed of fields — a game with more Corporations than ten gets the first ten and a footer saying so. Two Corporations can still collide on a colour, because `colourFor` is a hash of the name across ten colours; that is true of the roles too.
+**One embed per Corporation**, coloured with `GuildBlueprint::colourFor()` and carrying its wide lockup as the embed's `image` — or its square badge as a `thumbnail` where no lockup has been drawn — so a Corporation matches the Discord role its players already wear. The cost is Discord's cap of ten embeds per message, against twenty-five fields had it been one embed of fields — a game with more Corporations than ten gets the first ten and a footer saying so. Two Corporations can still collide on a colour, because `colourFor` is a hash of the name across ten colours; that is true of the roles too.
 
 **It is posted once and then rewritten.** A list that changes every time a Facility opens would otherwise leave the channel full of superseded copies, and a player reading the wrong one is worse than a player reading none. The message id is a `discord_resources` row (`message:facility-list`), so the reconcile pattern already covers it. This needs the *bot*, not the webhook: a webhook only posts to the channel it was made in.
 
@@ -450,8 +450,26 @@ belongs to, and artwork committed after a game was created appears in that game
 immediately rather than waiting on a column to be backfilled. The directory is
 listed once per request, for the reason `CardImage` does the same.
 
+**Two variants per faction, because one picture cannot do both jobs.** The square
+badge is the logo alone, under the bare slug, and it goes wherever the name is
+already written beside it — which is every one of the application's own screens, at
+24 to 48 pixels square. The wide lockup sets the name as type inside the picture,
+under a `-wide` suffix, so it only belongs where it can stand in place of written
+text and has room to be read: the `#facility-list` embed is its one consumer, and
+it takes the full width of a message as the embed's `image` rather than an 80×80
+`thumbnail`. `FactionLogo::ICON` and `::WIDE` name them.
+
+**Neither variant ever stands in for the other in the resolver**, which is the same
+asymmetry `CardImage` uses for a card's back. A lockup crushed into a 24-pixel
+square is an unreadable smudge, so a faction with only a lockup draws its initials
+in the small slots. A caller with a real preference asks for each in turn and says
+which it would rather have — `FacilityListEmbed` is the one that does, taking the
+lockup as `image` and falling back to the badge as `thumbnail`. The `-wide` suffix
+is only stripped when something is left over to be a faction, so `wide.png` belongs
+to a faction named Wide.
+
 **A faction with no logo is the normal case, and a clean checkout is in it.** So
-every caller copes with null: the Discord embed carries no `thumbnail` key at all
+every caller copes with null: the Discord embed carries neither picture key at all
 rather than an empty one, and the application's own pages draw the faction's
 initials on the colour `GuildBlueprint::colourFor()` gives it. That is also exactly
 what a Corporation Control invents mid-game gets, which is why the fallback is a

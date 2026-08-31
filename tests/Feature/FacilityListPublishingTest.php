@@ -180,42 +180,94 @@ class FacilityListPublishingTest extends TestCase
     }
 
     /**
-     * A logo where there is one, absolute because Discord fetches the image
-     * itself. The name is one no faction has, so this never writes over the
-     * game's own artwork - which a test cleaning up after itself would delete.
+     * Writes faction artwork for the duration of one closure.
+     *
+     * Every name passed in is one no faction in the game has, because the real
+     * logos will be committed and a test cleaning up after itself would delete
+     * one. The assertion is a hard stop rather than a convention to remember.
+     *
+     * @param  array<int, string>  $files
      */
-    public function test_an_embed_carries_its_corporations_logo_as_an_absolute_thumbnail(): void
+    private function withLogos(array $files, callable $body): void
     {
-        $game = $this->gameWithChannel();
-        Corporation::factory()->for($game)->create(['name' => 'Test Logo Combine']);
-
         $directory = public_path(FactionLogo::DIRECTORY);
         File::ensureDirectoryExists($directory);
-        $path = $directory.'/test-logo-combine.png';
 
-        $this->assertFileDoesNotExist($path, 'A test must never write over the game\'s own artwork.');
+        $paths = [];
 
-        File::put($path, 'not really an image');
+        foreach ($files as $file) {
+            $path = $directory.'/'.$file;
+
+            $this->assertFileDoesNotExist(
+                $path,
+                "[{$file}] already exists: a test must never write over the game's own artwork.",
+            );
+
+            File::put($path, 'not really an image');
+            $paths[] = $path;
+        }
+
         FactionLogo::flush();
 
         try {
-            $embeds = FacilityListEmbed::payload($game)['embeds'];
-            $mine = collect($embeds)->firstWhere('title', 'Test Logo Combine');
-
-            $this->assertNotNull($mine);
-            $this->assertSame(url('/images/factions/test-logo-combine.png'), $mine['thumbnail']['url']);
+            $body();
         } finally {
-            File::delete($path);
+            foreach ($paths as $path) {
+                File::delete($path);
+            }
+
             FactionLogo::flush();
         }
     }
 
     /**
-     * The normal case for a checkout with no artwork, and for a Corporation
-     * Control invented mid-game: no thumbnail key at all rather than an empty
-     * one, which Discord would reject.
+     * The wide lockup is what this one place has room for: a Corporation gets
+     * the full width of a message here, which is the only surface that does.
+     * Absolute, because Discord fetches the image itself.
      */
-    public function test_a_corporation_with_no_logo_gets_no_thumbnail(): void
+    public function test_an_embed_carries_the_wide_lockup_as_its_image(): void
+    {
+        $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Logo Combine']);
+
+        $this->withLogos(['test-logo-combine.png', 'test-logo-combine-wide.png'], function () use ($game): void {
+            $embeds = FacilityListEmbed::payload($game)['embeds'];
+            $mine = collect($embeds)->firstWhere('title', 'Test Logo Combine');
+
+            $this->assertNotNull($mine);
+            $this->assertSame(url('/images/factions/test-logo-combine-wide.png'), $mine['image']['url']);
+
+            // One picture per embed: the square badge would be saying the same
+            // thing again in the corner.
+            $this->assertArrayNotHasKey('thumbnail', $mine);
+        });
+    }
+
+    /**
+     * A faction whose lockup has not been drawn still gets its badge, in the
+     * only slot an 80x80 has room for.
+     */
+    public function test_an_embed_falls_back_to_the_square_badge_as_a_thumbnail(): void
+    {
+        $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Badge Only Combine']);
+
+        $this->withLogos(['test-badge-only-combine.png'], function () use ($game): void {
+            $embeds = FacilityListEmbed::payload($game)['embeds'];
+            $mine = collect($embeds)->firstWhere('title', 'Test Badge Only Combine');
+
+            $this->assertNotNull($mine);
+            $this->assertSame(url('/images/factions/test-badge-only-combine.png'), $mine['thumbnail']['url']);
+            $this->assertArrayNotHasKey('image', $mine);
+        });
+    }
+
+    /**
+     * The normal case for a checkout with no artwork, and for a Corporation
+     * Control invented mid-game: neither key at all rather than an empty one,
+     * which Discord would reject.
+     */
+    public function test_a_corporation_with_no_logo_gets_no_picture(): void
     {
         $game = $this->gameWithChannel();
 
@@ -224,6 +276,7 @@ class FacilityListPublishingTest extends TestCase
 
         $this->assertNotNull($gordon);
         $this->assertArrayNotHasKey('thumbnail', $gordon);
+        $this->assertArrayNotHasKey('image', $gordon);
     }
 
     public function test_the_heading_and_the_timestamp_bracket_the_list(): void

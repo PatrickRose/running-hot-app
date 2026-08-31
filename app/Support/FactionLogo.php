@@ -16,10 +16,20 @@ use Illuminate\Support\Str;
  * game was created appears in that game immediately rather than needing a
  * column somewhere to be backfilled.
  *
+ * There are two variants of a faction's artwork, because one picture cannot do
+ * both jobs. The square {@see self::ICON} is the logo alone and goes anywhere
+ * the name is written beside it - a table row, a card heading, a character's
+ * role line - which is every one of the application's own surfaces. The
+ * {@see self::WIDE} lockup sets the name as type inside the picture, so it
+ * needs horizontal room and has to stand in place of written text rather than
+ * next to it; Discord's #facility-list embed is its one consumer, where a
+ * Corporation gets the full width of a message. They are filed under the same
+ * slug, the wide one with a -wide suffix.
+ *
  * A faction with no logo is normal rather than exceptional, and it is the case
  * a fresh checkout is in. Control invents a Corporation mid-game and there has
  * never been a logo drawn for it, so every caller has to cope with null: the
- * Discord embed simply carries no thumbnail, and the application's own pages
+ * Discord embed simply carries no picture, and the application's own pages
  * draw the faction's initials on the colour its Discord role already wears.
  *
  * The directory is read once per request and answered from memory after that,
@@ -41,12 +51,46 @@ class FactionLogo
     public const DIRECTORY = 'images/factions';
 
     /**
+     * The square badge: the logo alone, no wordmark.
+     *
+     * The workhorse, and what every one of the application's own surfaces
+     * takes. It sits beside a faction's name in a table row, a card heading or
+     * a character's role line, so the picture does not have to say the name -
+     * and at 24 to 48 pixels square nothing with words in it would be legible
+     * anyway.
+     */
+    public const ICON = 'icon';
+
+    /**
+     * The wide lockup: the logo beside the faction's name set as type.
+     *
+     * Carries the name itself, so it belongs only where it can stand in place
+     * of written text rather than next to it, and only where there is
+     * horizontal room. Discord's #facility-list embed is the one consumer.
+     */
+    public const WIDE = 'wide';
+
+    /**
+     * What the wide lockup's file name appends to the slug.
+     *
+     * So a faction is two files - gordon.png and gordon-wide.png - under the
+     * one slug that identifies it, rather than two names to keep in step. The
+     * bare slug is the square one, which keeps every file already on record
+     * meaning what it did and makes the variant nobody can forget to supply
+     * the one that needs no suffix.
+     *
+     * Str::slug folds an underscore to a hyphen, so gordon_wide.png out of a
+     * designer's export lands in the same place.
+     */
+    public const WIDE_SUFFIX = '-wide';
+
+    /**
      * The extensions looked for, in the order they win.
      *
      * webp first for the reason card artwork prefers it: the same picture at a
-     * fraction of the bytes. These are smaller than a card either way - Discord
-     * scales a thumbnail to 80x80, so anything much over a few hundred pixels
-     * square is bytes spent on every message for nothing.
+     * fraction of the bytes. Neither variant wants to be large - Discord scales
+     * a thumbnail to 80x80 and an embed image to a few hundred wide - so
+     * anything much beyond that is bytes spent on every message for nothing.
      *
      * No svg, deliberately, even though the application's own pages would draw
      * one perfectly well: Discord does not render svg in an embed, so a faction
@@ -57,9 +101,9 @@ class FactionLogo
     public const EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg'];
 
     /**
-     * Logo file names by slug, or null before the first read.
+     * Logo file names by slug and then variant, or null before the first read.
      *
-     * @var array<string, string>|null
+     * @var array<string, array<string, string>>|null
      */
     private static ?array $manifest = null;
 
@@ -70,9 +114,9 @@ class FactionLogo
      * the game is served on. That is what the application's own pages want;
      * anything handing the path to Discord wants {@see self::urlFor()}.
      */
-    public static function pathFor(?string $name): ?string
+    public static function pathFor(?string $name, string $variant = self::ICON): ?string
     {
-        $file = self::fileFor($name);
+        $file = self::fileFor($name, $variant);
 
         return $file === null ? null : '/'.self::DIRECTORY.'/'.$file;
     }
@@ -84,31 +128,39 @@ class FactionLogo
      * can resolve from the public internet rather than a path relative to the
      * page it came from.
      */
-    public static function urlFor(?string $name): ?string
+    public static function urlFor(?string $name, string $variant = self::ICON): ?string
     {
-        $path = self::pathFor($name);
+        $path = self::pathFor($name, $variant);
 
         return $path === null ? null : url($path);
     }
 
     /**
      * The logo file name for a faction, or null where there is none.
+     *
+     * One variant never stands in for the other. A wide lockup crushed into a
+     * 24-pixel square is an unreadable smudge, so a faction with only a wide
+     * file draws its initials in the small slots instead - the same asymmetry
+     * {@see CardImage} uses, where a card's back has no fallback because an
+     * unsuffixed file is the front of a one-sided card. A caller that has a
+     * real preference between the two asks for each in turn and says which it
+     * would rather have; the #facility-list embed is the one that does.
      */
-    public static function fileFor(?string $name): ?string
+    public static function fileFor(?string $name, string $variant = self::ICON): ?string
     {
         if ($name === null || trim($name) === '') {
             return null;
         }
 
-        return self::manifest()[self::slug($name)] ?? null;
+        return self::manifest()[self::slug($name)][$variant] ?? null;
     }
 
     /**
-     * Whether a faction has a logo on record.
+     * Whether a faction has this variant on record.
      */
-    public static function has(?string $name): bool
+    public static function has(?string $name, string $variant = self::ICON): bool
     {
-        return self::fileFor($name) !== null;
+        return self::fileFor($name, $variant) !== null;
     }
 
     /**
@@ -148,13 +200,14 @@ class FactionLogo
     }
 
     /**
-     * Every logo file, indexed by the slug it belongs to.
+     * Every logo file, indexed by the slug it belongs to and then the variant.
      *
-     * A slug with more than one file keeps whichever extension wins, so dropping
-     * a webp beside an existing png supersedes it rather than making which one
-     * is served depend on the order the directory happens to list.
+     * A slug and variant with more than one file keeps whichever extension
+     * wins, so dropping a webp beside an existing png supersedes it rather than
+     * making which one is served depend on the order the directory happens to
+     * list.
      *
-     * @return array<string, string>
+     * @return array<string, array<string, string>>
      */
     private static function manifest(): array
     {
@@ -178,16 +231,42 @@ class FactionLogo
                 continue;
             }
 
-            $slug = self::slug($file->getFilenameWithoutExtension());
+            [$slug, $variant] = self::identify($file->getFilenameWithoutExtension());
 
-            if ($slug === '' || (isset($ranked[$slug]) && $ranked[$slug] <= $rank)) {
+            if ($slug === '' || (isset($ranked[$slug][$variant]) && $ranked[$slug][$variant] <= $rank)) {
                 continue;
             }
 
-            $ranked[$slug] = $rank;
-            $manifest[$slug] = $file->getFilename();
+            $ranked[$slug][$variant] = $rank;
+            $manifest[$slug][$variant] = $file->getFilename();
         }
 
         return self::$manifest = $manifest;
+    }
+
+    /**
+     * Which faction a file belongs to, and which variant of it it is.
+     *
+     * The suffix is only stripped when something is left to be a faction: a
+     * file called wide.png is a faction named Wide with no lockup rather than a
+     * lockup belonging to nobody. Everything else is the square badge, so a
+     * file already on record keeps meaning what it did.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private static function identify(string $filename): array
+    {
+        $slug = self::slug($filename);
+        $suffix = self::WIDE_SUFFIX;
+
+        if (str_ends_with($slug, $suffix)) {
+            $base = substr($slug, 0, -strlen($suffix));
+
+            if ($base !== '') {
+                return [$base, self::WIDE];
+            }
+        }
+
+        return [$slug, self::ICON];
     }
 }
