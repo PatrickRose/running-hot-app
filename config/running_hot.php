@@ -11,8 +11,31 @@ use App\Support\FacilityTypeBlueprint;
  * This is the starting position only. Every value here is a Tracker that
  * Control moves during play, so nothing in this file is ever read again once a
  * game has been created.
+ *
+ * The exception is the first entry, which is not roster at all: it is read by
+ * the demo seeder rather than by a game, and it lives here because a seeder
+ * cannot read the environment once config is cached.
  */
 return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Demo game Control team
+    |--------------------------------------------------------------------------
+    |
+    | Discord handles DemoGameSeeder seats on the demo game's Control team, so
+    | that signing in with Discord locally lands on the Control panel rather
+    | than on a player's dashboard. Comma or space separated; the seeder takes
+    | the same thing as an argument, which wins over this.
+    |
+    | Empty is the normal setting, and the shipped one: the demo game then has
+    | only the password login the seeder prints. A seat here is claimed the
+    | first time that handle signs in, exactly as a character is, so it may
+    | name someone who has never logged in.
+    |
+    */
+
+    'demo_control_discord' => env('DEMO_CONTROL_DISCORD', ''),
 
     /*
     |--------------------------------------------------------------------------
