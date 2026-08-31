@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { CardFace } from '@/components/card-face';
 import { FacilityDefenceBoard } from '@/components/facility-defence-board';
+import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import Heading from '@/components/heading';
 import { StackEnd } from '@/components/stack-end';
@@ -72,7 +73,10 @@ export default function Facilities({ game, board }: Props) {
                 {own && !own.can_defend && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>{own.name} — your defences</CardTitle>
+                            <CardTitle className="flex items-center gap-2">
+                                <FactionBadge faction={own} />
+                                {own.name} — your defences
+                            </CardTitle>
                             <CardDescription>
                                 {own.credits} Credits &middot;{' '}
                                 {own.physical_slots} physical and{' '}
@@ -225,12 +229,16 @@ export default function Facilities({ game, board }: Props) {
                     <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {board.public.map((corporation) => (
                             <div key={corporation.name}>
-                                <p className="font-medium">
+                                <p className="flex items-center gap-2 font-medium">
+                                    <FactionBadge
+                                        faction={corporation}
+                                        size="small"
+                                    />
                                     {corporation.name}
                                     {corporation.is_yours && (
                                         <Badge
                                             variant="outline"
-                                            className="ml-2 align-middle"
+                                            className="align-middle"
                                         >
                                             You
                                         </Badge>

@@ -7,7 +7,9 @@ use App\Enums\GameStatus;
 use App\Models\Character;
 use App\Models\DiscordMemberSync;
 use App\Models\Game;
+use App\Support\FactionBadge;
 use App\Support\GamePresenter;
+use App\Support\LogoImage;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -33,6 +35,9 @@ class DashboardController extends Controller
             ->map(fn (Character $character): array => [
                 'id' => $character->id,
                 'name' => $character->name,
+                // Set only for a character that is an organisation rather than
+                // a person; see GamePresenter::trackers().
+                'logo_path' => LogoImage::pathFor($character->name),
                 'role_label' => $character->role->label(),
                 'team' => $character->gang->name ?? $character->corporation?->name,
                 'credits' => $character->credits,
@@ -43,11 +48,11 @@ class DashboardController extends Controller
                 'hack' => $character->hack,
                 'incapacitated' => $character->isIncapacitated(),
                 'gang' => $character->gang === null ? null : [
-                    'name' => $character->gang->name,
+                    ...FactionBadge::for($character->gang->name),
                     'notoriety' => $character->gang->notoriety,
                 ],
                 'corporation' => $character->corporation === null ? null : [
-                    'name' => $character->corporation->name,
+                    ...FactionBadge::for($character->corporation->name),
                     'income' => $character->corporation->income,
                     'political_will' => $character->corporation->political_will,
                 ],

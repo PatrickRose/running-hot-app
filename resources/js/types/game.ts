@@ -86,8 +86,33 @@ export type TrackerSubject = {
     values: TrackerValues;
 };
 
+/**
+ * How a faction is drawn: its name, its logo where there is one, and the colour
+ * that stands in for the logo where there is not.
+ *
+ * Both extra fields come from the server. `logo_path` is resolved from a slug of
+ * the name — there is no column, so artwork added to the repository shows up in
+ * games that already exist. `colour` is derived from an md5 of the name and is
+ * the colour of the faction's Discord role, and it is sent rather than computed
+ * here so that hash is not written twice.
+ */
+export type Faction = {
+    name: string;
+    /** Null for a faction with no artwork on record, which is a normal case. */
+    logo_path: string | null;
+    /** CSS hex, e.g. `#1ABC9C`. */
+    colour: string;
+};
+
 export type CharacterSubject = TrackerSubject & {
     name: string;
+    /**
+     * Set only for the characters that are organisations rather than people —
+     * the two Press outlets and HM Government. Null for everybody else, and the
+     * page then draws nothing rather than falling back to initials the way a
+     * faction does.
+     */
+    logo_path: string | null;
     role: string;
     role_label: string;
     team: string | null;
@@ -97,7 +122,7 @@ export type CharacterSubject = TrackerSubject & {
     incapacitated: boolean;
 };
 
-export type NamedSubject = TrackerSubject & { name: string };
+export type NamedSubject = TrackerSubject & Faction;
 
 export type GameTrackers = {
     global: TrackerSubject;
@@ -167,9 +192,8 @@ export type CardHolding = {
     installed: number;
 };
 
-export type CorporationCardHoldings = {
+export type CorporationCardHoldings = Faction & {
     corporation_id: number;
-    corporation: string;
     cards: CardHolding[];
 };
 
@@ -352,9 +376,8 @@ export type ReorderQuote = {
     affordable: boolean;
 };
 
-export type CorporationFacilities = {
+export type CorporationFacilities = Faction & {
     id: number;
-    name: string;
     credits: number;
     /**
      * Whether this player may arrange the stacks or only read them. True for
@@ -390,8 +413,7 @@ export type PublicFacility = {
 };
 
 /** What every player may see: who owns what, and nothing about its defences. */
-export type PublicCorporationFacilities = {
-    name: string;
+export type PublicCorporationFacilities = Faction & {
     is_yours: boolean;
     facilities: PublicFacility[];
 };

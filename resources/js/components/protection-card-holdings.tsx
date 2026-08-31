@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,7 +66,10 @@ function CorporationHoldings({
 }) {
     return (
         <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-medium">{corporation.corporation}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+                <FactionBadge faction={corporation} size="small" />
+                {corporation.name}
+            </h3>
 
             {corporation.cards.length === 0 ? (
                 <p className="text-sm text-muted-foreground">

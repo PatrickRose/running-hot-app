@@ -1,4 +1,6 @@
 import { Head, Link, usePoll } from '@inertiajs/react';
+import { CharacterLogo } from '@/components/character-logo';
+import { FactionBadge } from '@/components/faction-badge';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +13,15 @@ import {
 } from '@/components/ui/card';
 import { dashboard, facilities } from '@/routes';
 import { index } from '@/routes/control/games';
-import type { GameSummary } from '@/types/game';
+import type { Faction, GameSummary } from '@/types/game';
 
 type PlayerCharacter = {
     id: number;
     name: string;
     role_label: string;
     team: string | null;
+    /** Set only for a character that is an organisation; see CharacterLogo. */
+    logo_path: string | null;
     credits: number;
     wounds: number;
     tags: number;
@@ -25,13 +29,40 @@ type PlayerCharacter = {
     brawn: number;
     hack: number;
     incapacitated: boolean;
-    gang: { name: string; notoriety: number } | null;
-    corporation: {
-        name: string;
-        income: number;
-        political_will: number;
-    } | null;
+    gang: (Faction & { notoriety: number }) | null;
+    corporation:
+        | (Faction & {
+              income: number;
+              political_will: number;
+          })
+        | null;
 };
+
+/**
+ * A character's role and team, with the team's badge against it.
+ *
+ * Gang before Corporation, matching how the server picks which of the two fills
+ * in `team`. A character Control has not put on a team yet gets the role alone.
+ */
+function CharacterTeam({ character }: { character: PlayerCharacter }) {
+    const faction: Faction | null = character.gang ?? character.corporation;
+
+    return (
+        <span className="flex items-center gap-2">
+            {faction ? (
+                <FactionBadge faction={faction} size="small" />
+            ) : (
+                // A Press outlet or HM Government is on no team and has a logo
+                // of its own; a Freelancer has neither and gets nothing.
+                <CharacterLogo logoPath={character.logo_path} />
+            )}
+            <span>
+                {character.role_label}
+                {character.team ? ` · ${character.team}` : ''}
+            </span>
+        </span>
+    );
+}
 
 type DiscordJoin = {
     invite_url: string | null;
@@ -146,8 +177,7 @@ export default function Dashboard({
                                 )}
                             </CardTitle>
                             <CardDescription>
-                                {character.role_label}
-                                {character.team ? ` · ${character.team}` : ''}
+                                <CharacterTeam character={character} />
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">

@@ -214,7 +214,7 @@ class GamePresenter
             'corporations' => $game->corporations()->orderBy('name')->get()->map(fn ($corporation): array => [
                 'subject_type' => $corporation->getMorphClass(),
                 'subject_id' => $corporation->id,
-                'name' => $corporation->name,
+                ...FactionBadge::for($corporation->name),
                 'values' => [
                     Tracker::Income->value => $corporation->income,
                     Tracker::PoliticalWill->value => $corporation->political_will,
@@ -224,7 +224,7 @@ class GamePresenter
             'gangs' => $game->gangs()->orderBy('name')->get()->map(fn ($gang): array => [
                 'subject_type' => $gang->getMorphClass(),
                 'subject_id' => $gang->id,
-                'name' => $gang->name,
+                ...FactionBadge::for($gang->name),
                 'values' => [
                     Tracker::Notoriety->value => $gang->notoriety,
                 ],
@@ -237,6 +237,13 @@ class GamePresenter
                     'subject_type' => $character->getMorphClass(),
                     'subject_id' => $character->id,
                     'name' => $character->name,
+                    // Only the characters that are organisations rather than
+                    // people have artwork - Business Times, Th3 Undergr0und, HM
+                    // Government - so this is null for everybody else, and the
+                    // page draws nothing rather than falling back to initials.
+                    // A coloured square against forty-odd names would imply an
+                    // organisation where there is only somebody's name.
+                    'logo_path' => LogoImage::pathFor($character->name),
                     'role' => $character->role->value,
                     'role_label' => $character->role->label(),
                     'team' => $character->gang->name ?? $character->corporation?->name,
@@ -326,7 +333,7 @@ class GamePresenter
         return [
             'turn' => $turnNumber,
             'public' => $corporations->map(fn (Corporation $corporation): array => [
-                'name' => $corporation->name,
+                ...FactionBadge::for($corporation->name),
                 'is_yours' => $own !== null && $own->is($corporation),
                 'facilities' => $corporation->facilities
                     ->sortBy(fn (Facility $facility): string => $facility->facilityType->name.' '.$facility->name)
@@ -445,7 +452,7 @@ class GamePresenter
             ->get();
 
         return [
-            'name' => $corporation->name,
+            ...FactionBadge::for($corporation->name),
             'credits' => $corporation->credits,
             // Whether this player may drag, or only read.
             'can_defend' => $mayDefend,
@@ -552,7 +559,7 @@ class GamePresenter
 
                 return [
                     'corporation_id' => $corporation->id,
-                    'corporation' => $corporation->name,
+                    ...FactionBadge::for($corporation->name),
                     'cards' => $cards,
                 ];
             })->all();
@@ -750,7 +757,7 @@ class GamePresenter
 
                 return [
                     'id' => $corporation->id,
-                    'name' => $corporation->name,
+                    ...FactionBadge::for($corporation->name),
                     'credits' => $corporation->credits,
                     'physical_slots' => $totals['physical_slots'],
                     'cyber_slots' => $totals['cyber_slots'],

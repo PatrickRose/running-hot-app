@@ -13,8 +13,10 @@ use App\Models\User;
 use App\Services\TurnEngine;
 use App\Support\Discord\FacilityListEmbed;
 use App\Support\Discord\GuildBlueprint;
+use App\Support\LogoImage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -175,6 +177,113 @@ class FacilityListPublishingTest extends TestCase
 
         $this->assertNotNull($gordon);
         $this->assertSame(GuildBlueprint::colourFor('Gordon'), $gordon['color']);
+    }
+
+    /**
+     * Writes faction artwork for the duration of one closure.
+     *
+     * Every name passed in is one no faction in the game has, because the real
+     * logos will be committed and a test cleaning up after itself would delete
+     * one. The assertion is a hard stop rather than a convention to remember.
+     *
+     * @param  array<int, string>  $files
+     */
+    private function withLogos(array $files, callable $body): void
+    {
+        $directory = public_path(LogoImage::DIRECTORY);
+        File::ensureDirectoryExists($directory);
+
+        $paths = [];
+
+        foreach ($files as $file) {
+            $path = $directory.'/'.$file;
+
+            $this->assertFileDoesNotExist(
+                $path,
+                "[{$file}] already exists: a test must never write over the game's own artwork.",
+            );
+
+            File::put($path, 'not really an image');
+            $paths[] = $path;
+        }
+
+        LogoImage::flush();
+
+        try {
+            $body();
+        } finally {
+            foreach ($paths as $path) {
+                File::delete($path);
+            }
+
+            LogoImage::flush();
+        }
+    }
+
+    /**
+     * The wide lockup is what this one place has room for: a Corporation gets
+     * the full width of a message here, which is the only surface that does.
+     * Absolute, because Discord fetches the image itself.
+     */
+    public function test_an_embed_carries_the_wide_lockup_as_its_image(): void
+    {
+        $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Logo Combine']);
+
+        $this->withLogos(['test-logo-combine.png', 'test-logo-combine-wide.png'], function () use ($game): void {
+            $embeds = FacilityListEmbed::payload($game)['embeds'];
+            $mine = collect($embeds)->firstWhere('title', 'Test Logo Combine');
+
+            $this->assertNotNull($mine);
+            $this->assertSame(url('/images/logos/test-logo-combine-wide.png'), $mine['image']['url']);
+
+            // One picture per embed: the square badge would be saying the same
+            // thing again in the corner.
+            $this->assertArrayNotHasKey('thumbnail', $mine);
+        });
+    }
+
+    /**
+     * A faction whose lockup has not been drawn still gets its badge, in the
+     * only slot an 80x80 has room for.
+     */
+    public function test_an_embed_falls_back_to_the_square_badge_as_a_thumbnail(): void
+    {
+        $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Badge Only Combine']);
+
+        $this->withLogos(['test-badge-only-combine.png'], function () use ($game): void {
+            $embeds = FacilityListEmbed::payload($game)['embeds'];
+            $mine = collect($embeds)->firstWhere('title', 'Test Badge Only Combine');
+
+            $this->assertNotNull($mine);
+            $this->assertSame(url('/images/logos/test-badge-only-combine.png'), $mine['thumbnail']['url']);
+            $this->assertArrayNotHasKey('image', $mine);
+        });
+    }
+
+    /**
+     * What a Corporation Control invented mid-game gets: neither key at all
+     * rather than an empty one, which Discord would reject.
+     *
+     * The Corporation is made here with a name nothing in the game has, rather
+     * than one from the roster. Every real faction now has artwork committed,
+     * so asserting the absence of it against Gordon passed only while the
+     * repository had none - which is the whole class of test that breaks the
+     * day the artwork lands, and this one did.
+     */
+    public function test_a_corporation_with_no_logo_gets_no_picture(): void
+    {
+        $game = $this->gameWithChannel();
+        Corporation::factory()->for($game)->create(['name' => 'Test Unbranded Combine']);
+
+        $embeds = FacilityListEmbed::payload($game)['embeds'];
+        $mine = collect($embeds)->firstWhere('title', 'Test Unbranded Combine');
+
+        $this->assertNotNull($mine);
+        $this->assertNull(LogoImage::pathFor('Test Unbranded Combine'));
+        $this->assertArrayNotHasKey('thumbnail', $mine);
+        $this->assertArrayNotHasKey('image', $mine);
     }
 
     public function test_the_heading_and_the_timestamp_bracket_the_list(): void

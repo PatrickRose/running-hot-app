@@ -1,6 +1,8 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { CharacterLogo } from '@/components/character-logo';
 import { ControlTeam } from '@/components/control-team';
 import { DiscordHandle } from '@/components/discord-handle';
+import { FactionBadge } from '@/components/faction-badge';
 import { GameDiscordPanel } from '@/components/game-discord';
 import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
@@ -386,7 +388,14 @@ export default function ControlGameShow({
                                             className="border-b last:border-0"
                                         >
                                             <td className="py-2 pr-4">
-                                                {character.name}
+                                                <span className="flex items-center gap-2">
+                                                    <CharacterLogo
+                                                        logoPath={
+                                                            character.logo_path
+                                                        }
+                                                    />
+                                                    {character.name}
+                                                </span>
                                                 {character.incapacitated && (
                                                     <Badge
                                                         variant="destructive"
@@ -628,7 +637,15 @@ function SubjectTable({
                             key={subject.subject_id}
                             className="border-b last:border-0"
                         >
-                            <td className="py-2 pr-4">{subject.name}</td>
+                            <td className="py-2 pr-4">
+                                <span className="flex items-center gap-2">
+                                    <FactionBadge
+                                        faction={subject}
+                                        size="small"
+                                    />
+                                    {subject.name}
+                                </span>
+                            </td>
                             {columns.map(([key, label]) => (
                                 <td key={key} className="py-2 pr-4">
                                     <TrackerValue
