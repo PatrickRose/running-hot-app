@@ -314,10 +314,48 @@ export type FacilitySummary = {
     security: FacilitySecurityState;
 };
 
+/**
+ * A card the Corporation is holding but has not installed — what Security drags
+ * from. It carries everything a card needs to draw itself, because the board
+ * shows the real card rather than a name in a list.
+ */
+export type HandCard = {
+    card_type_id: number;
+    code: string | null;
+    image_path: string | null;
+    name: string;
+    kind: ProtectionKind;
+    kind_label: string;
+    kind_glyph: string;
+    challenge: string;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+    /** Always at least 1: a card with no copies left is not in the hand. */
+    copies_in_hand: number;
+};
+
+/** What a proposed stack order would cost, answered by the server. */
+export type ReorderQuote = {
+    /** Cards that have to move. The Factory discount comes off after this. */
+    moved: number;
+    discount: number;
+    cost: number;
+    affordable: boolean;
+};
+
 export type CorporationFacilities = {
     id: number;
     name: string;
     credits: number;
+    /**
+     * Whether this player may arrange the stacks or only read them. True for
+     * the Corporation's Security seat; every other Corporate seat sees the
+     * same cards and cannot move them.
+     */
+    can_defend: boolean;
+    /** Empty for a viewer who may not defend. */
+    hand: HandCard[];
     /** Physical and cyber move independently, so they are reported apart. */
     physical_slots: number;
     cyber_slots: number;

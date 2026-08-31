@@ -3,6 +3,8 @@
 namespace App\Support;
 
 use App\Actions\PublishFacilityList;
+use App\Enums\CharacterRole;
+use App\Enums\GameStatus;
 use App\Enums\ProtectionKind;
 use App\Enums\ResearchSuit;
 use App\Enums\Tracker;
@@ -15,6 +17,7 @@ use App\Models\FacilityProtectionCard;
 use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\Phase;
+use App\Models\ProtectionCardHolding;
 use App\Models\ProtectionCardType;
 use App\Models\TechnologyType;
 use App\Models\Turn;
@@ -285,7 +288,16 @@ class GamePresenter
             ->orderBy('name')
             ->get();
 
-        $own = $user === null ? null : $this->ownCorporation($game, $user);
+        // Worked out together, because both answers need the same user and the
+        // second one needs the first: whether they may defend is a question
+        // about the Corporation they turn out to sit in.
+        $own = null;
+        $mayDefend = false;
+
+        if ($user !== null) {
+            $own = $this->ownCorporation($game, $user);
+            $mayDefend = $own !== null && $this->mayDefend($game, $user, $own);
+        }
 
         return [
             'turn' => $turnNumber,
@@ -303,7 +315,9 @@ class GamePresenter
                         'available_from_turn' => $facility->available_from_turn,
                     ])->all(),
             ])->all(),
-            'own' => $own === null ? null : $this->ownDefences($own, $turn, $turnNumber, $defence),
+            'own' => $own === null
+                ? null
+                : $this->ownDefences($own, $mayDefend, $turn, $turnNumber, $defence),
         ];
     }
 
@@ -326,12 +340,75 @@ class GamePresenter
     }
 
     /**
+     * Whether this player may arrange this Corporation's stacks, or only read
+     * them.
+     *
+     * The seat decides. Every Corporate seat sees the stacks, because 3.4.2
+     * keeps them Secret from everyone outside the Corporation rather than from
+     * the Corporation itself - but the rulebook gives the Facilities to
+     * Security, and a board three people can drag at once is a board nobody can
+     * trust. Control is not asked about here: Control has its own routes and
+     * reaches these Facilities through them.
+     */
+    private function mayDefend(Game $game, User $user, Corporation $corporation): bool
+    {
+        if ($game->status !== GameStatus::Running) {
+            return false;
+        }
+
+        return $game->characters()
+            ->where('user_id', $user->id)
+            ->where('corporation_id', $corporation->id)
+            ->where('role', CharacterRole::Security)
+            ->exists();
+    }
+
+    /**
+     * The copies this Corporation is holding but has not installed.
+     *
+     * This is the hand Security drags from, so it carries everything a card
+     * needs to draw itself rather than an id and a name: the board shows the
+     * real card, and dragging a picture of a Roboscorpion into a Facility is
+     * the whole point of the screen.
+     *
+     * A card with no copies left is left out rather than shown greyed. The hand
+     * is what you are holding; what you could hold if Control gave you more is
+     * the shop's question, and the shop is not built.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function handFor(Corporation $corporation): array
+    {
+        return $corporation->protectionCardHoldings()
+            ->where('copies', '>', 0)
+            ->with('cardType')
+            ->get()
+            ->sortBy(fn (ProtectionCardHolding $holding): string => $holding->cardType->kind->value.' '.$holding->cardType->name)
+            ->values()
+            ->map(fn (ProtectionCardHolding $holding): array => [
+                'card_type_id' => $holding->protection_card_type_id,
+                'code' => $holding->cardType->code,
+                'image_path' => $holding->cardType->imagePath(),
+                'name' => $holding->cardType->name,
+                'kind' => $holding->cardType->kind->value,
+                'kind_label' => $holding->cardType->kind->label(),
+                'kind_glyph' => $holding->cardType->kind->glyph(),
+                'challenge' => $holding->cardType->challenge,
+                'consequence' => $holding->cardType->consequence,
+                'charge_cost' => $holding->cardType->charge_cost,
+                'charge_consequence' => $holding->cardType->charge_consequence,
+                'copies_in_hand' => $holding->copies,
+            ])->all();
+    }
+
+    /**
      * One Corporation's own defences, in full.
      *
      * @return array<string, mixed>
      */
     private function ownDefences(
         Corporation $corporation,
+        bool $mayDefend,
         ?Turn $turn,
         ?int $turnNumber,
         FacilityDefenceService $defence,
@@ -346,6 +423,10 @@ class GamePresenter
         return [
             'name' => $corporation->name,
             'credits' => $corporation->credits,
+            // Whether this player may drag, or only read.
+            'can_defend' => $mayDefend,
+            // Only Security needs the hand, and only Security may act on it.
+            'hand' => $mayDefend ? $this->handFor($corporation) : [],
             'physical_slots' => $totals['physical_slots'],
             'cyber_slots' => $totals['cyber_slots'],
             'technology_capacity_per_facility' => $totals['technology_capacity'],
