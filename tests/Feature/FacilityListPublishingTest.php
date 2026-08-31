@@ -13,7 +13,7 @@ use App\Models\User;
 use App\Services\TurnEngine;
 use App\Support\Discord\FacilityListEmbed;
 use App\Support\Discord\GuildBlueprint;
-use App\Support\FactionLogo;
+use App\Support\LogoImage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\File;
@@ -190,7 +190,7 @@ class FacilityListPublishingTest extends TestCase
      */
     private function withLogos(array $files, callable $body): void
     {
-        $directory = public_path(FactionLogo::DIRECTORY);
+        $directory = public_path(LogoImage::DIRECTORY);
         File::ensureDirectoryExists($directory);
 
         $paths = [];
@@ -207,7 +207,7 @@ class FacilityListPublishingTest extends TestCase
             $paths[] = $path;
         }
 
-        FactionLogo::flush();
+        LogoImage::flush();
 
         try {
             $body();
@@ -216,7 +216,7 @@ class FacilityListPublishingTest extends TestCase
                 File::delete($path);
             }
 
-            FactionLogo::flush();
+            LogoImage::flush();
         }
     }
 
@@ -235,7 +235,7 @@ class FacilityListPublishingTest extends TestCase
             $mine = collect($embeds)->firstWhere('title', 'Test Logo Combine');
 
             $this->assertNotNull($mine);
-            $this->assertSame(url('/images/factions/test-logo-combine-wide.png'), $mine['image']['url']);
+            $this->assertSame(url('/images/logos/test-logo-combine-wide.png'), $mine['image']['url']);
 
             // One picture per embed: the square badge would be saying the same
             // thing again in the corner.
@@ -257,7 +257,7 @@ class FacilityListPublishingTest extends TestCase
             $mine = collect($embeds)->firstWhere('title', 'Test Badge Only Combine');
 
             $this->assertNotNull($mine);
-            $this->assertSame(url('/images/factions/test-badge-only-combine.png'), $mine['thumbnail']['url']);
+            $this->assertSame(url('/images/logos/test-badge-only-combine.png'), $mine['thumbnail']['url']);
             $this->assertArrayNotHasKey('image', $mine);
         });
     }

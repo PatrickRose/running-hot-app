@@ -5,7 +5,7 @@ namespace App\Support\Discord;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\Game;
-use App\Support\FactionLogo;
+use App\Support\LogoImage;
 use Illuminate\Support\Carbon;
 
 /**
@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
  * are shown is therefore assertable in a unit test, which matters more here
  * than anywhere else in the application, because this is the one thing the
  * application shows to everyone at once. It reads the faction artwork directory
- * through {@see FactionLogo} for a Corporation's thumbnail, which is still a
+ * through {@see LogoImage} for a Corporation's thumbnail, which is still a
  * read and still assertable - a test writes a logo and looks at the payload.
  *
  * WHAT MUST NOT GO IN HERE. The channel is visible to Runners, and rulebook
@@ -108,8 +108,8 @@ class FacilityListEmbed
         // than empty where there is no artwork at all: a Corporation Control
         // invented mid-game has none, and neither does a checkout that has not
         // had the logos added to it.
-        $wide = FactionLogo::urlFor($corporation->name, FactionLogo::WIDE);
-        $icon = FactionLogo::urlFor($corporation->name, FactionLogo::ICON);
+        $wide = LogoImage::urlFor($corporation->name, LogoImage::WIDE);
+        $icon = LogoImage::urlFor($corporation->name, LogoImage::ICON);
 
         if ($wide !== null) {
             $embed['image'] = ['url' => $wide];

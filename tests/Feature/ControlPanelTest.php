@@ -9,7 +9,10 @@ use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\User;
 use App\Services\TurnEngine;
+use App\Support\GamePresenter;
+use App\Support\LogoImage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -98,6 +101,44 @@ class ControlPanelTest extends TestCase
         $this->actingAs($this->control())
             ->post("/control/games/{$game->id}/phase/advance")
             ->assertSessionHasErrors('phase');
+    }
+
+    /**
+     * A character that is an organisation carries its own logo; a character
+     * that is a person carries none, and the page draws nothing rather than
+     * falling back to the initials a faction gets. Forty-odd coloured squares
+     * would imply an organisation where there is only somebody's name.
+     */
+    public function test_only_a_character_that_is_an_organisation_carries_a_logo(): void
+    {
+        $game = Game::factory()->create();
+        $outlet = Character::factory()->for($game)->create(['name' => 'Test Evening Herald']);
+        $person = Character::factory()->for($game)->create(['name' => 'Test Someone Ordinary']);
+
+        $directory = public_path(LogoImage::DIRECTORY);
+        File::ensureDirectoryExists($directory);
+        $path = $directory.'/test-evening-herald.png';
+
+        $this->assertFileDoesNotExist(
+            $path,
+            'A test must never write over the game\'s own artwork.',
+        );
+
+        File::put($path, 'not really an image');
+        LogoImage::flush();
+
+        try {
+            $characters = collect(app(GamePresenter::class)->trackers($game)['characters']);
+
+            $this->assertSame(
+                '/images/logos/test-evening-herald.png',
+                $characters->firstWhere('subject_id', $outlet->id)['logo_path'],
+            );
+            $this->assertNull($characters->firstWhere('subject_id', $person->id)['logo_path']);
+        } finally {
+            File::delete($path);
+            LogoImage::flush();
+        }
     }
 
     public function test_control_can_adjust_a_tracker(): void

@@ -1,4 +1,5 @@
 import { Head, Link, usePoll } from '@inertiajs/react';
+import { CharacterLogo } from '@/components/character-logo';
 import { FactionBadge } from '@/components/faction-badge';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
@@ -19,6 +20,8 @@ type PlayerCharacter = {
     name: string;
     role_label: string;
     team: string | null;
+    /** Set only for a character that is an organisation; see CharacterLogo. */
+    logo_path: string | null;
     credits: number;
     wounds: number;
     tags: number;
@@ -46,7 +49,13 @@ function CharacterTeam({ character }: { character: PlayerCharacter }) {
 
     return (
         <span className="flex items-center gap-2">
-            {faction && <FactionBadge faction={faction} size="small" />}
+            {faction ? (
+                <FactionBadge faction={faction} size="small" />
+            ) : (
+                // A Press outlet or HM Government is on no team and has a logo
+                // of its own; a Freelancer has neither and gets nothing.
+                <CharacterLogo logoPath={character.logo_path} />
+            )}
             <span>
                 {character.role_label}
                 {character.team ? ` · ${character.team}` : ''}

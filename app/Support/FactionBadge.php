@@ -43,7 +43,7 @@ class FactionBadge
     {
         return [
             'name' => $name,
-            'logo_path' => FactionLogo::pathFor($name),
+            'logo_path' => LogoImage::pathFor($name),
             'colour' => self::cssColour($name),
         ];
     }

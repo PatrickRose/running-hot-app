@@ -4,7 +4,7 @@ namespace Tests\Unit;
 
 use App\Support\Discord\GuildBlueprint;
 use App\Support\FactionBadge;
-use App\Support\FactionLogo;
+use App\Support\LogoImage;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -22,7 +22,7 @@ use Tests\TestCase;
  * itself would delete it. {@see self::writeLogo()} refuses to overwrite a file
  * that already exists rather than trusting that.
  */
-class FactionLogoTest extends TestCase
+class LogoImageTest extends TestCase
 {
     /** @var array<int, string> */
     private array $written = [];
@@ -34,14 +34,14 @@ class FactionLogoTest extends TestCase
         }
 
         $this->written = [];
-        FactionLogo::flush();
+        LogoImage::flush();
 
         parent::tearDown();
     }
 
     private function writeLogo(string $file): string
     {
-        $directory = public_path(FactionLogo::DIRECTORY);
+        $directory = public_path(LogoImage::DIRECTORY);
         File::ensureDirectoryExists($directory);
 
         $path = $directory.'/'.$file;
@@ -59,7 +59,7 @@ class FactionLogoTest extends TestCase
 
         // The directory listing is cached for the life of the process, so a
         // file written after something has read it needs the listing dropped.
-        FactionLogo::flush();
+        LogoImage::flush();
 
         return $path;
     }
@@ -69,8 +69,8 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test-holdings-combine.png');
 
         $this->assertSame(
-            '/images/factions/test-holdings-combine.png',
-            FactionLogo::pathFor('Test Holdings Combine'),
+            '/images/logos/test-holdings-combine.png',
+            LogoImage::pathFor('Test Holdings Combine'),
         );
     }
 
@@ -80,10 +80,10 @@ class FactionLogoTest extends TestCase
      */
     public function test_a_name_is_slugged_the_way_a_file_is_named(): void
     {
-        $this->assertSame('augmented-nucleotech', FactionLogo::slug('Augmented Nucleotech'));
-        $this->assertSame('mccullough-calibrated-mechanical', FactionLogo::slug('McCullough Calibrated Mechanical'));
-        $this->assertSame('g33ks', FactionLogo::slug('g33ks'));
-        $this->assertSame('gordon', FactionLogo::slug('Gordon'));
+        $this->assertSame('augmented-nucleotech', LogoImage::slug('Augmented Nucleotech'));
+        $this->assertSame('mccullough-calibrated-mechanical', LogoImage::slug('McCullough Calibrated Mechanical'));
+        $this->assertSame('g33ks', LogoImage::slug('g33ks'));
+        $this->assertSame('gordon', LogoImage::slug('Gordon'));
     }
 
     /**
@@ -96,12 +96,12 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test-two-variants-wide.png');
 
         $this->assertSame(
-            '/images/factions/test-two-variants.png',
-            FactionLogo::pathFor('Test Two Variants', FactionLogo::ICON),
+            '/images/logos/test-two-variants.png',
+            LogoImage::pathFor('Test Two Variants', LogoImage::ICON),
         );
         $this->assertSame(
-            '/images/factions/test-two-variants-wide.png',
-            FactionLogo::pathFor('Test Two Variants', FactionLogo::WIDE),
+            '/images/logos/test-two-variants-wide.png',
+            LogoImage::pathFor('Test Two Variants', LogoImage::WIDE),
         );
     }
 
@@ -115,8 +115,8 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test-default-variant-wide.png');
 
         $this->assertSame(
-            FactionLogo::pathFor('Test Default Variant', FactionLogo::ICON),
-            FactionLogo::pathFor('Test Default Variant'),
+            LogoImage::pathFor('Test Default Variant', LogoImage::ICON),
+            LogoImage::pathFor('Test Default Variant'),
         );
     }
 
@@ -128,9 +128,9 @@ class FactionLogoTest extends TestCase
     {
         $this->writeLogo('test-lockup-only-wide.png');
 
-        $this->assertNull(FactionLogo::pathFor('Test Lockup Only'));
-        $this->assertFalse(FactionLogo::has('Test Lockup Only'));
-        $this->assertTrue(FactionLogo::has('Test Lockup Only', FactionLogo::WIDE));
+        $this->assertNull(LogoImage::pathFor('Test Lockup Only'));
+        $this->assertFalse(LogoImage::has('Test Lockup Only'));
+        $this->assertTrue(LogoImage::has('Test Lockup Only', LogoImage::WIDE));
     }
 
     /**
@@ -141,8 +141,8 @@ class FactionLogoTest extends TestCase
     {
         $this->writeLogo('test-badge-only.png');
 
-        $this->assertNull(FactionLogo::pathFor('Test Badge Only', FactionLogo::WIDE));
-        $this->assertTrue(FactionLogo::has('Test Badge Only'));
+        $this->assertNull(LogoImage::pathFor('Test Badge Only', LogoImage::WIDE));
+        $this->assertTrue(LogoImage::has('Test Badge Only'));
     }
 
     /**
@@ -153,8 +153,8 @@ class FactionLogoTest extends TestCase
     {
         $this->writeLogo('wide.png');
 
-        $this->assertSame('/images/factions/wide.png', FactionLogo::pathFor('Wide'));
-        $this->assertNull(FactionLogo::pathFor('Wide', FactionLogo::WIDE));
+        $this->assertSame('/images/logos/wide.png', LogoImage::pathFor('Wide'));
+        $this->assertNull(LogoImage::pathFor('Wide', LogoImage::WIDE));
     }
 
     /**
@@ -166,23 +166,23 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test_underscore_suffix_wide.png');
 
         $this->assertSame(
-            '/images/factions/test_underscore_suffix_wide.png',
-            FactionLogo::pathFor('Test Underscore Suffix', FactionLogo::WIDE),
+            '/images/logos/test_underscore_suffix_wide.png',
+            LogoImage::pathFor('Test Underscore Suffix', LogoImage::WIDE),
         );
     }
 
     public function test_a_faction_with_no_logo_resolves_to_null(): void
     {
-        $this->assertNull(FactionLogo::pathFor('Test Nothing Drawn Yet'));
-        $this->assertNull(FactionLogo::pathFor('Test Nothing Drawn Yet', FactionLogo::WIDE));
-        $this->assertFalse(FactionLogo::has('Test Nothing Drawn Yet'));
+        $this->assertNull(LogoImage::pathFor('Test Nothing Drawn Yet'));
+        $this->assertNull(LogoImage::pathFor('Test Nothing Drawn Yet', LogoImage::WIDE));
+        $this->assertFalse(LogoImage::has('Test Nothing Drawn Yet'));
     }
 
     public function test_no_name_resolves_to_null(): void
     {
-        $this->assertNull(FactionLogo::pathFor(null));
-        $this->assertNull(FactionLogo::pathFor(''));
-        $this->assertNull(FactionLogo::pathFor('   '));
+        $this->assertNull(LogoImage::pathFor(null));
+        $this->assertNull(LogoImage::pathFor(''));
+        $this->assertNull(LogoImage::pathFor('   '));
     }
 
     /**
@@ -194,8 +194,8 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('Test-Case-Folding.PNG');
 
         $this->assertSame(
-            '/images/factions/Test-Case-Folding.PNG',
-            FactionLogo::pathFor('Test Case Folding'),
+            '/images/logos/Test-Case-Folding.PNG',
+            LogoImage::pathFor('Test Case Folding'),
         );
     }
 
@@ -209,8 +209,8 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test-both-formats.webp');
 
         $this->assertSame(
-            '/images/factions/test-both-formats.webp',
-            FactionLogo::pathFor('Test Both Formats'),
+            '/images/logos/test-both-formats.webp',
+            LogoImage::pathFor('Test Both Formats'),
         );
     }
 
@@ -224,12 +224,12 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test-mixed-formats-wide.webp');
 
         $this->assertSame(
-            '/images/factions/test-mixed-formats.png',
-            FactionLogo::pathFor('Test Mixed Formats'),
+            '/images/logos/test-mixed-formats.png',
+            LogoImage::pathFor('Test Mixed Formats'),
         );
         $this->assertSame(
-            '/images/factions/test-mixed-formats-wide.webp',
-            FactionLogo::pathFor('Test Mixed Formats', FactionLogo::WIDE),
+            '/images/logos/test-mixed-formats-wide.webp',
+            LogoImage::pathFor('Test Mixed Formats', LogoImage::WIDE),
         );
     }
 
@@ -242,7 +242,7 @@ class FactionLogoTest extends TestCase
     {
         $this->writeLogo('test-vector-only.svg');
 
-        $this->assertNull(FactionLogo::pathFor('Test Vector Only'));
+        $this->assertNull(LogoImage::pathFor('Test Vector Only'));
     }
 
     /**
@@ -254,15 +254,15 @@ class FactionLogoTest extends TestCase
         $this->writeLogo('test-absolute-url.png');
 
         $this->assertSame(
-            url('/images/factions/test-absolute-url.png'),
-            FactionLogo::urlFor('Test Absolute URL'),
+            url('/images/logos/test-absolute-url.png'),
+            LogoImage::urlFor('Test Absolute URL'),
         );
-        $this->assertStringStartsWith('http', (string) FactionLogo::urlFor('Test Absolute URL'));
+        $this->assertStringStartsWith('http', (string) LogoImage::urlFor('Test Absolute URL'));
     }
 
     public function test_a_faction_with_no_logo_has_no_url(): void
     {
-        $this->assertNull(FactionLogo::urlFor('Test Nothing Drawn Yet'));
+        $this->assertNull(LogoImage::urlFor('Test Nothing Drawn Yet'));
     }
 
     /**
@@ -277,7 +277,7 @@ class FactionLogoTest extends TestCase
         $badge = FactionBadge::for('Test Badge Shape');
 
         $this->assertSame('Test Badge Shape', $badge['name']);
-        $this->assertSame('/images/factions/test-badge-shape.png', $badge['logo_path']);
+        $this->assertSame('/images/logos/test-badge-shape.png', $badge['logo_path']);
         $this->assertSame(
             sprintf('#%06X', GuildBlueprint::colourFor('Test Badge Shape')),
             $badge['colour'],
@@ -299,6 +299,22 @@ class FactionLogoTest extends TestCase
                 "[{$name}] is a different colour in the browser than in Discord.",
             );
         }
+    }
+
+    /**
+     * A character that is an organisation resolves exactly as a faction does:
+     * the class keys on a name and does not care what kind of thing has it.
+     */
+    public function test_a_character_that_is_an_organisation_resolves_too(): void
+    {
+        $this->writeLogo('test-daily-bugle.png');
+        $this->writeLogo('test-daily-bugle-wide.png');
+
+        $this->assertSame('/images/logos/test-daily-bugle.png', LogoImage::pathFor('Test Daily Bugle'));
+        $this->assertSame(
+            '/images/logos/test-daily-bugle-wide.png',
+            LogoImage::pathFor('Test Daily Bugle', LogoImage::WIDE),
+        );
     }
 
     public function test_a_faction_with_no_logo_still_has_a_colour(): void

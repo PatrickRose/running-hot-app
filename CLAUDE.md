@@ -248,7 +248,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | The three card lists | `App\Support\ProtectionCardBlueprint`, `EquipmentCardBlueprint`, `TechnologyBlueprint` |
 | Seeding them into a game | `App\Actions\SeedProtectionCards`, `SeedEquipmentCards`, `SeedTechnologies`, `SeedProtectionCardHoldings` |
 | Finding a card's artwork from its code | `App\Support\CardImage` |
-| Finding a faction's logo from its name | `App\Support\FactionLogo` |
+| Finding a faction's logo from its name | `App\Support\LogoImage` |
 | A faction's logo and colour in one payload | `App\Support\FactionBadge`, `resources/js/components/faction-badge.tsx` |
 | What each icon in the game's font means | `App\Support\IconFont` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
@@ -439,16 +439,31 @@ Control sets any count outright via `ProtectionCardHoldingController`. The Corpo
 
 **Not modelled, deliberately:** the Corporation shop, auctions, research grants, trading copies between Security players, and who owns which Equipment card. Each is a conversation with Control, who then sets the count.
 
-## Faction logos
+## Logos
 
-**A faction's logo is identified by a slug of its name, and by nothing else.** The
-roster in `config/running_hot.php` is keyed by name, so `App\Support\FactionLogo`
-resolves `public/images/factions/<slug>.{webp,png,jpg,jpeg}` — Augmented Nucleotech
+**A logo is identified by a slug of the name it belongs to, and by nothing else.**
+The roster in `config/running_hot.php` is keyed by name, so `App\Support\LogoImage`
+resolves `public/images/logos/<slug>.{webp,png,jpg,jpeg}` — Augmented Nucleotech
 from `augmented-nucleotech`, g33ks from `g33ks`. There is deliberately no
-`logo_path` column: nothing stores a path, so no path can drift from the faction it
+`logo_path` column: nothing stores a path, so no path can drift from what it
 belongs to, and artwork committed after a game was created appears in that game
 immediately rather than waiting on a column to be backfilled. The directory is
-listed once per request, for the reason `CardImage` does the same.
+listed once per request, for the reason `CardImage` does the same — and the class is
+named for neither of the things that have logos, because it does not care which it
+is asked about.
+
+**Two kinds of thing have one, and they differ in what happens when there is
+none.** The nine factions are one. The other is the three characters that are
+*organisations* rather than people: Business Times and Th3 Undergr0und are
+newspapers and HM Government is a government, each staffed by a single player.
+A faction always gets a badge and falls back to its initials, because a faction is
+a side players need to pick out of a list. A character gets one **only where
+artwork exists** — a game has forty-odd of them and all but three are somebody's
+name, so a coloured square against every one would imply an organisation where
+there is none. `FactionBadge` is the always-badged one and is faction-only;
+`resources/js/components/character-logo.tsx` renders nothing when asked about a
+person. Adding `jack-scanton.png` would simply start showing it, which is the
+right amount of ceremony for a decision Control might make.
 
 **Two variants per faction, because one picture cannot do both jobs.** The square
 badge is the logo alone, under the bare slug, and it goes wherever the name is
@@ -457,7 +472,7 @@ already written beside it — which is every one of the application's own screen
 under a `-wide` suffix, so it only belongs where it can stand in place of written
 text and has room to be read: the `#facility-list` embed is its one consumer, and
 it takes the full width of a message as the embed's `image` rather than an 80×80
-`thumbnail`. `FactionLogo::ICON` and `::WIDE` name them.
+`thumbnail`. `LogoImage::ICON` and `::WIDE` name them.
 
 **Neither variant ever stands in for the other in the resolver**, which is the same
 asymmetry `CardImage` uses for a card's back. A lockup crushed into a 24-pixel
@@ -470,7 +485,7 @@ to a faction named Wide.
 
 **A faction with no logo is the normal case, and a clean checkout is in it.** So
 every caller copes with null: the Discord embed carries neither picture key at all
-rather than an empty one, and the application's own pages draw the faction's
+rather than an empty one, and the application's own pages draw a faction's
 initials on the colour `GuildBlueprint::colourFor()` gives it. That is also exactly
 what a Corporation Control invents mid-game gets, which is why the fallback is a
 first-class rendering rather than a placeholder — `FactionBadge` (the React one)
@@ -493,16 +508,16 @@ would be a hash function written twice to agree on a swatch. Two factions can
 collide on a colour — `colourFor` hashes across ten — which is already true of the
 Discord roles, and the logo is what tells them apart.
 
-**Discord fetches an embed's image itself**, so `FactionLogo::urlFor()` is absolute
+**Discord fetches an embed's image itself**, so `LogoImage::urlFor()` is absolute
 where `pathFor()` is rooted. That also means Discord cannot see a logo on a dev
 server it cannot reach: the thumbnail is quietly absent rather than broken. There
 is a line about this in the README, beside the file names.
 
-**A test must never write over a faction's real artwork**, for the reason the card
-tests must not: the logos are committed, so a test cleaning up after itself would
-delete one. `FactionLogoTest::writeLogo()` asserts the file does not already exist
-rather than trusting the convention, and every name it uses is one no faction has.
-`TestCase` calls `FactionLogo::flush()` for every test.
+**A test must never write over real artwork**, for the reason the card tests must
+not: the logos are committed, so a test cleaning up after itself would delete one.
+`LogoImageTest::writeLogo()` asserts the file does not already exist rather than
+trusting the convention, and every name it uses is one nothing in the game has.
+`TestCase` calls `LogoImage::flush()` for every test.
 
 ## The icon font
 
@@ -519,6 +534,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, and faction logos wherever the application names a team.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, and logos wherever the application names a team or one of the three characters that is an organisation.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

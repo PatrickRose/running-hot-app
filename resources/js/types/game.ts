@@ -106,6 +106,13 @@ export type Faction = {
 
 export type CharacterSubject = TrackerSubject & {
     name: string;
+    /**
+     * Set only for the characters that are organisations rather than people —
+     * the two Press outlets and HM Government. Null for everybody else, and the
+     * page then draws nothing rather than falling back to initials the way a
+     * faction does.
+     */
+    logo_path: string | null;
     role: string;
     role_label: string;
     team: string | null;

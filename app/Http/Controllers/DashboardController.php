@@ -9,6 +9,7 @@ use App\Models\DiscordMemberSync;
 use App\Models\Game;
 use App\Support\FactionBadge;
 use App\Support\GamePresenter;
+use App\Support\LogoImage;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -34,6 +35,9 @@ class DashboardController extends Controller
             ->map(fn (Character $character): array => [
                 'id' => $character->id,
                 'name' => $character->name,
+                // Set only for a character that is an organisation rather than
+                // a person; see GamePresenter::trackers().
+                'logo_path' => LogoImage::pathFor($character->name),
                 'role_label' => $character->role->label(),
                 'team' => $character->gang->name ?? $character->corporation?->name,
                 'credits' => $character->credits,

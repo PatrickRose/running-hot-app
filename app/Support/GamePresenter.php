@@ -237,6 +237,13 @@ class GamePresenter
                     'subject_type' => $character->getMorphClass(),
                     'subject_id' => $character->id,
                     'name' => $character->name,
+                    // Only the characters that are organisations rather than
+                    // people have artwork - Business Times, Th3 Undergr0und, HM
+                    // Government - so this is null for everybody else, and the
+                    // page draws nothing rather than falling back to initials.
+                    // A coloured square against forty-odd names would imply an
+                    // organisation where there is only somebody's name.
+                    'logo_path' => LogoImage::pathFor($character->name),
                     'role' => $character->role->value,
                     'role_label' => $character->role->label(),
                     'team' => $character->gang->name ?? $character->corporation?->name,

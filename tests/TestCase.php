@@ -3,7 +3,7 @@
 namespace Tests;
 
 use App\Support\CardImage;
-use App\Support\FactionLogo;
+use App\Support\LogoImage;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Http;
 use Laravel\Fortify\Features;
@@ -29,7 +29,7 @@ abstract class TestCase extends BaseTestCase
         // A test that writes artwork has to be seen by whatever reads it next,
         // so both listings start empty for every test.
         CardImage::flush();
-        FactionLogo::flush();
+        LogoImage::flush();
     }
 
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void
