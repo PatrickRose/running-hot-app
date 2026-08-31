@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int $setup_seconds
  * @property int $action_seconds
  * @property int $team_time_seconds
+ * @property int $council_recess_seconds
  * @property bool $auto_advance
  * @property string $discord_webhook_url
  * @property string|null $discord_guild_id
@@ -36,7 +37,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'name', 'status', 'stability', 'civil_unrest',
-    'setup_seconds', 'action_seconds', 'team_time_seconds',
+    'setup_seconds', 'action_seconds', 'team_time_seconds', 'council_recess_seconds',
     'auto_advance', 'discord_webhook_url',
     'discord_guild_id', 'discord_invite_url',
     'discord_provision_status', 'discord_provision_message', 'discord_provisioned_at',
@@ -86,6 +87,17 @@ class Game extends Model
     public function turns(): HasMany
     {
         return $this->hasMany(Turn::class);
+    }
+
+    /**
+     * The game's agenda cards: Control's deck, and every custom agenda players
+     * have written into it (rulebook 3.1).
+     *
+     * @return HasMany<AgendaCard, $this>
+     */
+    public function agendaCards(): HasMany
+    {
+        return $this->hasMany(AgendaCard::class);
     }
 
     /** @return HasMany<Corporation, $this> */
