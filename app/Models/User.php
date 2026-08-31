@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CharacterRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
@@ -106,5 +107,31 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->isControlEverywhere()
             || $this->controlMemberships()->where('game_id', $game->id)->exists();
+    }
+
+    /**
+     * The Corporation this account plays for in a game, if any.
+     *
+     * A player is bound to a Corporation by holding one of its seats rather
+     * than by a column, so this reads their claimed characters. Naming a role
+     * asks the narrower question - "whose Research player is this?" - which is
+     * what the research sub-game needs, since a CEO reads their Corporation's
+     * research and does not play it.
+     */
+    public function corporationIn(Game $game, ?CharacterRole $role = null): ?Corporation
+    {
+        $characters = $game->characters()
+            ->where('user_id', $this->id)
+            ->whereNotNull('corporation_id')
+            ->with('corporation')
+            ->get();
+
+        if ($role !== null) {
+            return $characters->firstWhere('role', $role)?->corporation;
+        }
+
+        return $characters
+            ->first(fn (Character $character): bool => $character->role->isCorporate())
+            ?->corporation;
     }
 }

@@ -289,6 +289,62 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | The research decks
+    |--------------------------------------------------------------------------
+    |
+    | What the research game of rulebook 3.2.1 is played out of: five cards in
+    | each Corporation's hand, six face up in the public pool, and the two decks
+    | those come from.
+    |
+    | The hand and pool sizes are the rulebook's. Everything else here is not:
+    | "Each Corporation's research deck begins as a fairly basic deck" is all
+    | 3.2.3 says about what is in one, and the rulebook never describes the
+    | public deck at all. So this is a starting position for Control to set
+    | rather than a rule being encoded, and it is written as a shape rather than
+    | as a list of cards: 'values' is one card of each value in every suit,
+    | 'copies' repeats that, and 'wild' adds that many cards of no suit.
+    |
+    | The defaults keep the private decks to low cards and no wilds, because
+    | that is what the tech tree implies a basic deck is - the six "Research
+    | deck" rows on the common tree sell 3-5s, then 6-10s, and only then wilds.
+    | A Corporation named under 'corporations' gets that deck instead of the
+    | default one, which is where a Corporation with a research focus of its own
+    | would be given it.
+    |
+    | Applied by App\Actions\SeedResearchDecks, which is a starting position
+    | and not a change: nothing goes through TrackerService, and re-running it
+    | leaves an existing deck alone rather than dealing a second one on top.
+    |
+    */
+
+    'research' => [
+
+        'hand_size' => 5,
+
+        'pool_size' => 6,
+
+        'private_deck' => [
+            'values' => [1, 2, 3, 4, 5],
+            'copies' => 1,
+            'wild' => 0,
+            'wild_value' => 3,
+        ],
+
+        'public_deck' => [
+            'values' => [1, 2, 3, 4, 5],
+            'copies' => 2,
+            'wild' => 2,
+            'wild_value' => 3,
+        ],
+
+        'corporations' => [
+            // 'Genetic Equity' => ['values' => [1, 2, 3, 4, 5, 6], 'copies' => 1],
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Starting credits
     |--------------------------------------------------------------------------
     |

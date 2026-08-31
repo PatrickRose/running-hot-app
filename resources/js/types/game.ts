@@ -428,3 +428,247 @@ export type FacilityBoard = {
     public: PublicCorporationFacilities[];
     own: CorporationFacilities | null;
 };
+
+/**
+ * One of a Corporation's technologies as it grants a deck card (rulebook
+ * 3.2.3).
+ *
+ * The amounts are Research Points the player assigns to suits of their own
+ * choosing, all different — "6 research credits in any suit and 3 in another" is
+ * `[6, 3]`, and "5 from each suit" is `[5, 5, 5, 5]`. The card takes the suit of
+ * the first amount unless it is wild, and its value is the player's choice
+ * inside the range.
+ */
+export type DeckGrant = {
+    amounts: number[];
+    value_min: number;
+    value_max: number;
+    wild: boolean;
+    /** Words printed on the card that the rulebook never defines, e.g. "No single". */
+    restriction: string | null;
+    requires_research_facilities: number;
+};
+
+/** A card in the research game (rulebook 3.2.1). */
+export type ResearchCardSummary = {
+    id: number;
+    /** Null for a wild card, which counts as whichever suit its set needs. */
+    suit: string | null;
+    suit_label: string | null;
+    /** The character that draws this card's icon — the wildcard's own for a wild. */
+    glyph: string;
+    value: number;
+    wild: boolean;
+    /** "7 Leaf", or "Wild 4". */
+    label: string;
+    restriction: string | null;
+    zone: 'deck' | 'hand' | 'pool' | 'spent';
+    zone_label: string;
+};
+
+/** A Corporation's place in the research turn order (rulebook 3.2.1). */
+export type ResearchSeatSummary = Faction & {
+    corporation_id: number;
+    order: number;
+    playing: boolean;
+    /** Why they are out: they left, their deck ran dry, or Control took them out. */
+    left_reason: string | null;
+    is_turn: boolean;
+    is_yours: boolean;
+    deck_remaining: number;
+};
+
+/** One sitting of the research game. All of this is public. */
+export type ResearchSessionSummary = {
+    id: number;
+    open: boolean;
+    turn: number | null;
+    pool: ResearchCardSummary[];
+    public_deck_remaining: number;
+    current_order: number | null;
+    is_your_turn: boolean;
+    seats: ResearchSeatSummary[];
+};
+
+/** One card of an equation, as it was when it was played. */
+export type PlayedResearchCard = {
+    suit: string | null;
+    value: number;
+    from_hand: boolean;
+};
+
+/** An equation somebody played, and what it paid (rulebook 3.2.1). */
+export type ResearchEquationSummary = {
+    id: number;
+    status: 'pending' | 'scored' | 'voided';
+    status_label: string;
+    /** Set only on Control's page, where equations from every Corporation mix. */
+    corporation: string | null;
+    corporation_id: number;
+    turn: number | null;
+    left: PlayedResearchCard[];
+    right: PlayedResearchCard[];
+    left_label: string;
+    right_label: string;
+    left_sum: number;
+    right_sum: number;
+    cards_per_side: number;
+    balanced: boolean;
+    /** The triangular bonus a balanced equation pays: 1, 3, 6, 10, and so on. */
+    bonus: number;
+    /**
+     * The suits each side may be scored as. An all-wild set may be any of the
+     * four, which is why this comes from the server rather than off the cards.
+     */
+    left_suits: string[];
+    right_suits: string[];
+    /** The suits the bonus may be split across. */
+    bonus_suits: string[];
+    scored_side: 'left' | 'right' | null;
+    scored_suit: string | null;
+    /** Points by suit, once somebody has taken them. */
+    awards: Record<string, number> | null;
+    scored_at: string | null;
+    notes: string | null;
+};
+
+/** A technology card a Corporation actually has (rulebook 3.2.2). */
+export type TechnologyHoldingSummary = {
+    id: number;
+    technology_type_id: number;
+    name: string;
+    code: string | null;
+    image_path: string | null;
+    back_image_path: string | null;
+    effect: string | null;
+    status: 'claimed' | 'researched' | 'destroyed';
+    status_label: string;
+    origin: 'researched' | 'shared' | 'weak_copy' | 'good_copy' | 'stolen';
+    origin_label: string;
+    discount_percent: number;
+    facility_id: number | null;
+    facility: string | null;
+    paid: Record<string, number>;
+    /**
+     * Whether the card is actually working. False for a claimed copy, and false
+     * for a split technology whose thief has not collected every piece
+     * (rulebook 3.2.7).
+     */
+    usable: boolean;
+    split_group: string | null;
+    split_piece: number | null;
+    split_pieces: number | null;
+    notes: string | null;
+};
+
+/** A copy or a theft in hand, and what paying for it would cost. */
+export type TechnologyClaim = {
+    id: number;
+    origin: string;
+    origin_label: string;
+    discount_percent: number;
+    cost: Record<string, number>;
+    facility: string | null;
+};
+
+/**
+ * A technology as its card prints it, plus the two things the research game
+ * needs off the row: whether it is one piece of a split technology (3.2.7), and
+ * whether "researching" it actually customises a deck (3.2.3).
+ *
+ * This is what Control's panel lists. A Corporation's own tree adds its answer
+ * to "can we?" on top — see `ResearchTreeEntry`.
+ */
+export type ResearchTechnologySummary = TechnologySummary & {
+    split_group: string | null;
+    split_piece: number | null;
+    split_pieces: number | null;
+    is_deck_customisation: boolean;
+    deck_grant: DeckGrant | null;
+};
+
+/** A row on a Corporation's tech tree, with its own answer to "can we?". */
+export type ResearchTreeEntry = ResearchTechnologySummary & {
+    affordable: boolean;
+    /** Prerequisite titles still missing (rulebook 3.2.2). */
+    missing_prerequisites: string[];
+    researched_count: number;
+    claims: TechnologyClaim[];
+};
+
+/** Where a technology can be housed, and how full it is (rulebook 3.2.2). */
+export type ResearchFacilitySummary = {
+    id: number;
+    name: string;
+    facility_type: string;
+    facility_type_id: number;
+    available: boolean;
+    stored: number;
+    /** 2 for every Corporate Facility the Corporation owns. Zero is possible. */
+    capacity: number;
+};
+
+/**
+ * One Corporation's own half of the research game — its hand, its deck, its
+ * points and its tree. Sent only to that Corporation: 3.2.5 makes the size of
+ * its point pile semi-secret, and a hand everybody can read is not a card game.
+ */
+export type OwnResearch = Faction & {
+    id: number;
+    /** True for the Research seat. The CEO and Security read and cannot act. */
+    can_play: boolean;
+    points: Record<string, number>;
+    hand: ResearchCardSummary[];
+    deck: ResearchCardSummary[];
+    deck_remaining: number;
+    seated: boolean;
+    playing: boolean;
+    left_reason: string | null;
+    is_your_turn: boolean;
+    pending_equations: ResearchEquationSummary[];
+    scored_equations: ResearchEquationSummary[];
+    facilities: ResearchFacilitySummary[];
+    holdings: TechnologyHoldingSummary[];
+    tree: ResearchTreeEntry[];
+};
+
+/** The research sub-game as one player sees it (rulebook 3.2). */
+export type ResearchBoard = {
+    turn: number | null;
+    suits: ResearchSuitSummary[];
+    hand_size: number;
+    pool_size: number;
+    session: ResearchSessionSummary | null;
+    corporations: Array<Faction & { id: number; is_yours: boolean }>;
+    own: OwnResearch | null;
+};
+
+/** How a technology card came into a Corporation's hands (rulebook 3.2.6). */
+export type TechnologyOriginSummary = {
+    value: string;
+    label: string;
+    default_discount_percent: number;
+};
+
+/** Everything Research Control needs to run the table. No tiering at all. */
+export type ResearchControlState = {
+    turn: number | null;
+    suits: ResearchSuitSummary[];
+    origins: TechnologyOriginSummary[];
+    session: ResearchSessionSummary | null;
+    public_deck_remaining: number;
+    corporations: Array<
+        Faction & {
+            id: number;
+            points: Record<string, number>;
+            deck_remaining: number;
+            hand: ResearchCardSummary[];
+            deck: ResearchCardSummary[];
+            facilities: ResearchFacilitySummary[];
+            holdings: TechnologyHoldingSummary[];
+            researchers: string[];
+        }
+    >;
+    equations: ResearchEquationSummary[];
+    technologies: ResearchTechnologySummary[];
+};

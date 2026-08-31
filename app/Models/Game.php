@@ -124,6 +124,35 @@ class Game extends Model
         return $this->hasMany(TechnologyType::class);
     }
 
+    /**
+     * The shared public research deck, plus every Corporation's private one
+     * (rulebook 3.2.1).
+     *
+     * @return HasMany<ResearchCard, $this>
+     */
+    public function researchCards(): HasMany
+    {
+        return $this->hasMany(ResearchCard::class);
+    }
+
+    /** @return HasMany<ResearchSession, $this> */
+    public function researchSessions(): HasMany
+    {
+        return $this->hasMany(ResearchSession::class);
+    }
+
+    /** @return HasMany<ResearchEquation, $this> */
+    public function researchEquations(): HasMany
+    {
+        return $this->hasMany(ResearchEquation::class);
+    }
+
+    /** @return HasMany<TechnologyHolding, $this> */
+    public function technologyHoldings(): HasMany
+    {
+        return $this->hasMany(TechnologyHolding::class);
+    }
+
     /** @return HasMany<Gang, $this> */
     public function gangs(): HasMany
     {
@@ -162,6 +191,23 @@ class Game extends Model
     public function discordMemberSyncs(): HasMany
     {
         return $this->hasMany(DiscordMemberSync::class);
+    }
+
+    /**
+     * The game players are in.
+     *
+     * There is one running game at a time - a session is an evening, and the
+     * player pages carry no game in their URL because a player only ever has
+     * one. Control's pages all name a game, because Control may be setting the
+     * next one up while this one is being played.
+     */
+    public static function current(): ?self
+    {
+        /** @var self|null */
+        return self::query()
+            ->where('status', GameStatus::Running)
+            ->latest('id')
+            ->first();
     }
 
     /**

@@ -1,5 +1,11 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, Building2, FolderGit2, LayoutGrid } from 'lucide-react';
+import {
+    BookOpen,
+    Building2,
+    FlaskConical,
+    FolderGit2,
+    LayoutGrid,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -13,7 +19,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, facilities } from '@/routes';
+import { dashboard, facilities, research } from '@/routes';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -26,6 +32,11 @@ const mainNavItems: NavItem[] = [
         title: 'Facilities',
         href: facilities(),
         icon: Building2,
+    },
+    {
+        title: 'Research',
+        href: research(),
+        icon: FlaskConical,
     },
 ];
 

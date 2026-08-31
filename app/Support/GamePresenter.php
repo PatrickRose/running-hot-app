@@ -219,6 +219,14 @@ class GamePresenter
                     Tracker::Income->value => $corporation->income,
                     Tracker::PoliticalWill->value => $corporation->political_will,
                     Tracker::CorporationCredits->value => $corporation->credits,
+                    // The four Research Point suits sit here rather than on the
+                    // research panel, because they are Trackers like the rest:
+                    // Control moves them from the same dialog, and every change
+                    // lands in the same ledger (rulebook 3.2.1).
+                    Tracker::ResearchCog->value => $corporation->cog_points,
+                    Tracker::ResearchBrain->value => $corporation->brain_points,
+                    Tracker::ResearchLeaf->value => $corporation->leaf_points,
+                    Tracker::ResearchMaths->value => $corporation->maths_points,
                 ],
             ])->all(),
             'gangs' => $game->gangs()->orderBy('name')->get()->map(fn ($gang): array => [

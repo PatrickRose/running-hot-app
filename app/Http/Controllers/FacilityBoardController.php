@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Support\GamePresenter;
 use Illuminate\Http\Request;
@@ -23,10 +22,7 @@ class FacilityBoardController extends Controller
 {
     public function __invoke(Request $request, GamePresenter $presenter): Response
     {
-        $game = Game::query()
-            ->where('status', GameStatus::Running)
-            ->latest('id')
-            ->first();
+        $game = Game::current();
 
         return Inertia::render('facilities', [
             'game' => $game === null ? null : $presenter->summary($game),
