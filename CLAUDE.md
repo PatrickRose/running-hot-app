@@ -285,6 +285,22 @@ php artisan game:tick     # advance any phase whose clock has expired
 
 PHP 8.5 is the minimum, and CI runs the same version.
 
+### Running those checks where Composer cannot download
+
+Some sandboxes — Claude Code on the web among them — allow git over HTTPS to github.com but block `api.github.com`, which is where Composer's `dist` zipballs come from. `composer install` then dies part way through with `Failed to download … from dist` or `Could not authenticate against github.com`, and none of the checks can be run. It is not an authentication problem and there is no token to go looking for: the 403 is egress policy, and `codeload.github.com` and `github.com/…/archive/*.zip` are blocked with it.
+
+```shell
+composer install --prefer-source --ignore-platform-req=php
+```
+
+- **`--prefer-source` is the whole trick.** Every package in the lock but one carries a git `source`, and cloning is allowed.
+- **`--ignore-platform-req=php`** is only needed while the sandbox's PHP is older than the 8.5 this application wants. Pass it to `composer dump-autoload` as well if you ever run that: without it the regenerated `platform_check.php` stops artisan booting at all, which looks like a far stranger problem than it is.
+- **`phpstan/phpstan` is the one exception, and it is what aborts the install.** Its lock entry has no `source` at all. Drop it and `larastan/larastan` from `composer.lock` and `composer.json` to get the rest installed — then **restore both files**, because neither edit is yours to commit.
+
+**phpstan is then one clone away, because its repository commits the built phar.** Fetch the exact commit `composer.lock` names for it, and larastan at its locked tag, into `vendor/phpstan/phpstan/` and `vendor/larastan/larastan/`; then add both to `vendor/composer/installed.json` and run `composer dump-autoload --ignore-platform-req=php`, or larastan's own namespace will not autoload. `php vendor/phpstan/phpstan/phpstan.phar analyse` from there is the same analysis CI runs.
+
+**A phpstan that exits 1 having printed nothing is a broken install, not a clean run.** Both ways of getting that wrong are silent: a phar too old for the larastan the lock pins (larastan v3 wants phpstan ^2.2), and `cp -r` into a directory that already exists, which nests the package one level below the path `phpstan.neon` includes. Bisect with a throwaway config including only `vendor/nesbot/carbon/extension.neon`, then only larastan's — the one that goes quiet is the one that is not where it says it is. What must not happen is concluding that phpstan cannot run here and pushing anyway: it can, and it finds real mistakes that the tests and `tsc` do not.
+
 ## Discord integration
 
 Three independent mechanisms, and it is worth keeping them straight:
