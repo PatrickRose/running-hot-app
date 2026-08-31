@@ -252,6 +252,10 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | A faction's logo and colour in one payload | `App\Support\FactionBadge`, `resources/js/components/faction-badge.tsx` |
 | What each icon in the game's font means | `App\Support\IconFont` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
+| The Council's agenda, voting and attendance | `App\Services\CouncilService` |
+| What each person at the Council may see | `App\Support\CouncilPresenter` |
+| Who may chair, and who may vote | `App\Policies\CouncilSessionPolicy`, `App\Policies\AgendaCardPolicy` |
+| The Council Chamber players read | `App\Http\Controllers\CouncilController`, `resources/js/pages/council.tsx` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | Who Control is, per game | `App\Models\ControlMember`, `App\Actions\ClaimControlSeatsForUser` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -338,6 +342,102 @@ The roster has to exist first, since team channels are permissioned from it. A b
 **Roles are handed out on every sign in**, not just the first — same reasoning as character claiming. Assigning a role needs the player to already be a guild member: Discord answers 404 otherwise, and the only way round it is the `guilds.join` scope, which would widen login beyond the `identify`/`email` it deliberately asks for. So a non-member is recorded as `not_a_member` in `discord_member_syncs`, the dashboard shows them the invite, and the next sign in tries again. A sync only ever adds or removes this game's own recorded roles, so a role Control granted by hand survives it.
 
 **Never let a test reach Discord.** `TestCase` calls `Http::preventStrayRequests()` and `phpunit.xml` blanks `DISCORD_WEBHOOK_URL`, because the sync queue driver runs the announcement job inline: without both, a real webhook in `.env` gets posted to for real. `SendDiscordAnnouncement` deliberately rethrows `StrayRequestException` so this fails loudly rather than being swallowed by its fail-soft catch.
+
+## The Council
+
+The CEOs' sub-game (rulebook 3.1), and the one place in this application with a
+real secret in it. Two halves on the same turn: the agenda is established during
+Setup, and voted on during the Action phase.
+
+**Players drive it; Control provides the agendas.** The rulebook gives Control
+four jobs and no more — draw three cards for the Chair, add remarks to a custom
+agenda, sign off an amendment, and judge an empty seat — so those are what
+`/control/games/{game}/council` holds. Everything else is the Chair's or a CEO's
+and happens at `/council`. Control still reaches all of it, through
+`CouncilSessionPolicy::before()`, because a ruling mid-game must not wait on the
+Chair being at their laptop.
+
+**Nothing seeds the agenda deck, deliberately.** The rulebook prints no agenda
+cards and the game's own deck is not in this repository, so Control writes the
+cards for the game it is running — the same way it invents a Facility type
+mid-game. A deck this application invented would be inventing the politics of
+Procatorion. An empty deck is therefore the normal state of a fresh game, and
+the draw says so rather than failing obscurely.
+
+**Political Will weights a vote; it is never spent on one.** The rulebook has a
+CEO write down the Political Will they *have* (3.1.2) and nothing in 3.1 takes
+it, so `castBallot` moves no tracker and a Corporation votes with everything it
+holds on every card. The one movement 3.1 does describe is what an absence
+costs, and even that has no figure printed: Control marks the seat and names the
+number, and it goes through `TrackerService` like everything else. `Tracker`
+adjustments are the only reason `CouncilService` knows about Political Will at
+all.
+
+**A ballot splits across resolutions.** A card carries two to five resolutions
+(3.1.4), so "which way you are voting" is a division of Political Will between
+them rather than a for-or-against. "Simple majority" is read as the most
+Political Will, because with five options there may be no absolute majority to
+be had — and the rulebook's own remedy for an undecided vote is the Chair rather
+than a second round. A tie is handed straight back to the Chair, who may only
+pick between the resolutions that actually tied: breaking a tie is choosing
+between the votes, not overruling them.
+
+**Secret means hidden from the players, not hidden.** 3.1.2 has the Chair
+receiving the individual breakdowns either way and leaking them as they see fit,
+so `CouncilPresenter` builds the Chair's view separately rather than hiding less
+of the same payload. Three tiers, and the line between them is the point: who
+has handed a slip over is public even in a secret vote (you can watch somebody
+vote at the table), the breakdown of a public vote is read out once the Chair
+resolves it, and the breakdown of a secret one reaches the Chair and Control
+alone. Your own vote is never hidden from you.
+
+**Declaring secrecy hands back the votes already in**, which is both halves of
+what 3.1.2 asks for: it must be done before any votes are submitted, and any
+that are in go back to the player. Going the other way is refused once anybody
+has voted — that is not in the rulebook and is here anyway, because a ballot
+cast under a promise of secrecy must not be exposed by the Chair changing their
+mind. The Chair leaking it is theirs to do; the application publishing it is
+not.
+
+**An amendment changes nothing until Council Control signs it off.** So a
+proposed addition is not yet an option and a proposed removal is still one — the
+card reads and votes as it stands, and a CEO can never be voting on words that
+moved underneath them. The 2-to-5 bounds are checked again at sign-off rather
+than trusted from the proposal: two amendments can be waiting at once, and it is
+signing both off that would take a card past them.
+
+**Where a card is lives on the card; what is true of it this turn lives on the
+item.** `AgendaCardStatus` is the whole lifecycle, deck and custom alike, and
+the two kinds meet at `WithChair` — from there the rulebook treats a drawn card
+and a player's card exactly alike. `council_agenda_items` adds only what belongs
+to one sitting: how the card got there, whether the vote is secret, and how it
+resolved. The five-item cap counts cards on the table, so a discarded one costs
+nothing.
+
+**The Chair rotation is held, never derived.** There is no rule saying whose
+turn it is — Council Control announces the order on the day (3.1.1) — so
+`corporations.council_chair_order` holds it and `CreateDefaultRoster` writes the
+roster's own order down as a starting point rather than leaving something to
+guess later. Each sitting then stores its own chair, so handing the Chair to
+somebody for one turn does not shuffle every turn after it.
+
+**The recess is a second clock inside the Setup phase**, and it is
+server-authoritative for the reason the phase clock is: `council_sessions.recess_at`
+is absolute, the browser only counts down between polls, and a pause moves it
+with the phase (`TurnEngine::resume` shifts it by however long the pause lasted).
+Five minutes is `games.council_recess_seconds`, a column rather than a constant,
+because Control runs the game to the clock it wants on the night.
+
+**Custom agendas are a three-step handshake, and all three steps are real.** A
+player writes the card, Control adds its remarks and gives it *back*, and only
+then does the player submit it to the Chair — the rulebook has the player submit
+it once they and Control agree, so agreeing is the player's to do too. Any
+player may write one: 3.1.3 hands blank cards to players rather than to CEOs.
+
+**Not modelled:** what a resolution actually *does*. The Council decides things
+about Procatorion, and the consequences are Control's to apply with the tracker
+controls — an outcome is recorded as the resolution that carried, and nothing
+reads it.
 
 ## Facility Defence
 
@@ -554,6 +654,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, and logos wherever the application names a team or one of the three characters that is an organisation.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, and the Council: the agenda deck Control writes, the Chair's powers over it, and Political-Will-weighted voting with secret ballots.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.
