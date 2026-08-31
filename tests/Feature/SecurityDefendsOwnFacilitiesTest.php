@@ -6,6 +6,7 @@ use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\ProtectionKind;
 use App\Enums\Tracker;
+use App\Models\ControlMember;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
@@ -362,6 +363,41 @@ class SecurityDefendsOwnFacilitiesTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame(1, $this->facility->protectionCards()->count());
+    }
+
+    public function test_a_seat_on_this_games_control_team_may_use_them_too(): void
+    {
+        $card = $this->card('Orc', ProtectionKind::Physical);
+        $user = User::factory()->create();
+        ControlMember::factory()->for($this->game)->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->post("/facilities/{$this->facility->id}/cards", [
+                'protection_card_type_id' => $card->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $this->facility->protectionCards()->count());
+    }
+
+    /**
+     * Control of somebody else's game is not Control here. Arranging a stack in
+     * a game you are not running is arranging a stranger's defences.
+     */
+    public function test_a_seat_on_another_games_control_team_is_refused(): void
+    {
+        $card = $this->card('Orc', ProtectionKind::Physical);
+        $user = User::factory()->create();
+        ControlMember::factory()->for(Game::factory()->create())->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->post("/facilities/{$this->facility->id}/cards", [
+                'protection_card_type_id' => $card->id,
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(0, $this->facility->protectionCards()->count());
     }
 
     /**

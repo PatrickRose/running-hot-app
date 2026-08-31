@@ -422,7 +422,9 @@ class GuildBlueprint
      * The role keys a given player should hold in this game.
      *
      * Control membership is a property of the login rather than of a character,
-     * so a Control member with no character still gets the Control role.
+     * so a Control member with no character still gets the Control role. It is
+     * asked of this game rather than in general, because a seat on one game's
+     * Control team is not Control of the server next door.
      *
      * @return array<int, string>
      */
@@ -430,7 +432,7 @@ class GuildBlueprint
     {
         $keys = [];
 
-        if ($user->isControl()) {
+        if ($user->isControlFor($this->game)) {
             $keys[] = self::ROLE_CONTROL;
         }
 

@@ -1,4 +1,5 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { ControlTeam } from '@/components/control-team';
 import { DiscordHandle } from '@/components/discord-handle';
 import { GameDiscordPanel } from '@/components/game-discord';
 import { GameWebhook } from '@/components/game-webhook';
@@ -21,6 +22,7 @@ import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import type {
     CharacterSubject,
+    ControlMember,
     DiscordBotGuilds,
     DiscordMemberSync,
     GameSummary,
@@ -33,6 +35,7 @@ type Props = {
     game: GameSummary;
     trackers: GameTrackers;
     adjustments: TrackerAdjustment[];
+    controlMembers: ControlMember[];
     discordSyncs: DiscordMemberSync[];
     discordGuilds?: DiscordBotGuilds;
 };
@@ -47,6 +50,7 @@ export default function ControlGameShow({
     game,
     trackers,
     adjustments,
+    controlMembers,
     discordSyncs,
     discordGuilds,
 }: Props) {
@@ -54,7 +58,13 @@ export default function ControlGameShow({
     // fresh without anyone having to reload during a live game. Provisioning
     // runs on the queue, so this poll is also how its progress arrives.
     usePoll(5000, {
-        only: ['game', 'trackers', 'adjustments', 'discordSyncs'],
+        only: [
+            'game',
+            'trackers',
+            'adjustments',
+            'controlMembers',
+            'discordSyncs',
+        ],
     });
 
     const { props } = usePage<{ errors: Record<string, string> }>();
@@ -297,6 +307,8 @@ export default function ControlGameShow({
                         />
                     </CardContent>
                 </Card>
+
+                <ControlTeam gameId={game.id} members={controlMembers} />
 
                 <GameDiscordPanel
                     gameId={game.id}

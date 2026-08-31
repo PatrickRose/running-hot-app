@@ -9,6 +9,7 @@ use App\Enums\ProtectionKind;
 use App\Enums\ResearchSuit;
 use App\Enums\Tracker;
 use App\Models\Character;
+use App\Models\ControlMember;
 use App\Models\Corporation;
 use App\Models\DiscordMemberSync;
 use App\Models\EquipmentCardType;
@@ -149,6 +150,29 @@ class GamePresenter
                 'message' => $sync->message,
                 'role_count' => count($sync->role_ids ?? []),
                 'synced_at' => $sync->synced_at?->toIso8601String(),
+            ])->all();
+    }
+
+    /**
+     * The game's Control team: who is running it, rather than playing in it.
+     *
+     * A seat reads as its account once claimed and as the handle it is waiting
+     * on before that, which is the same thing a character's row says.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function controlMembers(Game $game): array
+    {
+        return $game->controlMembers()
+            ->with('user:id,name,discord_username')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ControlMember $member): array => [
+                'id' => $member->id,
+                'discord_username' => $member->user->discord_username ?? $member->discord_username,
+                'claimed_by' => $member->user?->name,
+                // So Control can see which seat is theirs before removing one.
+                'is_you' => $member->user_id !== null && $member->user_id === auth()->id(),
             ])->all();
     }
 

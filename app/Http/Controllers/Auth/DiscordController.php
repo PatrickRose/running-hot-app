@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Actions\ClaimCharactersForUser;
+use App\Actions\ClaimControlSeatsForUser;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncDiscordRoles;
 use App\Models\Character;
+use App\Models\ControlMember;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -22,7 +24,10 @@ use Throwable;
  */
 class DiscordController extends Controller
 {
-    public function __construct(private readonly ClaimCharactersForUser $claimCharacters) {}
+    public function __construct(
+        private readonly ClaimCharactersForUser $claimCharacters,
+        private readonly ClaimControlSeatsForUser $claimControlSeats,
+    ) {}
 
     public function redirect(): SymfonyRedirectResponse
     {
@@ -70,6 +75,11 @@ class DiscordController extends Controller
         // roster after someone has already logged in still reaches them.
         $claimed = $this->claimCharacters->handle($user);
 
+        // And to whatever Control seats they have been named on, which is how
+        // an organiser becomes Control of a game without anyone touching the
+        // console.
+        $seats = $this->claimControlSeats->handle($user);
+
         // Hand out this player's Discord roles for every game they are in.
         // Queued rather than inline: signing in must not wait on Discord, and
         // must not fail if Discord is having a bad day. Like the claim above
@@ -81,12 +91,27 @@ class DiscordController extends Controller
 
         request()->session()->regenerate();
 
+        $status = [];
+
         if ($claimed !== []) {
             $names = implode(', ', array_map(fn (Character $character): string => $character->name, $claimed));
 
-            return to_route('dashboard')->with('status', 'You are playing '.$names.'.');
+            $status[] = 'You are playing '.$names.'.';
         }
 
-        return to_route('dashboard');
+        if ($seats !== []) {
+            $games = implode(', ', array_map(
+                fn (ControlMember $seat): string => $seat->game->name,
+                $seats,
+            ));
+
+            $status[] = 'You are Control for '.$games.'.';
+        }
+
+        if ($status === []) {
+            return to_route('dashboard');
+        }
+
+        return to_route('dashboard')->with('status', implode(' ', $status));
     }
 }

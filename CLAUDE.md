@@ -251,6 +251,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | What each icon in the game's font means | `App\Support\IconFont` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
+| Who Control is, per game | `App\Models\ControlMember`, `App\Actions\ClaimControlSeatsForUser` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
 | The `#facility-list` embed, and posting it | `App\Support\Discord\FacilityListEmbed`, `App\Actions\PublishFacilityList` |
 | Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
@@ -278,10 +279,27 @@ composer run dev          # serve + queue worker + vite + logs
 composer ci:check         # everything CI runs: eslint, prettier, tsc, pint, phpstan, tests
 php artisan test --compact --filter=SomeTest
 php artisan migrate:fresh --seed --seeder=DemoGameSeeder   # demo game, control@example.com / password
+DEMO_CONTROL_DISCORD=your_handle php artisan migrate:fresh --seed --seeder=DemoGameSeeder   # ...and sign in with Discord as Control
 php artisan game:tick     # advance any phase whose clock has expired
 ```
 
 PHP 8.5 is the minimum, and CI runs the same version.
+
+### Running those checks where Composer cannot download
+
+Some sandboxes — Claude Code on the web among them — allow git over HTTPS to github.com but block `api.github.com`, which is where Composer's `dist` zipballs come from. `composer install` then dies part way through with `Failed to download … from dist` or `Could not authenticate against github.com`, and none of the checks can be run. It is not an authentication problem and there is no token to go looking for: the 403 is egress policy, and `codeload.github.com` and `github.com/…/archive/*.zip` are blocked with it.
+
+```shell
+composer install --prefer-source --ignore-platform-req=php
+```
+
+- **`--prefer-source` is the whole trick.** Every package in the lock but one carries a git `source`, and cloning is allowed.
+- **`--ignore-platform-req=php`** is only needed while the sandbox's PHP is older than the 8.5 this application wants. Pass it to `composer dump-autoload` as well if you ever run that: without it the regenerated `platform_check.php` stops artisan booting at all, which looks like a far stranger problem than it is.
+- **`phpstan/phpstan` is the one exception, and it is what aborts the install.** Its lock entry has no `source` at all. Drop it and `larastan/larastan` from `composer.lock` and `composer.json` to get the rest installed — then **restore both files**, because neither edit is yours to commit.
+
+**phpstan is then one clone away, because its repository commits the built phar.** Fetch the exact commit `composer.lock` names for it, and larastan at its locked tag, into `vendor/phpstan/phpstan/` and `vendor/larastan/larastan/`; then add both to `vendor/composer/installed.json` and run `composer dump-autoload --ignore-platform-req=php`, or larastan's own namespace will not autoload. `php vendor/phpstan/phpstan/phpstan.phar analyse` from there is the same analysis CI runs.
+
+**A phpstan that exits 1 having printed nothing is a broken install, not a clean run.** Both ways of getting that wrong are silent: a phar too old for the larastan the lock pins (larastan v3 wants phpstan ^2.2), and `cp -r` into a directory that already exists, which nests the package one level below the path `phpstan.neon` includes. Bisect with a throwaway config including only `vendor/nesbot/carbon/extension.neon`, then only larastan's — the one that goes quiet is the one that is not where it says it is. What must not happen is concluding that phpstan cannot run here and pushing anyway: it can, and it finds real mistakes that the tests and `tsc` do not.
 
 ## Discord integration
 
@@ -310,6 +328,10 @@ Three independent mechanisms, and it is worth keeping them straight:
 **`ResetDiscordGuild` is the one destructive path, and it is nothing to do with provisioning.** It empties a guild so it can be built again from nothing: every channel, and every role bar `@everyone` and the managed ones Discord refuses to delete. That is far more than the application made — Control's own channels go too — which is why it is behind Control typing the game's name out, and why nothing else calls it. Children are deleted before their categories, because Discord orphans a category's children at the top level rather than taking them with it. A 403 on one object is counted and reported rather than abandoning the wipe: every guild has at least one role above the bot's. The guild itself survives; a bot cannot delete a server it did not create, and the invite links everyone has already used are worth more than the mess. Afterwards the game has no recorded snowflakes, no webhook URL and no invite, because all three now point at things that no longer exist.
 
 The roster has to exist first, since team channels are permissioned from it. A blueprint for a game with no corporations and no gangs is just Control plus the common channels, which is correct rather than an error.
+
+**Control is a roster, not just a flag.** `users.is_control` is granted from the console and means Control of every game there will ever be — right for whoever owns the deployment, useless for the four friends helping run tonight's game. So a game has a **Control team**: a `control_members` row per organiser, named by Discord handle in the game's Control panel and claimed at sign in exactly as a character is. `User::isControl()` is "Control of something" and gates the Control area; `isControlFor($game)` is "Control of this game" and gates every route carrying a `{game}`, so a seat on Saturday's game is not a seat on someone else's. A seat carries the Control Discord role in that game's guild and nowhere else, and whoever creates a game is seated on it, since otherwise they would be bounced off the panel of the game they had just made. Removing a seat takes the role with it. There is deliberately no way to grant the account-wide flag from the web: the thing Control actually needs to say is who is running *this* game.
+
+**The demo seeder can seat you.** `db:seed` takes no options of its own, so the handles come from `DEMO_CONTROL_DISCORD` (via `running_hot.demo_control_discord`), and `DemoGameSeeder::run()` takes the same string as an argument, which is how one seeder passes it to another: `$this->call(DemoGameSeeder::class, false, ['controlDiscord' => ...])`. Without it the demo game's only Control is the password login the seeder prints, so signing in with Discord locally lands on a player's dashboard with no way through — which is the whole reason it is there.
 
 **Roles are handed out on every sign in**, not just the first — same reasoning as character claiming. Assigning a role needs the player to already be a guild member: Discord answers 404 otherwise, and the only way round it is the `guilds.join` scope, which would widen login beyond the `identify`/`email` it deliberately asks for. So a non-member is recorded as `not_a_member` in `discord_member_syncs`, the dashboard shows them the invite, and the next sign in tries again. A sync only ever adds or removes this game's own recorded roles, so a role Control granted by hand survives it.
 

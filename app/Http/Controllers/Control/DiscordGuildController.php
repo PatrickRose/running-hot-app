@@ -101,8 +101,12 @@ class DiscordGuildController extends Controller
         $game = $gameId === null ? null : Game::query()->find($gameId);
 
         // A mismatched or missing state means this redirect did not start here.
+        // The game comes out of the session rather than the URI, so this is
+        // also where it is checked against who is Control of it: every other
+        // route naming a game is gated on that by the router.
         if ($game === null || $state === null
-            || ! hash_equals($state, (string) $request->query('state'))) {
+            || ! hash_equals($state, (string) $request->query('state'))
+            || ! ($request->user()?->isControlFor($game) ?? false)) {
             return to_route('control.games.index')->withErrors([
                 'discord_guild_id' => 'That Discord authorisation did not match a request from this browser. Please try again.',
             ]);
@@ -246,7 +250,8 @@ class DiscordGuildController extends Controller
             ->whereNotNull('discord_id')
             ->where(fn ($query) => $query
                 ->where('is_control', true)
-                ->orWhereHas('characters', fn ($characters) => $characters->where('game_id', $game->id)))
+                ->orWhereHas('characters', fn ($characters) => $characters->where('game_id', $game->id))
+                ->orWhereHas('controlMemberships', fn ($members) => $members->where('game_id', $game->id)))
             ->pluck('id');
 
         foreach ($userIds as $userId) {

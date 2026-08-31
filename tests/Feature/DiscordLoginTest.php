@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Character;
+use App\Models\ControlMember;
 use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,6 +37,22 @@ class DiscordLoginTest extends TestCase
         $factory->shouldReceive('driver')->with('discord')->andReturn($driver);
 
         $this->app->instance(SocialiteFactory::class, $factory);
+    }
+
+    public function test_signing_in_claims_the_control_seat_reserved_for_that_handle(): void
+    {
+        $game = Game::factory()->create();
+        $seat = ControlMember::factory()->for($game)->create(['discord_username' => 'patrick_rose']);
+
+        $this->fakeDiscordUser('987654321', 'control@example.com', 'Patrick_Rose');
+
+        $this->get('/auth/discord/callback')->assertRedirect('/dashboard');
+
+        $user = User::query()->where('discord_id', '987654321')->firstOrFail();
+
+        $this->assertSame($user->id, $seat->fresh()->user_id);
+        $this->assertTrue($user->isControlFor($game));
+        $this->get("/control/games/{$game->id}")->assertOk();
     }
 
     public function test_a_new_discord_user_gets_an_account_and_is_logged_in(): void

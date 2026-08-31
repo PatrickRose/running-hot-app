@@ -27,10 +27,18 @@ class FacilityPolicy
      * to: a ruling mid-game must not wait on the Security player being at their
      * laptop. Every ability here is therefore Security's *in addition* to
      * Control's rather than instead of it.
+     *
+     * Control of *this game*, though. A seat on one game's Control team is not
+     * a seat on another's, and the Facility says which game is being asked
+     * about, so the question is asked of that game rather than in general.
      */
-    public function before(User $user): ?bool
+    public function before(User $user, string $ability, ?Facility $facility = null): ?bool
     {
-        return $user->isControl() ? true : null;
+        $isControl = $facility === null
+            ? $user->isControl()
+            : $user->isControlFor($facility->game);
+
+        return $isControl ? true : null;
     }
 
     /**

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Enums\CharacterRole;
 use App\Enums\DiscordResourceKind;
 use App\Models\Character;
+use App\Models\ControlMember;
 use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\Gang;
@@ -165,6 +166,26 @@ class GuildBlueprintTest extends TestCase
         $keys = (new GuildBlueprint($game))->roleKeysForUser(User::factory()->control()->create());
 
         $this->assertSame([GuildBlueprint::ROLE_CONTROL], $keys);
+    }
+
+    public function test_a_seat_on_this_games_control_team_gets_the_control_role(): void
+    {
+        $game = Game::factory()->create();
+        $user = User::factory()->create();
+        ControlMember::factory()->for($game)->create(['user_id' => $user->id]);
+
+        $keys = (new GuildBlueprint($game))->roleKeysForUser($user);
+
+        $this->assertSame([GuildBlueprint::ROLE_CONTROL], $keys);
+    }
+
+    public function test_a_seat_on_another_game_gets_nothing_here(): void
+    {
+        $game = Game::factory()->create();
+        $user = User::factory()->create();
+        ControlMember::factory()->for(Game::factory()->create())->create(['user_id' => $user->id]);
+
+        $this->assertSame([], (new GuildBlueprint($game))->roleKeysForUser($user));
     }
 
     public function test_a_player_in_two_teams_gets_both_roles_once_each(): void
