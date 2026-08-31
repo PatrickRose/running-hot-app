@@ -56,7 +56,7 @@ class ControlMemberController extends Controller
         abort_if($controlMember->game_id !== $game->id, 404);
 
         $userId = $controlMember->user_id;
-        $label = $controlMember->user?->name ?? '@'.$controlMember->discord_username;
+        $label = $controlMember->user->name ?? '@'.$controlMember->discord_username;
 
         $controlMember->delete();
 

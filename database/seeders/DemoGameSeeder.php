@@ -26,9 +26,6 @@ class DemoGameSeeder extends Seeder
     ) {}
 
     /**
-     * The console is optional so that the seeder can be run from tinker or from
-     * another seeder with an argument, neither of which has one.
-     *
      * @param  string|null  $controlDiscord  Discord handles to seat on the demo
      *                                       game's Control team, comma or space
      *                                       separated. Falls back to
@@ -64,36 +61,36 @@ class DemoGameSeeder extends Seeder
         $created = $this->roster->handle($game);
         $defences = $this->facilities->handle($game);
 
-        $this->command?->info(sprintf(
+        $this->command->info(sprintf(
             'Demo game seeded: %d corporations, %d gangs, %d characters.',
             $created['corporations'],
             $created['gangs'],
             $created['characters'],
         ));
-        $this->command?->info(sprintf(
+        $this->command->info(sprintf(
             '%d Facilities built, %d card holdings given out, %d cards installed.',
             $defences['facilities'],
             $defences['holdings'],
             $defences['installed'],
         ));
-        $this->command?->info(sprintf(
+        $this->command->info(sprintf(
             '%d Protection Cards, %d Equipment cards and %d technologies catalogued.',
             $game->protectionCardTypes()->count(),
             $game->equipmentCardTypes()->count(),
             $game->technologyTypes()->count(),
         ));
-        $this->command?->info('Control login: control@example.com / password');
+        $this->command->info('Control login: control@example.com / password');
 
         if ($seated === []) {
-            $this->command?->warn('Nobody is on the game\'s Control team. Set DEMO_CONTROL_DISCORD to your Discord handle to sign in with Discord as Control.');
+            $this->command->warn('Nobody is on the game\'s Control team. Set DEMO_CONTROL_DISCORD to your Discord handle to sign in with Discord as Control.');
         } else {
-            $this->command?->info(sprintf(
+            $this->command->info(sprintf(
                 'Control team: @%s. A seat is claimed the first time that handle signs in.',
                 implode(', @', $seated),
             ));
         }
 
-        $this->command?->warn('Add a Discord server to the game in the Control panel before announcements will land.');
+        $this->command->warn('Add a Discord server to the game in the Control panel before announcements will land.');
     }
 
     /**
@@ -105,8 +102,8 @@ class DemoGameSeeder extends Seeder
      * so this may name a handle that has never signed in.
      *
      * db:seed takes no options of its own, so the handles come from config -
-     * or as an argument, for `$this->call(DemoGameSeeder::class, false, [...])`
-     * and for tinker.
+     * or as an argument, which is how one seeder calls another:
+     * `$this->call(DemoGameSeeder::class, false, ['controlDiscord' => '...'])`.
      *
      * @return array<int, string> the handles seated
      */

@@ -169,7 +169,7 @@ class GamePresenter
             ->get()
             ->map(fn (ControlMember $member): array => [
                 'id' => $member->id,
-                'discord_username' => $member->user?->discord_username ?? $member->discord_username,
+                'discord_username' => $member->user->discord_username ?? $member->discord_username,
                 'claimed_by' => $member->user?->name,
                 // So Control can see which seat is theirs before removing one.
                 'is_you' => $member->user_id !== null && $member->user_id === auth()->id(),

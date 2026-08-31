@@ -6,7 +6,11 @@ use App\Models\ControlMember;
 use App\Models\Game;
 use App\Models\User;
 use Database\Seeders\DemoGameSeeder;
+use Illuminate\Console\Command;
+use Illuminate\Console\OutputStyle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\TestCase;
 
 /**
@@ -21,11 +25,22 @@ class DemoGameSeederTest extends TestCase
     use RefreshDatabase;
 
     /**
+     * Run the seeder the way `$this->call()` does, which is the only path that
+     * can pass it an argument. It reports to a console, so it is given one
+     * writing into a buffer rather than the test's output.
+     *
      * @param  array<string, mixed>  $parameters
      */
     private function seedDemoGame(array $parameters = []): Game
     {
-        app(DemoGameSeeder::class)->setContainer($this->app)->__invoke($parameters);
+        $console = new Command;
+        $console->setLaravel($this->app);
+        $console->setOutput(new OutputStyle(new ArrayInput([]), new BufferedOutput));
+
+        app(DemoGameSeeder::class)
+            ->setContainer($this->app)
+            ->setCommand($console)
+            ->__invoke($parameters);
 
         return Game::query()->latest('id')->firstOrFail();
     }
