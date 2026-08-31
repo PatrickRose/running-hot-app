@@ -428,3 +428,143 @@ export type FacilityBoard = {
     public: PublicCorporationFacilities[];
     own: CorporationFacilities | null;
 };
+
+/**
+ * The Council (rulebook 3.1).
+ *
+ * The shape of these mirrors who may see what rather than what is stored: a
+ * field that is null here is usually a thing the viewer is not entitled to
+ * rather than a thing that does not exist. `totals` and `breakdown` are the
+ * ones that matter — both are withheld from the players on a vote the Chair
+ * declared secret, and the Chair's own payload carries them.
+ */
+export type AgendaAmendment = 'addition' | 'removal' | 'rewording';
+
+export type AgendaResolutionView = {
+    id: number;
+    position: number;
+    text: string;
+    /** False for an addition still waiting on Control, and for a removed one. */
+    votable: boolean;
+    removed: boolean;
+    pending_amendment: AgendaAmendment | null;
+    pending_amendment_label: string | null;
+    /** The words a rewording would put in place of `text`, once signed off. */
+    pending_text: string | null;
+};
+
+export type AgendaCardView = {
+    id: number;
+    title: string;
+    body: string | null;
+    control_note: string | null;
+    status: string;
+    status_label: string;
+    is_custom: boolean;
+    author: string | null;
+    editable_by_author: boolean;
+    resolutions: AgendaResolutionView[];
+};
+
+/** Political Will per resolution, keyed by resolution id. */
+export type BallotAllocations = Record<number, number>;
+
+export type CouncilVoteRecord = Faction & {
+    corporation_id: number;
+    allocations: BallotAllocations;
+};
+
+export type CouncilItem = {
+    id: number;
+    source: 'drawn' | 'urgent' | 'promoted';
+    source_label: string;
+    secret: boolean;
+    resolved: boolean;
+    resolved_at: string | null;
+    tie_broken: boolean;
+    card: AgendaCardView;
+    outcome: { resolution_id: number; text: string } | null;
+    /** Who has handed a slip to the Chair — public even in a secret vote. */
+    submitted: Array<
+        Faction & {
+            ballot_id: number;
+            corporation_id: number;
+            submitted_at: string;
+        }
+    >;
+    /** Withheld from the players while a vote is secret, or still open. */
+    totals: Record<number, number> | null;
+    tied: boolean | null;
+    breakdown: CouncilVoteRecord[] | null;
+    /** Your own vote, which is never hidden from you. */
+    your_ballot: {
+        id: number;
+        submitted_at: string;
+        allocations: BallotAllocations;
+    } | null;
+    can_vote: boolean;
+};
+
+export type CouncilSessionView = {
+    id: number;
+    chair: (Faction & { id: number }) | null;
+    recess_at: string | null;
+    recess_seconds_remaining: number | null;
+    in_recess: boolean;
+    paused: boolean;
+    has_drawn: boolean;
+    tabled_count: number;
+    maximum_items: number;
+    cards_drawn: number;
+    cards_kept: number;
+    can_promote: boolean;
+};
+
+export type CouncilViewer = {
+    is_control: boolean;
+    is_chair: boolean;
+    can_vote: boolean;
+    can_submit_agenda: boolean;
+    corporation: (Faction & { id: number; political_will: number }) | null;
+    character_id: number | null;
+};
+
+export type CouncilBoard = {
+    turn: number | null;
+    session: CouncilSessionView | null;
+    viewer: CouncilViewer;
+    /** The three in the Chair's hand: the Chair's and Control's alone. */
+    hand: AgendaCardView[];
+    items: CouncilItem[];
+    with_chair: AgendaCardView[];
+    important: AgendaCardView[];
+    my_cards: AgendaCardView[];
+};
+
+export type CouncilSeatView = Faction & {
+    corporation_id: number;
+    political_will: number;
+    setup_attendance: 'unknown' | 'present' | 'absent';
+    action_attendance: 'unknown' | 'present' | 'absent';
+    setup_penalty_applied: boolean;
+    action_penalty_applied: boolean;
+};
+
+export type CouncilControlBoard = {
+    deck: AgendaCardView[];
+    with_control: AgendaCardView[];
+    amendments: Array<
+        AgendaResolutionView & {
+            card_id: number;
+            card_title: string;
+            proposed_by: string | null;
+        }
+    >;
+    rotation: Array<
+        Faction & { id: number; chair_order: number | null; is_chair: boolean }
+    >;
+    seats: CouncilSeatView[];
+    /** What Control's penalty field is pre-filled with, not a rule. */
+    absence_penalty: number;
+    recess_seconds: number;
+};
