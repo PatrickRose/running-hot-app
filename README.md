@@ -39,7 +39,8 @@ name they belong to.
 
 Nothing else needs doing: there is no column and no seeding step, so a logo added
 here shows up in games that already exist. `webp`, `png`, `jpg` and `jpeg` all
-resolve, and a `webp` supersedes a `png` of the same name. `Str::slug` folds an
+resolve, and a `webp` supersedes a `png` of the same name — the committed set is
+webp. `Str::slug` folds an
 underscore to a hyphen, so `gordon_wide.png` lands in the same place as
 `gordon-wide.png`.
 
@@ -48,9 +49,21 @@ other: a faction with only a lockup draws its initials in the small slots rather
 than an unreadable smudge, and the embed falls back to the square badge as an
 80×80 thumbnail when there is no lockup.
 
-- **Keep them small.** Discord scales a thumbnail to 80×80 and an embed image to a
-  few hundred pixels wide, so anything much beyond that is bytes spent on every
-  message for nothing.
+- **Keep them small — this matters more than it sounds.** The committed files are
+  256px badges and 800px lockups, as lossless webp: 381 KB for all twenty-four.
+  The print-resolution export is 8334px square and 16668px wide, and a browser
+  decompresses an image in full however small the box it draws it in — so one
+  8334px badge is ~278 MB of bitmap, and a page with a dozen on it will take a
+  phone's tab down. Resize on the way in:
+
+    ```bash
+    magick in.png -resize 256x256 -define webp:lossless=true out.webp   # badge
+    magick in.png -resize 800x400 -define webp:lossless=true out.webp   # lockup
+    ```
+
+    Lossless because these are flat artwork with hard edges, and it costs almost
+    nothing over lossy at this size.
+
 - **No SVG.** Discord will not render one in an embed, so a vector-only faction
   would look right in the browser and have no thumbnail in the channel. The
   resolver ignores them for that reason.

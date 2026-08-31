@@ -457,7 +457,11 @@ none.** The nine factions are one. The other is the three characters that are
 *organisations* rather than people: Business Times and Th3 Undergr0und are
 newspapers and HM Government is a government, each staffed by a single player.
 A faction always gets a badge and falls back to its initials, because a faction is
-a side players need to pick out of a list. A character gets one **only where
+a side players need to pick out of a list. The faction's colour is painted **only**
+behind those initials: behind real artwork it would impose an arbitrary hash colour
+on somebody's brand, so a logo gets a plain white ground instead — not no ground,
+because the artwork is transparent around a black diamond frame that vanishes on a
+dark page. A character gets one **only where
 artwork exists** — a game has forty-odd of them and all but three are somebody's
 name, so a coloured square against every one would imply an organisation where
 there is none. `FactionBadge` is the always-badged one and is faction-only;
@@ -507,6 +511,14 @@ derived from an md5 of the name, and a second implementation of that in TypeScri
 would be a hash function written twice to agree on a swatch. Two factions can
 collide on a colour — `colourFor` hashes across ten — which is already true of the
 Discord roles, and the logo is what tells them apart.
+
+**The committed files are web-sized, and the export is not.** The artwork comes out
+of design at print resolution — 8334px square for a badge, 16668px wide for a
+lockup — and a browser decompresses an image in full however small the box it draws
+it in, so one of those badges is about 278MB of bitmap and the Control panel draws a
+dozen. What is committed is 256px badges and 800px lockups as lossless webp, which
+is 381KB for all twenty-four against 22MB for the export. Resize anything new on
+the way in; the README carries the command.
 
 **Discord fetches an embed's image itself**, so `LogoImage::urlFor()` is absolute
 where `pathFor()` is rooted. That also means Discord cannot see a logo on a dev

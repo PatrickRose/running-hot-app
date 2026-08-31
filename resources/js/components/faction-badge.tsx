@@ -37,16 +37,24 @@ export function FactionBadge({
         <span
             aria-hidden="true"
             className={`flex shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-black/10 dark:ring-white/15 ${box} ${className}`}
-            // The colour backs the logo as well as the initials: most of these
-            // are drawn on a transparent ground, and a dark logo on the page's
-            // own dark background is a logo nobody can see.
-            style={{ backgroundColor: faction.colour }}
+            // The faction's own colour only where it is standing in for a logo.
+            // Behind real artwork it would be an arbitrary hash colour imposed
+            // on somebody's brand — Dancers drawn on yellow when their own
+            // palette is magenta — so a logo gets a plain white ground instead.
+            // Not none: the artwork is transparent around a black diamond
+            // frame, which on a dark page is a logo nobody can see. White is
+            // what these are drawn to sit on, in either theme.
+            style={
+                faction.logo_path === null
+                    ? { backgroundColor: faction.colour }
+                    : undefined
+            }
         >
             {faction.logo_path ? (
                 <img
                     src={faction.logo_path}
                     alt=""
-                    className="size-full object-contain"
+                    className="size-full bg-white object-contain"
                 />
             ) : (
                 <span className="font-semibold tracking-wide text-white drop-shadow-sm">

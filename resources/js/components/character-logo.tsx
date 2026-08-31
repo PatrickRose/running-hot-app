@@ -8,11 +8,11 @@
  * back to: a coloured square against all forty-odd of them would imply an
  * organisation where there is none.
  *
- * No colour behind it either, for the same reason. A faction's badge sits on the
- * colour its Discord role already wears, which is what makes a logo drawn on a
- * transparent ground legible and what stands in when there is no logo at all.
- * Neither applies here — there is no fallback to colour, and these carry their
- * own ground.
+ * Not the faction colour behind it, though. A faction's badge falls back to that
+ * colour when it has no artwork, and there is no such fallback here. But these
+ * are drawn transparent around a black diamond frame, which on a dark page is a
+ * logo nobody can see — so it gets the same plain white ground a faction's real
+ * artwork gets, which is what the artwork is drawn to sit on in either theme.
  *
  * Decorative, because the character's name is always written beside it.
  */
@@ -32,7 +32,7 @@ export function CharacterLogo({
             src={logoPath}
             alt=""
             aria-hidden="true"
-            className={`size-6 shrink-0 rounded-md object-contain ${className}`}
+            className={`size-6 shrink-0 rounded-md bg-white object-contain ring-1 ring-black/10 dark:ring-white/15 ${className}`}
         />
     );
 }
