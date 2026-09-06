@@ -280,7 +280,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 composer run dev          # serve + queue worker + vite + logs
 composer ci:check         # everything CI runs: eslint, prettier, tsc, pint, phpstan, tests
 php artisan test --compact --filter=SomeTest
-php artisan migrate:fresh --seed --seeder=DemoGameSeeder   # demo game, control@example.com / password
+php artisan migrate:fresh --seed --seeder=DemoGameSeeder   # demo game; prints a login per character, all "password"
 DEMO_CONTROL_DISCORD=your_handle php artisan migrate:fresh --seed --seeder=DemoGameSeeder   # ...and sign in with Discord as Control
 php artisan game:tick     # advance any phase whose clock has expired
 ```
@@ -332,6 +332,8 @@ Three independent mechanisms, and it is worth keeping them straight:
 The roster has to exist first, since team channels are permissioned from it. A blueprint for a game with no corporations and no gangs is just Control plus the common channels, which is correct rather than an error.
 
 **Control is a roster, not just a flag.** `users.is_control` is granted from the console and means Control of every game there will ever be — right for whoever owns the deployment, useless for the four friends helping run tonight's game. So a game has a **Control team**: a `control_members` row per organiser, named by Discord handle in the game's Control panel and claimed at sign in exactly as a character is. `User::isControl()` is "Control of something" and gates the Control area; `isControlFor($game)` is "Control of this game" and gates every route carrying a `{game}`, so a seat on Saturday's game is not a seat on someone else's. A seat carries the Control Discord role in that game's guild and nowhere else, and whoever creates a game is seated on it, since otherwise they would be bounced off the panel of the game they had just made. Removing a seat takes the role with it. There is deliberately no way to grant the account-wide flag from the web: the thing Control actually needs to say is who is running *this* game.
+
+**Every character in the demo game has a password login**, named after the character — `augmented-nucleotech-corp-security@example.com`, `jack-scanton@example.com` — all sharing the password `password`, and printed as a table when the seeder runs. A real game claims a seat by Discord handle, which would want a Discord account per player before a developer could see the game from a CEO's chair and then from a Runner's. Seeding a second time numbers a clash (`jack-scanton-2@example.com`) rather than falling over, so the second game gets its own accounts.
 
 **The demo seeder can seat you.** `db:seed` takes no options of its own, so the handles come from `DEMO_CONTROL_DISCORD` (via `running_hot.demo_control_discord`), and `DemoGameSeeder::run()` takes the same string as an argument, which is how one seeder passes it to another: `$this->call(DemoGameSeeder::class, false, ['controlDiscord' => ...])`. Without it the demo game's only Control is the password login the seeder prints, so signing in with Discord locally lands on a player's dashboard with no way through — which is the whole reason it is there.
 
