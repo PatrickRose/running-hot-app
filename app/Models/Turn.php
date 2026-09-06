@@ -46,4 +46,18 @@ class Turn extends Model
     {
         return $this->hasOne(CouncilSession::class);
     }
+
+    /**
+     * The runs against this turn's Facilities (rulebook 3.4).
+     *
+     * A run belongs to a turn because that is the scope of everything it
+     * touches, and 3.4.5 makes it sharper: a run not finished before the Action
+     * phase ends is unsuccessful, so one cannot outlive its turn.
+     *
+     * @return HasMany<Run, $this>
+     */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
+    }
 }
