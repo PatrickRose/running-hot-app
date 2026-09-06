@@ -31,6 +31,7 @@ class TurnEngine
         private readonly ApplyTeamTimeUpkeep $upkeep,
         private readonly FacilityDefenceService $facilityDefence,
         private readonly PublishFacilityList $facilityList,
+        private readonly CouncilService $council,
     ) {}
 
     /**
@@ -128,6 +129,16 @@ class TurnEngine
         ])->save();
 
         $this->announcer->phaseResumed($phase);
+
+        // The Council's recess is a second clock inside the Setup phase, so it
+        // keeps the time it had left as well: a game paused four minutes into
+        // Setup should not come back to a Council that has already risen.
+        $session = $phase->turn->councilSession()->first();
+
+        if ($session !== null) {
+            $this->council->shiftRecess($session, max(0, $pausedFor));
+        }
+
         $this->scheduleAutoAdvance($phase);
 
         return $phase;
@@ -200,6 +211,11 @@ class TurnEngine
         // refresh does nothing until Control has published one.
         if ($type === PhaseType::Setup) {
             $this->facilityList->refresh($game);
+
+            // The Council takes its seats as Setup opens, and goes into recess
+            // five minutes later (rulebook 3.1.1). Opening the sitting here is
+            // what anchors that second clock to the phase's own start.
+            $this->council->openSession($turn, $now);
         }
 
         // Income and free Wound recovery land as Team Time opens, giving Control
