@@ -279,9 +279,10 @@ export default function ControlCouncil({ game, council, control }: Props) {
                     <CardHeader>
                         <CardTitle>The agenda deck</CardTitle>
                         <CardDescription>
-                            Nothing is seeded here. The rulebook prints no
-                            agenda cards, so the deck is whatever you write for
-                            the game you are running.
+                            The game&rsquo;s own deck, seeded with every new
+                            game. Write more for the game you are running, and
+                            take out anything you would rather the Chair did not
+                            draw.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4">
@@ -289,7 +290,8 @@ export default function ControlCouncil({ game, council, control }: Props) {
 
                         {control.deck.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
-                                The deck is empty.
+                                The deck has run out. Everything in it has been
+                                drawn, or taken out.
                             </p>
                         ) : (
                             control.deck.map((card) => (

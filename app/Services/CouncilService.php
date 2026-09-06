@@ -185,7 +185,7 @@ class CouncilService
 
             if ($cards->isEmpty()) {
                 throw ValidationException::withMessages([
-                    'council' => 'The agenda deck is empty. Control writes the cards it holds.',
+                    'council' => 'The agenda deck has run out. Control writes more from the Control panel.',
                 ]);
             }
 
@@ -349,10 +349,12 @@ class CouncilService
     // -----------------------------------------------------------------
 
     /**
-     * Write a card into the game's deck. Control's, and the only way anything
-     * gets into the deck: no agenda cards are seeded, because the game's own
-     * deck is not in this repository and inventing one would be inventing the
-     * game's politics.
+     * Write a card into the game's deck.
+     *
+     * The only way anything gets into it, seeding included: App\Actions\SeedAgendaCards
+     * lays the game's own deck down through here rather than writing rows, so
+     * the two-to-five bound of 3.1.4 holds for a seeded card exactly as it does
+     * for one Control invents at the table.
      *
      * @param  array<int, string>  $resolutions
      */

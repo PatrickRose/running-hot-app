@@ -45,9 +45,10 @@ class CouncilController extends Controller
     /**
      * Write a card into the game's agenda deck.
      *
-     * Nothing seeds these. The rulebook prints no agenda cards, so the deck is
-     * whatever Control writes for the game it is running - and a deck this
-     * application invented would be inventing the politics of Procatorion.
+     * A new game already holds the game's own deck, seeded from
+     * App\Support\AgendaCardBlueprint, so this is Control adding to it rather
+     * than filling it - the same way it adds an Equipment card that a
+     * technology has just invented.
      */
     public function storeCard(Game $game, Request $request): RedirectResponse
     {

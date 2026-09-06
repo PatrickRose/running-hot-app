@@ -244,6 +244,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
 | A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
+| The game's agenda deck | `App\Support\AgendaCardBlueprint`, `App\Actions\SeedAgendaCards` |
 | A game's starting Facilities and card holdings | `config/running_hot.php`, `App\Actions\CreateDefaultFacilities` |
 | The three card lists | `App\Support\ProtectionCardBlueprint`, `EquipmentCardBlueprint`, `TechnologyBlueprint` |
 | Seeding them into a game | `App\Actions\SeedProtectionCards`, `SeedEquipmentCards`, `SeedTechnologies`, `SeedProtectionCardHoldings` |
@@ -357,12 +358,25 @@ and happens at `/council`. Control still reaches all of it, through
 `CouncilSessionPolicy::before()`, because a ruling mid-game must not wait on the
 Chair being at their laptop.
 
-**Nothing seeds the agenda deck, deliberately.** The rulebook prints no agenda
-cards and the game's own deck is not in this repository, so Control writes the
-cards for the game it is running — the same way it invents a Facility type
-mid-game. A deck this application invented would be inventing the politics of
-Procatorion. An empty deck is therefore the normal state of a fresh game, and
-the draw says so rather than failing obscurely.
+**The agenda deck is real data, and it seeds like the three card lists.**
+`App\Support\AgendaCardBlueprint` holds the game's own twenty-one cards and
+`App\Actions\SeedAgendaCards` gives them to every new game from `Game::booted`.
+An agenda card carries no printed code, so it is matched on its title — which
+works only because the titles are distinct, and `AgendaCardBlueprintTest` is
+what keeps that true. The match also ignores cards a player submitted: somebody
+is perfectly likely to write a custom agenda called "Privacy" (3.1.3), and
+theirs must not stand in for Control's.
+
+Seeding goes through `CouncilService::createDeckCard` rather than writing rows,
+so a seeded card cannot break the two-to-five bound 3.1.4 puts on resolutions.
+Re-running adds only what is missing entirely and never overwrites, so a card
+the Chair has amended survives it.
+
+Two entries read like transcription slips and are not. Retirement offers a
+pension package and a `"pension package"` — the quotation marks are the whole
+difference and they are the joke — and Grants names the four Research Point
+suits, which makes it the only card in the deck naming a mechanic rather than a
+policy. Nothing reads either: what a resolution *does* is Control's to apply.
 
 **Political Will weights a vote; it is never spent on one.** The rulebook has a
 CEO write down the Political Will they *have* (3.1.2) and nothing in 3.1 takes

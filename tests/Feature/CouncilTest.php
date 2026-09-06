@@ -224,8 +224,9 @@ class CouncilTest extends TestCase
             ])
             ->assertRedirect();
 
+        // The one card a player wrote, as against the game's own deck.
         /** @var AgendaCard $card */
-        $card = $this->game->agendaCards()->sole();
+        $card = $this->game->agendaCards()->whereNotNull('submitted_by_character_id')->sole();
         $this->assertSame(AgendaCardStatus::Draft, $card->status);
 
         $this->actingAs($author)
@@ -291,8 +292,7 @@ class CouncilTest extends TestCase
 
     public function test_control_draws_for_the_chair(): void
     {
-        AgendaCard::factory()->count(4)->for($this->game)->withResolutions()->create();
-
+        // No cards are made here: a new game already holds the game's own deck.
         $control = $this->control();
 
         $this->actingAs($control)

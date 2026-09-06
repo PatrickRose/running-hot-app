@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\SeedAgendaCards;
 use App\Actions\SeedEquipmentCards;
 use App\Actions\SeedFacilityTypes;
 use App\Actions\SeedProtectionCards;
@@ -49,7 +50,7 @@ class Game extends Model
 
     /**
      * Give every new game the catalogues it is played out of: the Facility
-     * types, and the three card lists.
+     * types, the three card lists, and the Council's agenda deck.
      *
      * A hook rather than a call in the controller so that every route into a
      * game - Control creating one, a seeder, a factory in a test - ends up with
@@ -67,6 +68,7 @@ class Game extends Model
             app(SeedProtectionCards::class)->handle($game);
             app(SeedEquipmentCards::class)->handle($game);
             app(SeedTechnologies::class)->handle($game);
+            app(SeedAgendaCards::class)->handle($game);
         });
     }
 
