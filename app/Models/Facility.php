@@ -83,6 +83,12 @@ class Facility extends Model
     }
 
     /** @return HasMany<FacilityTurnState, $this> */
+    /** @return HasMany<Run, $this> */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
+    }
+
     public function turnStates(): HasMany
     {
         return $this->hasMany(FacilityTurnState::class);

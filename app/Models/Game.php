@@ -147,6 +147,12 @@ class Game extends Model
     }
 
     /** @return HasMany<TrackerAdjustment, $this> */
+    /** @return HasMany<Run, $this> */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
+    }
+
     public function trackerAdjustments(): HasMany
     {
         return $this->hasMany(TrackerAdjustment::class);

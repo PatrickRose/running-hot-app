@@ -34,4 +34,10 @@ class Turn extends Model
     {
         return $this->hasMany(Phase::class);
     }
+
+    /** @return HasMany<Run, $this> */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
+    }
 }
