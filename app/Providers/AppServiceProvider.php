@@ -7,6 +7,8 @@ use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\Gang;
 use App\Models\User;
+use App\Services\Dice;
+use App\Services\RandomDice;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Date;
@@ -25,7 +27,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Every roll in a Run goes through this, so that a test can say what
+        // the dice did and then assert on the consequence.
+        $this->app->bind(Dice::class, RandomDice::class);
     }
 
     /**
