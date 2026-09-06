@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\AgendaCardController;
 use App\Http\Controllers\Auth\DiscordController;
 use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\ControlMemberController;
+use App\Http\Controllers\Control\CouncilController as ControlCouncilController;
 use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\EquipmentCardTypeController;
 use App\Http\Controllers\Control\FacilityController;
@@ -14,6 +16,9 @@ use App\Http\Controllers\Control\ProtectionCardHoldingController;
 use App\Http\Controllers\Control\ProtectionCardTypeController;
 use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
+use App\Http\Controllers\CouncilBallotController;
+use App\Http\Controllers\CouncilChairController;
+use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
@@ -47,6 +52,44 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('facilities.cards.quote');
     Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
         ->name('facilities.cards.remove');
+
+    // The Council (rulebook 3.1). Everyone playing may read it, because the
+    // agenda is read out and any player may write a custom one. Who may vote,
+    // and who may chair, is the CouncilSessionPolicy's answer rather than a
+    // middleware's - the Chair is a Corporation that changes every turn.
+    Route::get('council', CouncilController::class)->name('council');
+
+    Route::post('council/items/{item}/ballots', [CouncilBallotController::class, 'store'])
+        ->name('council.ballots.store');
+    // The Chair hands a slip back: every vote already in when a vote is
+    // declared secret, and the only way a CEO gets to change one.
+    Route::delete('council/ballots/{ballot}', [CouncilBallotController::class, 'destroy'])
+        ->name('council.ballots.return');
+
+    // The Chair's own powers over the agenda.
+    Route::post('council/{session}/hand', [CouncilChairController::class, 'keep'])
+        ->name('council.hand.keep');
+    Route::post('council/{session}/promote', [CouncilChairController::class, 'promote'])
+        ->name('council.promote');
+    Route::post('council/{session}/rulings', [CouncilChairController::class, 'rule'])
+        ->name('council.rulings.store');
+    Route::post('council/{session}/agenda-cards/{card}/amendments', [CouncilChairController::class, 'amend'])
+        ->name('council.amendments.store');
+    Route::post('council/items/{item}/secret', [CouncilChairController::class, 'secret'])
+        ->name('council.items.secret');
+    Route::post('council/items/{item}/resolve', [CouncilChairController::class, 'resolve'])
+        ->name('council.items.resolve');
+
+    // Custom agendas: written by a player, annotated by Control, and submitted
+    // to the Chair by the player once they agree (3.1.3).
+    Route::post('council/agenda-cards', [AgendaCardController::class, 'store'])
+        ->name('council.agenda-cards.store');
+    Route::patch('council/agenda-cards/{card}', [AgendaCardController::class, 'update'])
+        ->name('council.agenda-cards.update');
+    Route::post('council/agenda-cards/{card}/to-control', [AgendaCardController::class, 'submitToControl'])
+        ->name('council.agenda-cards.to-control');
+    Route::post('council/agenda-cards/{card}/to-chair', [AgendaCardController::class, 'submitToChair'])
+        ->name('council.agenda-cards.to-chair');
 
     Route::middleware('can:control')
         ->prefix('control')
@@ -162,6 +205,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('control-members.store');
                 Route::delete('games/{game}/control-members/{controlMember}', [ControlMemberController::class, 'destroy'])
                     ->name('control-members.destroy');
+
+                // The Council (rulebook 3.1). Control's half of it: the deck
+                // and the draw, the remarks on a custom agenda, the sign-off
+                // on an amendment, and the cost of an empty seat. The Chair
+                // runs the rest through its own routes, which Control may also
+                // reach - the policy lets Control through everywhere.
+                Route::get('games/{game}/council', [ControlCouncilController::class, 'index'])
+                    ->name('council.index');
+
+                Route::post('games/{game}/council/agenda-cards', [ControlCouncilController::class, 'storeCard'])
+                    ->name('council.agenda-cards.store');
+                Route::patch('games/{game}/council/agenda-cards/{card}', [ControlCouncilController::class, 'updateCard'])
+                    ->name('council.agenda-cards.update');
+                Route::delete('games/{game}/council/agenda-cards/{card}', [ControlCouncilController::class, 'destroyCard'])
+                    ->name('council.agenda-cards.destroy');
+                Route::post('games/{game}/council/agenda-cards/{card}/annotate', [ControlCouncilController::class, 'annotate'])
+                    ->name('council.agenda-cards.annotate');
+
+                Route::post('games/{game}/council/hand', [ControlCouncilController::class, 'hand'])
+                    ->name('council.hand');
+                Route::post('games/{game}/council/chair', [ControlCouncilController::class, 'chair'])
+                    ->name('council.chair');
+                Route::post('games/{game}/council/rotation', [ControlCouncilController::class, 'rotation'])
+                    ->name('council.rotation');
+                Route::post('games/{game}/council/recess', [ControlCouncilController::class, 'recess'])
+                    ->name('council.recess');
+                Route::post('games/{game}/council/amendments/{resolution}', [ControlCouncilController::class, 'amendment'])
+                    ->name('council.amendments.update');
+                Route::post('games/{game}/council/attendance', [ControlCouncilController::class, 'attendance'])
+                    ->name('council.attendance');
+                Route::post('games/{game}/council/penalties', [ControlCouncilController::class, 'penalty'])
+                    ->name('council.penalties.store');
 
                 Route::post('games/{game}/characters/{character}/discord', [CharacterController::class, 'updateDiscord'])
                     ->name('characters.discord');

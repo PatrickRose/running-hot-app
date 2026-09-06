@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/card';
 import { index as cardsIndex } from '@/routes/control/cards';
 import { removeTag } from '@/routes/control/characters';
+import { index as councilIndex } from '@/routes/control/council';
 import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
@@ -99,6 +100,14 @@ export default function ControlGameShow({
                             }
                         >
                             Facility Defence
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(councilIndex.url({ game: game.id }))
+                            }
+                        >
+                            Council
                         </Button>
                         <Button
                             variant="outline"
