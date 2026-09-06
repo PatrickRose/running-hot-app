@@ -40,7 +40,9 @@ export function CouncilItem({
     viewer: CouncilViewer;
     sessionId: number;
 }) {
-    const chairing = viewer.is_chair || viewer.is_control;
+    // May act as the Chair on this vote, which Control may too. Being the
+    // Chair is viewer.is_chair, and nothing here claims it.
+    const chairing = viewer.can_chair;
 
     return (
         <Card>
@@ -102,7 +104,11 @@ export function CouncilItem({
                 )}
 
                 {chairing && !item.resolved && (
-                    <ChairControls item={item} sessionId={sessionId} />
+                    <ChairControls
+                        item={item}
+                        sessionId={sessionId}
+                        asControl={!viewer.is_chair}
+                    />
                 )}
             </CardContent>
         </Card>
@@ -213,9 +219,12 @@ function Totals({ item }: { item: CouncilItemView }) {
 function ChairControls({
     item,
     sessionId,
+    asControl,
 }: {
     item: CouncilItemView;
     sessionId: number;
+    /** Control using the Chair's controls rather than the Chair itself. */
+    asControl: boolean;
 }) {
     const [choice, setChoice] = useState<string>('');
 
@@ -225,7 +234,14 @@ function ChairControls({
 
     return (
         <div className="flex flex-col gap-3 rounded-md border border-dashed p-3">
-            <p className="text-sm font-medium">The Chair</p>
+            <p className="text-sm font-medium">
+                The Chair
+                {asControl && (
+                    <span className="ml-2 font-normal text-muted-foreground">
+                        &mdash; you are acting as Control
+                    </span>
+                )}
+            </p>
 
             <div className="flex flex-wrap items-center gap-2">
                 <Button

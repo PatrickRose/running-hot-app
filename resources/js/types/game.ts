@@ -526,7 +526,14 @@ export type CouncilSessionView = {
 
 export type CouncilViewer = {
     is_control: boolean;
+    /** You hold the CEO seat of the Corporation chairing this turn. */
     is_chair: boolean;
+    /**
+     * You may use the Chair's controls — the Chair, or Control standing behind
+     * them. Not the same as being the Chair, and never say so on a page.
+     */
+    can_chair: boolean;
+    /** You hold a CEO seat, so there is a Corporation's vote for you to cast. */
     can_vote: boolean;
     can_submit_agenda: boolean;
     corporation: (Faction & { id: number; political_will: number }) | null;

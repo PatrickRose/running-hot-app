@@ -193,6 +193,41 @@ class CouncilTest extends TestCase
         $this->assertSame($resolutions[0]->text, $resolved['outcome']['text']);
     }
 
+    /**
+     * Control may do everything the Chair can and is not the Chair. The page
+     * says whose seat it is, so answering "are you the Chair" through the Gate
+     * - which CouncilSessionPolicy::before() hands Control unconditionally -
+     * told Control it was Augmented Nucleotech.
+     */
+    public function test_control_may_chair_without_being_the_chair(): void
+    {
+        $presenter = app(CouncilPresenter::class);
+
+        $chair = $this->player(CharacterRole::Ceo, $this->gordon);
+        $rival = $this->player(CharacterRole::Ceo, $this->dtc);
+
+        $asControl = $presenter->forPlayer($this->game, $this->control())['viewer'];
+        $asChair = $presenter->forPlayer($this->game, $chair)['viewer'];
+        $asRival = $presenter->forPlayer($this->game, $rival)['viewer'];
+
+        // Control holds no seat, so it is neither the Chair nor a voter - and
+        // may still run both.
+        $this->assertFalse($asControl['is_chair']);
+        $this->assertFalse($asControl['can_vote']);
+        $this->assertTrue($asControl['can_chair']);
+        $this->assertNull($asControl['corporation']);
+
+        // Gordon has the Chair on turn 1, being first in the rotation.
+        $this->assertTrue($asChair['is_chair']);
+        $this->assertTrue($asChair['can_chair']);
+        $this->assertTrue($asChair['can_vote']);
+
+        // And a CEO who is not chairing votes and nothing else.
+        $this->assertFalse($asRival['is_chair']);
+        $this->assertFalse($asRival['can_chair']);
+        $this->assertTrue($asRival['can_vote']);
+    }
+
     public function test_only_the_chairing_corporation_may_chair(): void
     {
         $item = $this->tabledItem();

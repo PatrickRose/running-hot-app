@@ -16,6 +16,7 @@ use App\Models\CouncilSeat;
 use App\Models\CouncilSession;
 use App\Models\Game;
 use App\Models\User;
+use App\Policies\CouncilSessionPolicy;
 use App\Services\CouncilService;
 
 /**
@@ -47,7 +48,11 @@ class CouncilPresenter
         $session = $turn?->councilSession()->first();
 
         $viewer = $this->viewer($game, $session, $user);
-        $privileged = $viewer['is_chair'] || $viewer['is_control'];
+
+        // What the Chair may see, which Control may see too. Read from the
+        // ability rather than from the seat, because this is a question about
+        // permission rather than about identity.
+        $privileged = $viewer['can_chair'] || $viewer['is_control'];
 
         return [
             'turn' => $turn?->number,
@@ -149,6 +154,7 @@ class CouncilPresenter
         $blank = [
             'is_control' => false,
             'is_chair' => false,
+            'can_chair' => false,
             'can_vote' => false,
             'can_submit_agenda' => false,
             'corporation' => null,
@@ -175,10 +181,23 @@ class CouncilPresenter
             ->where('user_id', $user->id)
             ->first();
 
+        // Who you are and what you may do are different questions, and the
+        // Gate can only answer the second: CouncilSessionPolicy::before() hands
+        // Control every ability at the Council, so asking it "are you the
+        // Chair" of Control gets a yes - and the page then tells Control it is
+        // Augmented Nucleotech.
+        //
+        // So the seat is asked of the policy method directly, under the
+        // override rather than through it, and the ability is asked of the
+        // Gate. Control may do everything the Chair can and is still not the
+        // Chair, which is exactly what the page should say.
+        $seats = app(CouncilSessionPolicy::class);
+
         return [
             'is_control' => $isControl,
-            'is_chair' => $session !== null && $user->can('chair', $session),
-            'can_vote' => $session !== null && $user->can('vote', $session),
+            'is_chair' => $session !== null && $seats->chair($user, $session),
+            'can_chair' => $session !== null && $user->can('chair', $session),
+            'can_vote' => $session !== null && $seats->vote($user, $session),
             'can_submit_agenda' => $anyCharacter !== null && $user->can('create', [AgendaCard::class, $game]),
             'corporation' => $ceo?->corporation === null ? null : [
                 'id' => $ceo->corporation->id,

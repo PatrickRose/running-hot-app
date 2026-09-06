@@ -51,7 +51,9 @@ export default function Council({ game, council }: Props) {
     }
 
     const { session, viewer } = council;
-    const chairing = viewer.is_chair || viewer.is_control;
+    // May run the sitting, which the Chair and Control both may. Whether you
+    // *are* the Chair is viewer.is_chair, and is a different question.
+    const chairing = viewer.can_chair;
 
     return (
         <>
@@ -95,6 +97,11 @@ export default function Council({ game, council }: Props) {
                                             That is you
                                         </Badge>
                                     )}
+                                    {!viewer.is_chair && viewer.is_control && (
+                                        <Badge variant="secondary">
+                                            You are Control
+                                        </Badge>
+                                    )}
                                 </CardTitle>
                                 <CardDescription>
                                     {session.tabled_count} of{' '}
@@ -108,6 +115,7 @@ export default function Council({ game, council }: Props) {
 
                         {chairing && council.hand.length > 0 && (
                             <ChairsHand
+                                asControl={!viewer.is_chair}
                                 sessionId={session.id}
                                 hand={council.hand}
                                 keeps={session.cards_kept}
@@ -185,10 +193,13 @@ function ChairsHand({
     sessionId,
     hand,
     keeps,
+    asControl,
 }: {
     sessionId: number;
     hand: AgendaCardView[];
     keeps: number;
+    /** Control looking at somebody else's hand, rather than the Chair at theirs. */
+    asControl: boolean;
 }) {
     const [kept, setKept] = useState<number[]>([]);
     const allowed = Math.min(keeps, hand.length);
@@ -200,6 +211,8 @@ function ChairsHand({
                 <CardDescription>
                     Keep {allowed} to be voted on this turn. The rest are
                     discarded.
+                    {asControl &&
+                        ' You are choosing as Control, on the Chair’s behalf.'}
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">

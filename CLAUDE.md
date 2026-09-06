@@ -411,6 +411,17 @@ than a second round. A tie is handed straight back to the Chair, who may only
 pick between the resolutions that actually tied: breaking a tie is choosing
 between the votes, not overruling them.
 
+**Who you are and what you may do are different questions, and only the second
+goes through the Gate.** `CouncilSessionPolicy::before()` hands Control every
+ability at the Council, so asking it "is this user the Chair" answers yes for
+Control — and the Chamber then told Control it was Augmented Nucleotech. So
+`CouncilPresenter` asks the policy's `chair()` and `vote()` methods directly,
+under the override rather than through it, for `is_chair` and `can_vote`, and
+asks the Gate for `can_chair`. Control may do everything the Chair can and is
+still not the Chair; the page says so, and the Chair's controls say whose hands
+they are in. Any new flag that names a seat rather than a permission wants the
+same treatment.
+
 **Secret means hidden from the players, not hidden.** 3.1.2 has the Chair
 receiving the individual breakdowns either way and leaking them as they see fit,
 so `CouncilPresenter` builds the Chair's view separately rather than hiding less
