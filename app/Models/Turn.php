@@ -36,6 +36,12 @@ class Turn extends Model
         return $this->hasMany(Phase::class);
     }
 
+    /** @return HasMany<Run, $this> */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
+    }
+
     /**
      * This turn's sitting of the Council (rulebook 3.1), which spans the Setup
      * and Action phases and so belongs to the turn rather than to either.
