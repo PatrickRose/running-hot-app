@@ -351,9 +351,9 @@ real secret in it. Two halves on the same turn: the agenda is established during
 Setup, and voted on during the Action phase.
 
 **Players drive it; Control provides the agendas.** The rulebook gives Control
-four jobs and no more — draw three cards for the Chair, add remarks to a custom
-agenda, sign off an amendment, and judge an empty seat — so those are what
-`/control/games/{game}/council` holds. Everything else is the Chair's or a CEO's
+four jobs and no more — pick the cards the Chair is handed, add remarks to a
+custom agenda, sign off an amendment, and judge an empty seat — so those are
+what `/control/games/{game}/council` holds. Everything else is the Chair's or a CEO's
 and happens at `/council`. Control still reaches all of it, through
 `CouncilSessionPolicy::before()`, because a ruling mid-game must not wait on the
 Chair being at their laptop.
@@ -377,6 +377,21 @@ pension package and a `"pension package"` — the quotation marks are the whole
 difference and they are the joke — and Grants names the four Research Point
 suits, which makes it the only card in the deck naming a mechanic rather than a
 policy. Nothing reads either: what a resolution *does* is Control's to apply.
+
+**Control picks the cards; nothing is drawn.** The rulebook says Control draws
+three from the deck, but at the table Control is holding the deck and reading
+it — which three the Council is asked about is a judgement about the game in
+front of it, not a shuffle. So `CouncilService::handToChair()` takes the ids
+Control ticked. Three is what the panel offers and what the Chair keeps two of;
+the count is not enforced, because a Control that wants to put four up should
+not be argued with.
+
+Handing over **sets** the hand rather than adding to it, so a card picked by
+mistake is taken back by handing the corrected set over again and anything
+dropped goes back to the deck. That stops the moment the Chair keeps two:
+`chairHasChosen()` reads it off the cards rather than a flag, because a handed
+card that is no longer in the hand was either kept or discarded and either way
+the discard of 3.1.1 has happened.
 
 **Political Will weights a vote; it is never spent on one.** The rulebook has a
 CEO write down the Political Will they *have* (3.1.2) and nothing in 3.1 takes
@@ -422,8 +437,11 @@ signing both off that would take a card past them.
 
 **Where a card is lives on the card; what is true of it this turn lives on the
 item.** `AgendaCardStatus` is the whole lifecycle, deck and custom alike, and
-the two kinds meet at `WithChair` — from there the rulebook treats a drawn card
-and a player's card exactly alike. `council_agenda_items` adds only what belongs
+the two kinds meet at `WithChair` — from there the rulebook treats a card
+Control handed over and a player's card exactly alike. `InHand` and `WithChair`
+read alike and are not: `InHand` is one of Control's cards awaiting the Chair's
+keep-or-discard, `WithChair` a player's custom agenda awaiting urgent, important
+or rejected. `council_agenda_items` adds only what belongs
 to one sitting: how the card got there, whether the vote is secret, and how it
 resolved. The five-item cap counts cards on the table, so a discarded one costs
 nothing.
@@ -441,6 +459,13 @@ is absolute, the browser only counts down between polls, and a pause moves it
 with the phase (`TurnEngine::resume` shifts it by however long the pause lasted).
 Five minutes is `games.council_recess_seconds`, a column rather than a constant,
 because Control runs the game to the clock it wants on the night.
+
+**A card waiting on Control's remarks is Control's alone to see.** Not the
+Chair's: it has not been handed to the Chair yet and might never be, because the
+author reads the remarks first and may keep it back. It appears in the Council
+Chamber for Control as well as on the Control panel, because the player is told
+their card is with Control and the Chamber is where both of them go looking —
+the pile that was only on the panel was a card that had visibly vanished.
 
 **Custom agendas are a three-step handshake, and all three steps are real.** A
 player writes the card, Control adds its remarks and gives it *back*, and only
@@ -668,6 +693,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, and the Council: the agenda deck Control writes, the Chair's powers over it, and Political-Will-weighted voting with secret ballots.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, and the Council: the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

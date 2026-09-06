@@ -33,9 +33,9 @@ return new class extends Migration
             // it directly, and a pause moves it with the phase.
             $table->timestamp('recess_at')->nullable();
 
-            // When Control drew the three cards for the Chair. Null until they
-            // have, which is what stops a Chair keeping two out of nothing.
-            $table->timestamp('drawn_at')->nullable();
+            // When Control last handed cards to the Chair. Null until it has,
+            // which is what stops a Chair keeping two out of nothing.
+            $table->timestamp('handed_at')->nullable();
 
             $table->timestamps();
 

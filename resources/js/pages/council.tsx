@@ -15,6 +15,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { index as councilControl } from '@/routes/control/council';
 import { promote } from '@/routes/council';
 import { toChair, toControl } from '@/routes/council/agenda-cards';
 import { keep } from '@/routes/council/hand';
@@ -117,8 +118,8 @@ export default function Council({ game, council }: Props) {
                             <h2 className="text-lg font-medium">Up for vote</h2>
                             {council.items.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">
-                                    Nothing is on the agenda yet. Control draws
-                                    three cards and the Chair keeps two.
+                                    Nothing is on the agenda yet. Control picks
+                                    the cards, and the Chair keeps two.
                                 </p>
                             ) : (
                                 council.items.map((item) => (
@@ -140,6 +141,14 @@ export default function Council({ game, council }: Props) {
                                 canPromote={session.can_promote}
                             />
                         )}
+
+                        {viewer.is_control &&
+                            council.with_control.length > 0 && (
+                                <ControlsPile
+                                    gameId={game.id}
+                                    cards={council.with_control}
+                                />
+                            )}
                     </>
                 )}
 
@@ -167,7 +176,7 @@ export default function Council({ game, council }: Props) {
 }
 
 /**
- * The three Control drew, before two of them are read out (rulebook 3.1.1).
+ * What Control has handed over, before two of them are read out (3.1.1).
  *
  * Nobody but the Chair and Control has seen these, so nobody else is shown
  * them: the discard is meant to be the Chair's own decision, made privately.
@@ -328,6 +337,58 @@ function ChairsPiles({
                         </AgendaCardPanel>
                     </div>
                 ))}
+            </CardContent>
+        </Card>
+    );
+}
+
+/**
+ * Cards a player has handed to Control and Control has not yet remarked on
+ * (3.1.3).
+ *
+ * Control's alone. The Chair does not see these, because a card with Control
+ * has not been handed to the Chair yet and might never be — the author reads
+ * the remarks first and may keep it back.
+ *
+ * It is shown here as well as on the Control panel because the player is told
+ * their card is with Control, and this is where both of them come looking. The
+ * remarks themselves are written on the panel, so this points at it rather
+ * than growing a second copy of that form.
+ */
+function ControlsPile({
+    gameId,
+    cards,
+}: {
+    gameId: number;
+    cards: AgendaCardView[];
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Waiting on Control</CardTitle>
+                <CardDescription>
+                    {cards.length === 1 ? 'A card' : `${cards.length} cards`}{' '}
+                    handed to you, and not yet given back to their authors. The
+                    Chair cannot see these.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+                {cards.map((card) => (
+                    <div key={card.id} className="rounded-md border p-3">
+                        <AgendaCardPanel card={card} />
+                    </div>
+                ))}
+
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="self-start"
+                    onClick={() =>
+                        router.get(councilControl.url({ game: gameId }))
+                    }
+                >
+                    Add your remarks on the Control panel
+                </Button>
             </CardContent>
         </Card>
     );

@@ -29,7 +29,7 @@ class CouncilChairController extends Controller
     public function __construct(private readonly CouncilService $council) {}
 
     /**
-     * Keep two of the three drawn, and discard the rest (3.1.1).
+     * Keep two of what Control handed over, and discard the rest (3.1.1).
      */
     public function keep(Request $request, CouncilSession $session): RedirectResponse
     {

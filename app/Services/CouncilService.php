@@ -159,74 +159,139 @@ class CouncilService
     // -----------------------------------------------------------------
 
     /**
-     * Control draws three cards from the deck and hands them to the Chair.
+     * Control picks cards out of the deck and hands them to the Chair (3.1.1).
      *
-     * Once per sitting: drawing again would hand the Chair a second hand to
-     * choose from, and the discard of 3.1.1 is the whole point of the draw.
-     * A deck with fewer than three cards left hands over what there is.
+     * Picked rather than dealt. The rulebook says Control draws three, and at
+     * the table Control is holding the deck and reading it - so which three the
+     * Council is asked about is a judgement Control makes about the game in
+     * front of it, not a shuffle. Three is what the Control panel offers and
+     * what the Chair then keeps two of; handing over a different number is
+     * Control's to do, and the Chair keeps two of whatever arrives.
      *
+     * This sets the hand rather than adding to it, so a card picked by mistake
+     * is taken back by handing the corrected set over again: anything dropped
+     * goes back to the deck. That stops once the Chair has chosen, because by
+     * then the discard of 3.1.1 has happened and the agenda is the Chair's.
+     *
+     * @param  array<int, int>  $cardIds
      * @return Collection<int, AgendaCard>
      */
-    public function draw(CouncilSession $session): Collection
+    public function handToChair(CouncilSession $session, array $cardIds): Collection
     {
-        if ($session->hasDrawn()) {
+        if ($this->chairHasChosen($session)) {
             throw ValidationException::withMessages([
-                'council' => 'Three cards have already been drawn for this turn.',
+                'cards' => 'The Chair has already chosen from this turn\'s cards.',
             ]);
         }
 
-        return DB::transaction(function () use ($session): Collection {
-            /** @var Collection<int, AgendaCard> $cards */
-            $cards = $session->turn->game->agendaCards()
-                ->where('status', AgendaCardStatus::Deck)
-                ->inRandomOrder()
-                ->limit(CouncilSession::CARDS_DRAWN)
-                ->get();
+        $cardIds = array_values(array_unique(array_map('intval', $cardIds)));
 
-            if ($cards->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'council' => 'The agenda deck has run out. Control writes more from the Control panel.',
-                ]);
+        if ($cardIds === []) {
+            throw ValidationException::withMessages([
+                'cards' => 'Pick the cards to hand to the Chair.',
+            ]);
+        }
+
+        // More than the Council could vote on in a turn is not a hand, it is
+        // the deck. The Chair still only keeps two of it.
+        if (count($cardIds) > CouncilSession::MAXIMUM_ITEMS) {
+            throw ValidationException::withMessages([
+                'cards' => sprintf(
+                    'The Council votes on at most %d items a turn, so there is no point handing over more.',
+                    CouncilSession::MAXIMUM_ITEMS,
+                ),
+            ]);
+        }
+
+        /** @var Collection<int, AgendaCard> $picked */
+        $picked = $session->turn->game->agendaCards()
+            ->whereIn('id', $cardIds)
+            ->whereIn('status', [AgendaCardStatus::Deck, AgendaCardStatus::InHand])
+            ->get();
+
+        if ($picked->count() !== count($cardIds)) {
+            throw ValidationException::withMessages([
+                'cards' => 'One of those cards is not in the deck.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($session, $picked): Collection {
+            // Anything Control has dropped since last time goes back to the
+            // deck, and takes its place in this sitting with it.
+            $returned = $this->currentHand($session)
+                ->whereNotIn('id', $picked->pluck('id')->all());
+
+            foreach ($returned as $card) {
+                $card->forceFill(['status' => AgendaCardStatus::Deck])->save();
+
+                $session->items()->where('agenda_card_id', $card->id)->delete();
             }
 
-            foreach ($cards as $card) {
-                $card->forceFill(['status' => AgendaCardStatus::Drawn])->save();
+            foreach ($picked as $card) {
+                $card->forceFill(['status' => AgendaCardStatus::InHand])->save();
 
-                $session->items()->create([
-                    'agenda_card_id' => $card->id,
-                    'source' => AgendaItemSource::Drawn,
-                ]);
+                $session->items()->firstOrCreate(
+                    ['agenda_card_id' => $card->id],
+                    ['source' => AgendaItemSource::Handed],
+                );
             }
 
-            $session->forceFill(['drawn_at' => Carbon::now()])->save();
+            $session->forceFill(['handed_at' => Carbon::now()])->save();
 
-            return $cards;
+            return $picked;
         });
     }
 
     /**
-     * The Chair keeps two of the three drawn and discards the rest (3.1.1).
+     * What the Chair is holding: the cards Control has handed over and the
+     * Chair has not yet kept or discarded.
+     *
+     * @return Collection<int, AgendaCard>
+     */
+    public function currentHand(CouncilSession $session): Collection
+    {
+        return AgendaCard::query()
+            ->whereIn('id', $session->items()
+                ->where('source', AgendaItemSource::Handed)
+                ->pluck('agenda_card_id'))
+            ->where('status', AgendaCardStatus::InHand)
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Whether the Chair has already kept two out of what Control handed over.
+     *
+     * Read from the cards rather than from a flag on the sitting, because that
+     * is where it is written: a handed card that is no longer in the hand was
+     * either kept or discarded, and either way the choice is made.
+     */
+    public function chairHasChosen(CouncilSession $session): bool
+    {
+        return $session->items()
+            ->where('source', AgendaItemSource::Handed)
+            ->whereHas('card', fn ($query) => $query->where('status', '!=', AgendaCardStatus::InHand))
+            ->exists();
+    }
+
+    /**
+     * The Chair keeps two of what Control handed over, and the rest are
+     * discarded (3.1.1).
      *
      * @param  array<int, int>  $keptCardIds
      * @return Collection<int, AgendaCard>
      */
     public function keep(CouncilSession $session, array $keptCardIds): Collection
     {
-        /** @var Collection<int, AgendaCard> $drawn */
-        $drawn = AgendaCard::query()
-            ->whereIn('id', $session->items()
-                ->where('source', AgendaItemSource::Drawn)
-                ->pluck('agenda_card_id'))
-            ->where('status', AgendaCardStatus::Drawn)
-            ->get();
+        $handed = $this->currentHand($session);
 
-        if ($drawn->isEmpty()) {
+        if ($handed->isEmpty()) {
             throw ValidationException::withMessages([
                 'kept' => 'There is nothing in the Chair\'s hand to keep.',
             ]);
         }
 
-        $kept = $drawn->whereIn('id', $keptCardIds);
+        $kept = $handed->whereIn('id', $keptCardIds);
 
         if ($kept->count() !== count(array_unique($keptCardIds))) {
             throw ValidationException::withMessages([
@@ -234,21 +299,21 @@ class CouncilService
             ]);
         }
 
-        // Two, unless the deck could not find three in the first place.
-        $allowed = min(CouncilSession::CARDS_KEPT, $drawn->count());
+        // Two, unless Control handed over fewer than two to begin with.
+        $allowed = min(CouncilSession::CARDS_KEPT, $handed->count());
 
         if ($kept->count() !== $allowed) {
             throw ValidationException::withMessages([
-                'kept' => sprintf('The Chair keeps %d of the %d drawn.', $allowed, $drawn->count()),
+                'kept' => sprintf('The Chair keeps %d of the %d handed over.', $allowed, $handed->count()),
             ]);
         }
 
-        return DB::transaction(function () use ($session, $drawn, $kept): Collection {
+        return DB::transaction(function () use ($session, $handed, $kept): Collection {
             foreach ($kept as $card) {
                 $this->tableCard($session, $card);
             }
 
-            foreach ($drawn->whereNotIn('id', $kept->pluck('id')->all()) as $card) {
+            foreach ($handed->whereNotIn('id', $kept->pluck('id')->all()) as $card) {
                 $card->forceFill(['status' => AgendaCardStatus::Discarded])->save();
             }
 
@@ -259,8 +324,8 @@ class CouncilService
     /**
      * Put a card up for vote this turn, subject to the five-item cap (3.1.3).
      *
-     * The item may already exist - a drawn card has had one since the draw -
-     * in which case this only moves the card onto the table.
+     * The item may already exist - a card Control handed over has had one
+     * since it was handed - in which case this only moves it onto the table.
      */
     public function tableCard(CouncilSession $session, AgendaCard $card, ?AgendaItemSource $source = null): CouncilAgendaItem
     {
@@ -296,7 +361,7 @@ class CouncilService
             /** @var CouncilAgendaItem $item */
             $item = $session->items()->firstOrCreate(
                 ['agenda_card_id' => $card->id],
-                ['source' => $source ?? AgendaItemSource::Drawn],
+                ['source' => $source ?? AgendaItemSource::Handed],
             );
 
             $card->forceFill(['status' => AgendaCardStatus::Tabled])->save();

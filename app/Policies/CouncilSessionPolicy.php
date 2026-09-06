@@ -20,7 +20,7 @@ class CouncilSessionPolicy
 {
     /**
      * Control can do anything at the Council, and needs to be able to: the
-     * rulebook has Control drawing the cards, signing off amendments and
+     * rulebook has Control picking the cards, signing off amendments and
      * judging attendance, and a ruling mid-game must not wait on the Chair
      * being at their laptop.
      *
@@ -37,8 +37,8 @@ class CouncilSessionPolicy
     }
 
     /**
-     * Chair this sitting: keep two of the three drawn, rule on custom agendas,
-     * amend resolutions, declare a vote secret, and resolve it.
+     * Chair this sitting: keep two of what Control hands over, rule on custom
+     * agendas, amend resolutions, declare a vote secret, and resolve it.
      *
      * Held by a Corporation rather than by a player, and read from the CEO seat
      * that Corporation fields. A Corporation whose CEO seat is unclaimed has

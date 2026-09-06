@@ -53,10 +53,10 @@ class CouncilPresenter
             'turn' => $turn?->number,
             'session' => $session === null ? null : $this->session($game, $session),
             'viewer' => $viewer,
-            // The three in the Chair's hand, before two of them are read out.
-            // Nobody else has seen them yet, so nobody else is shown them.
+            // What Control has handed the Chair, before two of them are read
+            // out. Nobody else has seen these, so nobody else is shown them.
             'hand' => $privileged && $session !== null
-                ? $this->cardsInSession($session, AgendaCardStatus::Drawn)
+                ? $this->cardsInSession($session, AgendaCardStatus::InHand)
                 : [],
             'items' => $session === null ? [] : $this->items($session, $viewer, $privileged),
             'with_chair' => $privileged
@@ -64,6 +64,17 @@ class CouncilPresenter
                 : [],
             'important' => $privileged
                 ? $this->cards($game, AgendaCardStatus::Important)
+                : [],
+            // Control's alone, and pointedly not the Chair's: a card sitting
+            // with Control has not been given to the Chair yet, and might never
+            // be - the author sees the remarks first and may keep it back
+            // (3.1.3). Showing the Chair would be handing it over early.
+            //
+            // It is here rather than only on the Control panel because a player
+            // is told their card is with Control, and the Council Chamber is
+            // where they and Control both go to look for it.
+            'with_control' => $viewer['is_control']
+                ? $this->cards($game, AgendaCardStatus::WithControl)
                 : [],
             'my_cards' => $this->myCards($game, $user),
         ];
@@ -117,10 +128,11 @@ class CouncilPresenter
             'recess_seconds_remaining' => $session->recessSecondsRemaining($reference),
             'in_recess' => $session->isInRecess($reference),
             'paused' => $reference !== null,
-            'has_drawn' => $session->hasDrawn(),
+            'has_handed' => $session->hasHandedOver(),
+            'chair_has_chosen' => $this->council->chairHasChosen($session),
             'tabled_count' => $this->council->tabledCount($session),
             'maximum_items' => CouncilSession::MAXIMUM_ITEMS,
-            'cards_drawn' => CouncilSession::CARDS_DRAWN,
+            'cards_handed' => CouncilSession::CARDS_HANDED,
             'cards_kept' => CouncilSession::CARDS_KEPT,
             'can_promote' => $session->items()->where('source', AgendaItemSource::Promoted)->doesntExist(),
         ];

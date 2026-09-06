@@ -25,7 +25,7 @@ use Inertia\Response;
  *
  * Deliberately the smaller half. The Council is the CEOs' sub-game and the
  * Chair runs it, so what is here is the four things the rulebook actually gives
- * Control - the deck and the draw, the remarks on a custom agenda, the sign-off
+ * Control - the deck and picking from it, the remarks on a custom agenda, the sign-off
  * on an amendment, and the cost of an empty seat - plus the overrides Control
  * has over everything else in this application.
  */
@@ -90,17 +90,29 @@ class CouncilController extends Controller
     }
 
     /**
-     * Control draws three and hands them to the Chair (3.1.1).
+     * Control picks the cards the Council is asked about (3.1.1).
+     *
+     * The whole set every time rather than one at a time, so unpicking a card
+     * before the Chair has looked is the same act as picking one - and the
+     * service is where "the Chair has already chosen" is decided.
      */
-    public function draw(Game $game, Request $request): RedirectResponse
+    public function hand(Game $game, Request $request): RedirectResponse
     {
         $session = $this->session($game);
 
-        $drawn = $this->council->draw($session);
+        $validated = $request->validate([
+            'cards' => ['required', 'array', 'min:1'],
+            'cards.*' => [
+                'required', 'integer',
+                Rule::exists('agenda_cards', 'id')->where('game_id', $game->id),
+            ],
+        ]);
+
+        $handed = $this->council->handToChair($session, $validated['cards']);
 
         return back()->with('status', sprintf(
-            '%d card(s) drawn for the Chair.',
-            $drawn->count(),
+            '%s handed to the Chair.',
+            $handed->pluck('title')->join(', ', ' and '),
         ));
     }
 

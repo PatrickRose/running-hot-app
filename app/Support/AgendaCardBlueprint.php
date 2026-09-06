@@ -6,7 +6,7 @@ namespace App\Support;
  * The game's agenda deck (rulebook 3.1.1), applied to every new game by
  * App\Actions\SeedAgendaCards.
  *
- * These are the cards Control draws three of at the start of each Setup phase.
+ * These are the cards Control picks from at the start of each Setup phase.
  * Like the three card lists beside this one, it is a starting catalogue rather
  * than a fixed deck: every card lands in the game's own agenda_cards table,
  * Control writes more from the Control panel, and the Chair may amend the

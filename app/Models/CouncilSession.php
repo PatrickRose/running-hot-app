@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
  * @property int $turn_id
  * @property int|null $chair_corporation_id
  * @property Carbon|null $recess_at
- * @property Carbon|null $drawn_at
+ * @property Carbon|null $handed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Turn $turn
@@ -25,14 +25,18 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, CouncilAgendaItem> $items
  * @property-read Collection<int, CouncilSeat> $seats
  */
-#[Fillable(['turn_id', 'chair_corporation_id', 'recess_at', 'drawn_at'])]
+#[Fillable(['turn_id', 'chair_corporation_id', 'recess_at', 'handed_at'])]
 class CouncilSession extends Model
 {
     /**
-     * How many cards Control draws, and how many of them the Chair keeps
-     * (rulebook 3.1.1).
+     * How many cards Control hands the Chair, and how many of them the Chair
+     * keeps (rulebook 3.1.1).
+     *
+     * The first is what the Control panel offers rather than a limit: Control
+     * picks the cards, so it may hand over a different number and the Chair
+     * then keeps two of whatever arrives.
      */
-    public const CARDS_DRAWN = 3;
+    public const CARDS_HANDED = 3;
 
     public const CARDS_KEPT = 2;
 
@@ -48,7 +52,7 @@ class CouncilSession extends Model
     {
         return [
             'recess_at' => 'datetime',
-            'drawn_at' => 'datetime',
+            'handed_at' => 'datetime',
         ];
     }
 
@@ -101,8 +105,8 @@ class CouncilSession extends Model
         return $this->recess_at !== null && $this->recessSecondsRemaining($reference) === 0;
     }
 
-    public function hasDrawn(): bool
+    public function hasHandedOver(): bool
     {
-        return $this->drawn_at !== null;
+        return $this->handed_at !== null;
     }
 }

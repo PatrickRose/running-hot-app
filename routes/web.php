@@ -223,8 +223,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::post('games/{game}/council/agenda-cards/{card}/annotate', [ControlCouncilController::class, 'annotate'])
                     ->name('council.agenda-cards.annotate');
 
-                Route::post('games/{game}/council/draw', [ControlCouncilController::class, 'draw'])
-                    ->name('council.draw');
+                Route::post('games/{game}/council/hand', [ControlCouncilController::class, 'hand'])
+                    ->name('council.hand');
                 Route::post('games/{game}/council/chair', [ControlCouncilController::class, 'chair'])
                     ->name('council.chair');
                 Route::post('games/{game}/council/rotation', [ControlCouncilController::class, 'rotation'])

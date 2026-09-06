@@ -7,12 +7,12 @@ namespace App\Enums;
  *
  * A card's whole life is one of these, whether Control wrote it into the deck
  * or a player wrote it during Setup. The two kinds meet at WithChair: from
- * there a drawn card and a custom one are treated exactly alike, which is what
- * the rulebook does.
+ * there a card Control handed over and a custom one are treated exactly alike,
+ * which is what the rulebook does.
  */
 enum AgendaCardStatus: string
 {
-    /** Control's, written into the game's deck and not yet drawn. */
+    /** Control's, written into the game's deck and not yet picked. */
     case Deck = 'deck';
 
     /** A player is writing it. Theirs to edit until they hand it over. */
@@ -27,8 +27,8 @@ enum AgendaCardStatus: string
     /** With the Chair, awaiting urgent, important or rejected. */
     case WithChair = 'with_chair';
 
-    /** One of the three drawn for the Chair, not yet kept or discarded. */
-    case Drawn = 'drawn';
+    /** In the Chair's hand: handed over by Control, not yet kept or discarded. */
+    case InHand = 'in_hand';
 
     /** Up for vote this turn. */
     case Tabled = 'tabled';
@@ -39,7 +39,7 @@ enum AgendaCardStatus: string
     /** Returned to the player, who may take it to a future Chair. */
     case Rejected = 'rejected';
 
-    /** The third of the three drawn, out of play. */
+    /** Handed over, not kept, and out of play for this sitting. */
     case Discarded = 'discarded';
 
     /** Voted on, and the outcome is on the item. */
@@ -53,7 +53,7 @@ enum AgendaCardStatus: string
             self::WithControl => 'With Control',
             self::Annotated => 'Annotated by Control',
             self::WithChair => 'With the Chair',
-            self::Drawn => 'Drawn',
+            self::InHand => 'In the Chair\'s hand',
             self::Tabled => 'Up for vote',
             self::Important => 'Held as important',
             self::Rejected => 'Rejected',

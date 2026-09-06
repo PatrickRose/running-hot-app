@@ -290,16 +290,58 @@ class CouncilTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_control_draws_for_the_chair(): void
+    public function test_control_picks_what_the_council_is_asked_about(): void
     {
         // No cards are made here: a new game already holds the game's own deck.
         $control = $this->control();
 
+        $picked = $this->game->agendaCards()
+            ->where('status', AgendaCardStatus::Deck)
+            ->orderBy('title')
+            ->limit(3)
+            ->pluck('id');
+
         $this->actingAs($control)
-            ->post(route('control.council.draw', ['game' => $this->game->id]))
+            ->post(route('control.council.hand', ['game' => $this->game->id]), [
+                'cards' => $picked->all(),
+            ])
             ->assertRedirect();
 
-        $this->assertSame(3, $this->game->agendaCards()->where('status', AgendaCardStatus::Drawn)->count());
+        $inHand = $this->game->agendaCards()
+            ->where('status', AgendaCardStatus::InHand)
+            ->pluck('id');
+
+        $this->assertSame($picked->sort()->values()->all(), $inHand->sort()->values()->all());
+    }
+
+    /**
+     * The pile a card sits in between the player handing it over and Control
+     * handing it back. Control's alone: the Chair has not been given it yet
+     * and might never be, so seeing it would be being handed it early.
+     */
+    public function test_a_card_with_control_is_visible_to_control_and_not_to_the_chair(): void
+    {
+        $author = $this->player(CharacterRole::Runner, null);
+        $character = $this->game->characters()->where('user_id', $author->id)->sole();
+
+        $council = app(CouncilService::class);
+        $council->submitToControl($council->draftCustomCard($character, 'Ban the drones', null, ['Ban them', 'Licence them']));
+
+        $presenter = app(CouncilPresenter::class);
+        $chair = $this->player(CharacterRole::Ceo, $this->gordon);
+
+        $this->assertSame(
+            ['Ban the drones'],
+            array_column($presenter->forPlayer($this->game, $this->control())['with_control'], 'title'),
+        );
+
+        $this->assertSame([], $presenter->forPlayer($this->game, $chair)['with_control']);
+
+        // And the author can still see where their own card has got to.
+        $this->assertSame(
+            'With Control',
+            $presenter->forPlayer($this->game, $author)['my_cards'][0]['status_label'],
+        );
     }
 
     public function test_control_is_the_only_one_who_may_write_the_deck(): void

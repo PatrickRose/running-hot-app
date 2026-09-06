@@ -58,7 +58,7 @@ class AgendaCardController extends Controller
 
         $this->council->submitToControl($card);
 
-        return back()->with('status', $card->title.' is with Control.');
+        return back()->with('status', $card->title.' is with Control, who will add any remarks and give it back to you.');
     }
 
     /**

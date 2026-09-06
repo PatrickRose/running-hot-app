@@ -476,7 +476,7 @@ export type CouncilVoteRecord = Faction & {
 
 export type CouncilItem = {
     id: number;
-    source: 'drawn' | 'urgent' | 'promoted';
+    source: 'handed' | 'urgent' | 'promoted';
     source_label: string;
     secret: boolean;
     resolved: boolean;
@@ -512,10 +512,14 @@ export type CouncilSessionView = {
     recess_seconds_remaining: number | null;
     in_recess: boolean;
     paused: boolean;
-    has_drawn: boolean;
+    /** Whether Control has handed the Chair anything this sitting. */
+    has_handed: boolean;
+    /** Once true, the hand is settled and Control cannot change it. */
+    chair_has_chosen: boolean;
     tabled_count: number;
     maximum_items: number;
-    cards_drawn: number;
+    /** What the Control panel offers as a hand, not a limit. */
+    cards_handed: number;
     cards_kept: number;
     can_promote: boolean;
 };
@@ -533,11 +537,16 @@ export type CouncilBoard = {
     turn: number | null;
     session: CouncilSessionView | null;
     viewer: CouncilViewer;
-    /** The three in the Chair's hand: the Chair's and Control's alone. */
+    /** What Control has handed the Chair: the Chair's and Control's alone. */
     hand: AgendaCardView[];
     items: CouncilItem[];
     with_chair: AgendaCardView[];
     important: AgendaCardView[];
+    /**
+     * Cards waiting on Control's remarks — Control's alone, and pointedly not
+     * the Chair's: one of these has not been handed to the Chair yet.
+     */
+    with_control: AgendaCardView[];
     my_cards: AgendaCardView[];
 };
 

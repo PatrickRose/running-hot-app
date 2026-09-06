@@ -7,13 +7,13 @@ namespace App\Enums;
  * 3.1.3).
  *
  * Worth recording rather than inferring: all three end up as items to be voted
- * on, but only one of them came out of the deck, and the Chair may promote only
- * one previously submitted item per turn.
+ * on, but only one of them was Control's to choose, and the Chair may promote
+ * only one previously submitted item per turn.
  */
 enum AgendaItemSource: string
 {
-    /** One of the three Control drew for the Chair. */
-    case Drawn = 'drawn';
+    /** One of the cards Control picked out of the deck for the Chair. */
+    case Handed = 'handed';
 
     /** A custom agenda the Chair accepted as urgent. */
     case Urgent = 'urgent';
@@ -24,7 +24,7 @@ enum AgendaItemSource: string
     public function label(): string
     {
         return match ($this) {
-            self::Drawn => 'Drawn from the deck',
+            self::Handed => 'Handed to the Chair by Control',
             self::Urgent => 'Accepted as urgent',
             self::Promoted => 'Promoted from the important pile',
         };

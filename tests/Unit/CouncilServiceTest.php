@@ -47,20 +47,26 @@ class CouncilServiceTest extends TestCase
         $this->council = app(CouncilService::class);
     }
 
-    public function test_it_draws_three_and_keeps_two(): void
+    public function test_control_picks_the_cards_and_the_chair_keeps_two(): void
     {
         $session = $this->council->openSession($this->turn);
 
-        foreach (range(1, 5) as $index) {
-            $this->deckCard('Card '.$index);
+        $cards = collect(range(1, 5))->map(fn (int $index) => $this->deckCard('Card '.$index));
+        $picked = $cards->take(CouncilSession::CARDS_HANDED);
+
+        $handed = $this->council->handToChair($session, $picked->pluck('id')->all());
+
+        // Picked, not dealt: exactly the three Control asked for, and the two
+        // it passed over are still in the deck (which also holds the game's
+        // own cards, seeded with every game).
+        $this->assertSame($picked->pluck('id')->all(), $handed->pluck('id')->all());
+        $this->assertSame(3, $this->game->agendaCards()->where('status', AgendaCardStatus::InHand)->count());
+
+        foreach ($cards->skip(CouncilSession::CARDS_HANDED) as $passedOver) {
+            $this->assertSame(AgendaCardStatus::Deck, $passedOver->fresh()->status);
         }
 
-        $drawn = $this->council->draw($session);
-
-        $this->assertCount(CouncilSession::CARDS_DRAWN, $drawn);
-        $this->assertSame(3, $this->game->agendaCards()->where('status', AgendaCardStatus::Drawn)->count());
-
-        $kept = $drawn->take(2);
+        $kept = $handed->take(2);
         $this->council->keep($session, $kept->pluck('id')->all());
 
         $this->assertSame(2, $this->game->agendaCards()->where('status', AgendaCardStatus::Tabled)->count());
@@ -72,30 +78,65 @@ class CouncilServiceTest extends TestCase
     {
         $session = $this->council->openSession($this->turn);
 
-        foreach (range(1, 3) as $index) {
-            $this->deckCard('Card '.$index);
-        }
+        $cards = collect(range(1, 3))->map(fn (int $index) => $this->deckCard('Card '.$index));
 
-        $drawn = $this->council->draw($session);
+        $handed = $this->council->handToChair($session, $cards->pluck('id')->all());
 
         $this->expectException(ValidationException::class);
 
-        $this->council->keep($session, $drawn->pluck('id')->all());
+        $this->council->keep($session, $handed->pluck('id')->all());
     }
 
-    public function test_control_cannot_draw_twice_in_a_turn(): void
+    /**
+     * Control picks by hand, so it can pick wrongly. Handing the corrected set
+     * over puts the card it dropped back in the deck.
+     */
+    public function test_control_can_change_its_mind_until_the_chair_chooses(): void
     {
         $session = $this->council->openSession($this->turn);
 
-        foreach (range(1, 6) as $index) {
-            $this->deckCard('Card '.$index);
-        }
+        $cards = collect(range(1, 4))->map(fn (int $index) => $this->deckCard('Card '.$index));
 
-        $this->council->draw($session);
+        $this->council->handToChair($session, $cards->take(3)->pluck('id')->all());
+
+        $corrected = $cards->slice(1, 3);
+        $this->council->handToChair($session->refresh(), $corrected->pluck('id')->all());
+
+        $this->assertSame(
+            $corrected->pluck('id')->all(),
+            $this->council->currentHand($session->refresh())->pluck('id')->all(),
+        );
+
+        // The one Control took back is in the deck again, and no longer part of
+        // this sitting at all.
+        $this->assertSame(AgendaCardStatus::Deck, $cards->first()->fresh()->status);
+        $this->assertSame(3, $session->items()->count());
+    }
+
+    public function test_control_cannot_change_the_hand_once_the_chair_has_chosen(): void
+    {
+        $session = $this->council->openSession($this->turn);
+
+        $cards = collect(range(1, 4))->map(fn (int $index) => $this->deckCard('Card '.$index));
+
+        $handed = $this->council->handToChair($session, $cards->take(3)->pluck('id')->all());
+        $this->council->keep($session, $handed->take(2)->pluck('id')->all());
 
         $this->expectException(ValidationException::class);
 
-        $this->council->draw($session->refresh());
+        $this->council->handToChair($session->refresh(), [$cards->last()->id]);
+    }
+
+    public function test_a_card_that_is_not_in_the_deck_cannot_be_handed_over(): void
+    {
+        $session = $this->council->openSession($this->turn);
+
+        $tabled = $this->deckCard('Already up for vote');
+        $this->council->tableCard($session, $tabled);
+
+        $this->expectException(ValidationException::class);
+
+        $this->council->handToChair($session->refresh(), [$tabled->id]);
     }
 
     public function test_a_turn_takes_no_more_than_five_agenda_items(): void

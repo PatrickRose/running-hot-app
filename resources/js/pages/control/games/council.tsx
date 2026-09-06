@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import {
     attendance,
     chair,
-    draw,
+    hand as handToChair,
     recess,
     rotation,
 } from '@/routes/control/council';
@@ -36,6 +36,7 @@ import type {
     CouncilBoard,
     CouncilControlBoard,
     CouncilSeatView,
+    CouncilSessionView,
     GameSummary,
 } from '@/types/game';
 
@@ -91,37 +92,22 @@ export default function ControlCouncil({ game, council, control }: Props) {
                     <CardHeader>
                         <CardTitle>The sitting</CardTitle>
                         <CardDescription>
-                            Control draws three cards and hands them to the
-                            Chair, who keeps two. The Chair rotates in the order
-                            below, which Council Control announces on the day.
+                            You pick the cards the Council is asked about and
+                            hand them to the Chair, who keeps two. The Chair
+                            rotates in the order below, which Council Control
+                            announces on the day.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4">
-                        <div className="flex flex-wrap items-center gap-3">
-                            <Button
-                                size="sm"
-                                disabled={session?.has_drawn}
-                                onClick={() =>
-                                    router.post(
-                                        draw.url({ game: game.id }),
-                                        {},
-                                        { preserveScroll: true },
-                                    )
-                                }
-                            >
-                                {session?.has_drawn
-                                    ? 'Drawn for this turn'
-                                    : `Draw ${session?.cards_drawn ?? 3} for the Chair`}
-                            </Button>
-
-                            {session && (
-                                <span className="text-sm text-muted-foreground">
-                                    {session.tabled_count} of{' '}
-                                    {session.maximum_items} agenda items this
-                                    turn
-                                </span>
-                            )}
-                        </div>
+                        {session && (
+                            <p className="text-sm text-muted-foreground">
+                                {session.tabled_count} of{' '}
+                                {session.maximum_items} agenda items this turn
+                                {session.has_handed &&
+                                    !session.chair_has_chosen &&
+                                    ' · the Chair is choosing'}
+                            </p>
+                        )}
 
                         <Rotation gameId={game.id} control={control} />
 
@@ -280,18 +266,26 @@ export default function ControlCouncil({ game, council, control }: Props) {
                         <CardTitle>The agenda deck</CardTitle>
                         <CardDescription>
                             The game&rsquo;s own deck, seeded with every new
-                            game. Write more for the game you are running, and
-                            take out anything you would rather the Chair did not
-                            draw.
+                            game. Pick what this turn&rsquo;s Council is asked
+                            about, and write more for the game you are running.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4">
+                        {session && (
+                            <DeckPicker
+                                gameId={game.id}
+                                session={session}
+                                deck={control.deck}
+                                hand={council.hand}
+                            />
+                        )}
+
                         <DeckComposer gameId={game.id} />
 
                         {control.deck.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
-                                The deck has run out. Everything in it has been
-                                drawn, or taken out.
+                                Nothing is left in the deck. Everything has been
+                                handed over, voted on, or taken out.
                             </p>
                         ) : (
                             control.deck.map((card) => (
@@ -324,6 +318,114 @@ export default function ControlCouncil({ game, council, control }: Props) {
                 </Card>
             </div>
         </>
+    );
+}
+
+/**
+ * Picking what the Council is asked about (rulebook 3.1.1).
+ *
+ * Control holds the deck and reads it, so which cards go up is a judgement
+ * about the game in front of you rather than a shuffle. Three is what the
+ * rulebook has Control hand over and what this offers; the count is not
+ * enforced, and the Chair keeps two of whatever arrives.
+ *
+ * The whole hand is sent every time, so unticking a card picked by mistake is
+ * the same act as picking one and it goes back to the deck. That stops the
+ * moment the Chair keeps two, because by then the discard has happened and the
+ * agenda is theirs.
+ */
+function DeckPicker({
+    gameId,
+    session,
+    deck,
+    hand,
+}: {
+    gameId: number;
+    session: CouncilSessionView;
+    deck: AgendaCardView[];
+    hand: AgendaCardView[];
+}) {
+    const [picked, setPicked] = useState<number[]>(() =>
+        hand.map((card) => card.id),
+    );
+
+    if (session.chair_has_chosen) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                The Chair has chosen from this turn&rsquo;s cards. Anything else
+                reaches the agenda as an urgent item, or by being promoted.
+            </p>
+        );
+    }
+
+    const choices = [...hand, ...deck];
+
+    if (choices.length === 0) {
+        return null;
+    }
+
+    const toggle = (id: number) =>
+        setPicked((current) =>
+            current.includes(id)
+                ? current.filter((existing) => existing !== id)
+                : [...current, id],
+        );
+
+    return (
+        <div className="flex flex-col gap-3 rounded-md border border-dashed p-3">
+            <p className="text-sm font-medium">
+                {session.has_handed
+                    ? 'In the Chair\u2019s hand'
+                    : `Pick ${session.cards_handed} for the Chair`}
+            </p>
+
+            <ul className="flex flex-col gap-1">
+                {choices.map((card) => (
+                    <li key={card.id}>
+                        <label className="flex items-start gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={picked.includes(card.id)}
+                                onChange={() => toggle(card.id)}
+                            />
+                            <span>
+                                {card.title}
+                                <span className="ml-2 text-muted-foreground">
+                                    {card.resolutions.length} resolutions
+                                </span>
+                            </span>
+                        </label>
+                    </li>
+                ))}
+            </ul>
+
+            <div className="flex flex-wrap items-center gap-3">
+                <Button
+                    size="sm"
+                    disabled={picked.length === 0}
+                    onClick={() =>
+                        router.post(
+                            handToChair.url({ game: gameId }),
+                            { cards: picked },
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    {session.has_handed
+                        ? 'Change what the Chair holds'
+                        : `Hand ${picked.length} to the Chair`}
+                </Button>
+
+                {picked.length !== session.cards_handed && (
+                    <span className="text-xs text-muted-foreground">
+                        The rulebook has Control hand over{' '}
+                        {session.cards_handed}. The Chair keeps two of whatever
+                        arrives.
+                    </span>
+                )}
+            </div>
+        </div>
     );
 }
 
