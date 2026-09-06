@@ -20,6 +20,13 @@ use Illuminate\Validation\ValidationException;
  * number of cards. It is written "7 Leaf / 3 Maths", which is why the two sets
  * are called left and right rather than being numbered.
  *
+ * A card may also carry a marking that limits how it is played: a No single
+ * card cannot be the only card in its set. That is the one rule here the
+ * rulebook does not state - it prints the marking on two of the cards deck
+ * customisation sells and never says what it means - so it is the designer's
+ * ruling rather than a reading, and it lives in
+ * App\Enums\ResearchCardRestriction.
+ *
  * Scoring is two separate payments and they follow different rules:
  *
  * - The equation itself pays "in one of the suits that you used ... equal to
@@ -91,6 +98,25 @@ class Equation
                         strtolower($side->label()),
                     ),
                 ]);
+            }
+        }
+
+        foreach (EquationSide::all() as $side) {
+            $cards = $this->side($side);
+
+            foreach ($cards as $card) {
+                $minimum = $card->restriction?->minimumSetSize() ?? 1;
+
+                if (count($cards) < $minimum) {
+                    throw ValidationException::withMessages([
+                        'equation' => sprintf(
+                            'A card marked "%s" needs at least %d cards in its set: %s',
+                            $card->restriction->label(),
+                            $minimum,
+                            lcfirst($card->restriction->description()),
+                        ),
+                    ]);
+                }
             }
         }
 

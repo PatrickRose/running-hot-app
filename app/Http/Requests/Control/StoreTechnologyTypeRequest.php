@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Control;
 
+use App\Enums\ResearchCardRestriction;
 use App\Models\Game;
 use App\Models\TechnologyType;
 use Illuminate\Foundation\Http\FormRequest;
@@ -85,9 +86,9 @@ class StoreTechnologyTypeRequest extends FormRequest
             'value_min' => $minimum,
             'value_max' => max($minimum, (int) ($grant['value_max'] ?? $minimum)),
             'wild' => filter_var($grant['wild'] ?? false, FILTER_VALIDATE_BOOL),
-            'restriction' => filled($grant['restriction'] ?? null)
-                ? trim((string) $grant['restriction'])
-                : null,
+            'restriction' => ResearchCardRestriction::tryFrom(
+                trim((string) ($grant['restriction'] ?? ''))
+            )?->value,
             'requires_research_facilities' => max(0, (int) ($grant['requires_research_facilities'] ?? 0)),
         ];
     }
@@ -152,7 +153,7 @@ class StoreTechnologyTypeRequest extends FormRequest
             'deck_grant.value_min' => ['required_with:deck_grant', 'integer', 'min:1', 'max:99'],
             'deck_grant.value_max' => ['required_with:deck_grant', 'integer', 'min:1', 'max:99'],
             'deck_grant.wild' => ['required_with:deck_grant', 'boolean'],
-            'deck_grant.restriction' => ['nullable', 'string', 'max:100'],
+            'deck_grant.restriction' => ['nullable', Rule::enum(ResearchCardRestriction::class)],
             'deck_grant.requires_research_facilities' => ['required_with:deck_grant', 'integer', 'min:0', 'max:50'],
 
             'notes' => ['nullable', 'string', 'max:2000'],

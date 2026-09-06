@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 
 /**
@@ -15,18 +16,22 @@ use App\Enums\ResearchSuit;
  *
  * A wild card carries no suit. "Some cards are marked as wild and can be used
  * as any type", so its suit is not unknown, it is whichever the set needs.
+ *
+ * A restriction is the third thing the rules need, and the only one that is not
+ * printed as a number: a No single card cannot be the only card in its set.
  */
 final readonly class EquationCard
 {
     /**
      * @param  ResearchSuit|null  $suit  null for a wild card
      * @param  bool  $fromHand  false for one of the six public cards
+     * @param  ResearchCardRestriction|null  $restriction  the marking on the card, if it carries one
      */
     public function __construct(
         public ?ResearchSuit $suit,
         public int $value,
         public bool $fromHand = false,
-        public ?int $id = null,
+        public ?ResearchCardRestriction $restriction = null,
     ) {}
 
     public function isWild(): bool

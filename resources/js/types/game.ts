@@ -444,8 +444,12 @@ export type DeckGrant = {
     value_min: number;
     value_max: number;
     wild: boolean;
-    /** Words printed on the card that the rulebook never defines, e.g. "No single". */
+    /**
+     * The marking printed on the card, e.g. "No single" — which the rulebook
+     * prints and never defines. What it does is `restriction_note`.
+     */
     restriction: string | null;
+    restriction_note: string | null;
     requires_research_facilities: number;
 };
 
@@ -461,7 +465,10 @@ export type ResearchCardSummary = {
     wild: boolean;
     /** "7 Leaf", or "Wild 4". */
     label: string;
+    /** The marking printed on the card, e.g. "No single". */
     restriction: string | null;
+    /** What that marking does. Shown where there is room; read out where not. */
+    restriction_note: string | null;
     zone: 'deck' | 'hand' | 'pool' | 'spent';
     zone_label: string;
 };

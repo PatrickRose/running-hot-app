@@ -305,7 +305,28 @@ class ResearchPresenter
             'split_piece' => $type->split_piece,
             'split_pieces' => $type->split_pieces,
             'is_deck_customisation' => $type->isDeckCustomisation(),
-            'deck_grant' => $type->deckGrant(),
+            'deck_grant' => $this->deckGrant($type),
+        ];
+    }
+
+    /**
+     * What a deck customisation row grants, with its marking in the words the
+     * card prints rather than the key the rules match on.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function deckGrant(TechnologyType $type): ?array
+    {
+        $grant = $type->deckGrant();
+
+        if ($grant === null) {
+            return null;
+        }
+
+        return [
+            ...$grant,
+            'restriction' => $grant['restriction']?->label(),
+            'restriction_note' => $grant['restriction']?->description(),
         ];
     }
 
@@ -393,7 +414,12 @@ class ResearchPresenter
                 'value' => $card->value,
                 'wild' => $card->isWild(),
                 'label' => $card->label(),
-                'restriction' => $card->restriction,
+                // The words on the card, and what they do. Both, because "No
+                // single" is not self-explanatory and the tile has room for
+                // three characters: the label is drawn and the note is what a
+                // screen reader and a tooltip get.
+                'restriction' => $card->restriction?->label(),
+                'restriction_note' => $card->restriction?->description(),
                 'zone' => $card->zone->value,
                 'zone_label' => $card->zone->label(),
             ];

@@ -520,10 +520,19 @@ without either touching its twin. A null suit is a wild card rather than a
 missing one, and it draws the icon font's `Y`, which was drawn for this and had
 nothing to show it until now.
 
-**"No single" is shown and not acted on.** Two of the deck customisation rows add
-a card printed with those words, and the rulebook never defines them anywhere, so
-the words travel on the card as text for the table to read. Inventing a rule for
-them would be exactly the mistake the Income rule warns about.
+**"No single" means the card cannot be alone in its set**, so the side of the
+equation holding it needs at least two cards. Two of the deck customisation rows
+sell a card printed with those words and the rulebook defines them nowhere — this
+is the designer's ruling rather than a reading, which is why it is written down
+here and in `App\Enums\ResearchCardRestriction` rather than inferred from
+anything.
+
+**A card's marking is an enum, not the text it started as.** The equation rules
+act on it now, and a rule keyed off a string somebody typed breaks on a capital
+letter — so `restriction` holds a key and `label()` holds the printed words. That
+also makes it a choice rather than a free-text box wherever Control sets one: a
+marking the rules could not enforce would be worse on a card than no marking.
+Adding a second marking is a case, a `minimumSetSize()` and nothing else.
 
 **Deck customisation is priced on the tree, and prices unlike anything else on
 it.** "4 research credits in any suit", "6 in any suit and 3 in another", "5 from
@@ -605,9 +614,9 @@ waiting to be scored, a tech tree with each row's affordability worked out, the
 cards a Corporation has researched and the deck it plays from is about as much as
 the rest of the application sends put together.
 
-**Not modelled, deliberately:** what "No single" does, and what any technology's
-effect does. Effects are printed text for Control to read, exactly as a Facility
-type's are — the sub-games that would act on them are unbuilt.
+**Not modelled, deliberately:** what any technology's effect does. Effects are
+printed text for Control to read, exactly as a Facility type's are — the sub-games
+that would act on them are unbuilt.
 
 ## Logos
 

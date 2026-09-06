@@ -125,7 +125,7 @@ export function ResearchTable({
                 <CardTitle>The research table</CardTitle>
                 <CardDescription>
                     {session.open
-                        ? 'Two sets of cards, the same number in each, every card in a set the same suit — and at least one out of your own hand.'
+                        ? 'Two sets of cards, the same number in each, every card in a set the same suit — and at least one out of your own hand. A card marked “No single” cannot be the only one on its side.'
                         : 'This sitting has closed.'}
                     {' · '}
                     {session.public_deck_remaining} card

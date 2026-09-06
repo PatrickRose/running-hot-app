@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\GameStatus;
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
 use App\Enums\Tracker;
@@ -110,7 +111,7 @@ class ResearchDeckTest extends TestCase
             'value_min' => 3,
             'value_max' => 5,
             'wild' => false,
-            'restriction' => 'No single',
+            'restriction' => ResearchCardRestriction::NoSingle,
             'requires_research_facilities' => 0,
         ], $first->deckGrant());
 
@@ -127,14 +128,14 @@ class ResearchDeckTest extends TestCase
     {
         $card = $this->table()->customiseDeck(
             $this->corporation,
-            $this->entry(['restriction' => 'No single']),
+            $this->entry(['restriction' => ResearchCardRestriction::NoSingle->value]),
             [ResearchSuit::Leaf],
             4,
         );
 
         $this->assertSame(ResearchSuit::Leaf, $card->suit);
         $this->assertSame(4, $card->value);
-        $this->assertSame('No single', $card->restriction);
+        $this->assertSame(ResearchCardRestriction::NoSingle, $card->restriction);
         // Into the deck, not the hand: buying a card is not a free draw.
         $this->assertSame(ResearchZone::Deck, $card->zone);
         $this->assertSame($this->corporation->id, $card->corporation_id);
@@ -251,11 +252,11 @@ class ResearchDeckTest extends TestCase
             'zone' => ResearchZone::Deck,
         ]);
 
-        $this->table()->editCard($card, ResearchSuit::Brain, 8, 'No single');
+        $this->table()->editCard($card, ResearchSuit::Brain, 8, ResearchCardRestriction::NoSingle);
 
         $this->assertSame(ResearchSuit::Brain, $card->refresh()->suit);
         $this->assertSame(8, $card->value);
-        $this->assertSame('No single', $card->restriction);
+        $this->assertSame(ResearchCardRestriction::NoSingle, $card->restriction);
     }
 
     public function test_control_writes_a_deck_customisation_row_of_its_own(): void
@@ -278,7 +279,7 @@ class ResearchDeckTest extends TestCase
                     'value_min' => '3',
                     'value_max' => '5',
                     'wild' => '0',
-                    'restriction' => 'No single',
+                    'restriction' => ResearchCardRestriction::NoSingle->value,
                     'requires_research_facilities' => '2',
                 ],
             ])
@@ -292,7 +293,7 @@ class ResearchDeckTest extends TestCase
             'value_min' => 3,
             'value_max' => 5,
             'wild' => false,
-            'restriction' => 'No single',
+            'restriction' => ResearchCardRestriction::NoSingle,
             'requires_research_facilities' => 2,
         ], $written->deckGrant());
     }

@@ -240,11 +240,21 @@ export function TechnologyForm({
                                 >
                                     Printed on the card
                                 </Label>
-                                <Input
+                                {/* A list rather than a text field: the
+                                    equation rules act on this, and a marking
+                                    they cannot enforce would be worse on the
+                                    card than no marking at all. */}
+                                <select
                                     id="technology-restriction"
                                     name="deck_grant[restriction]"
-                                    placeholder="No single"
-                                />
+                                    defaultValue=""
+                                    className={SELECT_CLASS}
+                                >
+                                    <option value="">No marking</option>
+                                    <option value="no_single">
+                                        No single — cannot be alone in its set
+                                    </option>
+                                </select>
                             </div>
                         </div>
                         <label className="flex items-center gap-2 text-sm">

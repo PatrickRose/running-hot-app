@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\EquationSide;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
@@ -188,6 +189,66 @@ class ResearchTableTest extends TestCase
         $this->expectException(ValidationException::class);
 
         $this->table()->play($session, $corporation, [$card->id], [$card->id]);
+    }
+
+    public function test_a_no_single_card_cannot_be_played_alone(): void
+    {
+        $session = $this->table()->openSession($this->game);
+        $corporation = $this->firstToPlay($session);
+
+        [$hand, $pool] = $this->stack($corporation, ResearchSuit::Leaf, 3, ResearchSuit::Maths, 3);
+
+        $hand->forceFill(['restriction' => ResearchCardRestriction::NoSingle])->save();
+
+        try {
+            $this->table()->play($session, $corporation, [$hand->id], [$pool->id]);
+            $this->fail('A No single card should not have been playable alone.');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('No single', $exception->getMessage());
+        }
+
+        // Refused before anything moved: the cards are still where they were,
+        // and it is still this Corporation's turn.
+        $this->assertSame(ResearchZone::Hand, $hand->refresh()->zone);
+        $this->assertSame(ResearchZone::Pool, $pool->refresh()->zone);
+        $this->assertTrue($session->refresh()->isTurnOf($corporation));
+        $this->assertSame(0, $session->equations()->count());
+    }
+
+    public function test_a_no_single_card_plays_once_it_has_company(): void
+    {
+        $session = $this->table()->openSession($this->game);
+        $corporation = $this->firstToPlay($session);
+
+        $hand = $this->table()->hand($corporation);
+        $pool = $this->table()->pool($this->game);
+
+        $hand[0]->forceFill([
+            'suit' => ResearchSuit::Leaf,
+            'value' => 3,
+            'restriction' => ResearchCardRestriction::NoSingle,
+        ])->save();
+        $hand[1]->forceFill(['suit' => ResearchSuit::Leaf, 'value' => 1])->save();
+        $pool[0]->forceFill(['suit' => ResearchSuit::Maths, 'value' => 2])->save();
+        $pool[1]->forceFill(['suit' => ResearchSuit::Maths, 'value' => 2])->save();
+
+        $equation = $this->table()->play(
+            $session,
+            $corporation,
+            [$hand[0]->id, $hand[1]->id],
+            [$pool[0]->id, $pool[1]->id],
+        );
+
+        $this->assertSame(2, $equation->cards_per_side);
+        $this->assertTrue($equation->balanced);
+
+        // The marking is kept in the snapshot, so an equation still reads as
+        // the equation that was played once its cards have been gathered back.
+        $this->assertSame(
+            ResearchCardRestriction::NoSingle->value,
+            $equation->left_cards[0]['restriction'],
+        );
+        $this->assertNull($equation->left_cards[1]['restriction']);
     }
 
     public function test_a_corporation_whose_deck_runs_dry_leaves_the_table(): void

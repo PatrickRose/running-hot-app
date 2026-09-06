@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Enums\EquationSide;
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Support\Equation;
 use App\Support\EquationCard;
@@ -108,6 +109,54 @@ class EquationTest extends TestCase
 
         $this->assertSame(ResearchSuit::all(), $equation->suitsFor(EquationSide::Left));
         $this->assertSame([ResearchSuit::Cog], $equation->suitsFor(EquationSide::Right));
+    }
+
+    public function test_a_no_single_card_cannot_be_the_only_card_in_its_set(): void
+    {
+        // The rulebook prints the marking on two of the cards deck
+        // customisation sells and never says what it does. The designer's
+        // ruling: it has to be played with another card, so its side of the
+        // equation needs at least two.
+        $this->expectException(ValidationException::class);
+
+        $this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, restriction: ResearchCardRestriction::NoSingle)],
+            [$this->card(ResearchSuit::Maths, 3)],
+        )->validate();
+    }
+
+    public function test_a_no_single_card_is_fine_once_it_has_company(): void
+    {
+        $this->assertTrue($this->equation(
+            [
+                $this->card(ResearchSuit::Leaf, 3, fromHand: true, restriction: ResearchCardRestriction::NoSingle),
+                $this->card(ResearchSuit::Leaf, 4),
+            ],
+            [$this->card(ResearchSuit::Maths, 5), $this->card(ResearchSuit::Maths, 2)],
+        )->isValid());
+    }
+
+    public function test_a_no_single_card_is_refused_from_either_side(): void
+    {
+        // Both sets hold the same number of cards, so a lone No single card on
+        // the right is the same illegal equation seen from the other end - and
+        // it has to be refused from there too.
+        $this->expectException(ValidationException::class);
+
+        $this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true)],
+            [$this->card(ResearchSuit::Maths, 3, restriction: ResearchCardRestriction::NoSingle)],
+        )->validate();
+    }
+
+    public function test_an_unmarked_card_may_be_alone_in_its_set(): void
+    {
+        // The rulebook's own first example is one card against one card, so the
+        // marking has to be what refuses it rather than the set size.
+        $this->assertTrue($this->equation(
+            [$this->card(ResearchSuit::Leaf, 7, fromHand: true)],
+            [$this->card(ResearchSuit::Maths, 3)],
+        )->isValid());
     }
 
     /**
@@ -270,8 +319,12 @@ class EquationTest extends TestCase
         return new Equation($left, $right);
     }
 
-    private function card(?ResearchSuit $suit, int $value, bool $fromHand = false): EquationCard
-    {
-        return new EquationCard($suit, $value, $fromHand);
+    private function card(
+        ?ResearchSuit $suit,
+        int $value,
+        bool $fromHand = false,
+        ?ResearchCardRestriction $restriction = null,
+    ): EquationCard {
+        return new EquationCard($suit, $value, $fromHand, $restriction);
     }
 }

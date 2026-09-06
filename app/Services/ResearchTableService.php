@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Actions\SeedResearchDecks;
 use App\Enums\EquationSide;
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
@@ -605,7 +606,7 @@ class ResearchTableService
         ResearchCard $card,
         ?ResearchSuit $suit,
         int $value,
-        ?string $restriction = null,
+        ?ResearchCardRestriction $restriction = null,
     ): ResearchCard {
         if ($value < 1) {
             throw ValidationException::withMessages([
@@ -881,7 +882,7 @@ class ResearchTableService
      * The cards of one side, as they were when they were played.
      *
      * @param  array<int, ResearchCard>  $cards
-     * @return array<int, array{suit: string|null, value: int, from_hand: bool}>
+     * @return array<int, array{suit: string|null, value: int, from_hand: bool, restriction: string|null}>
      */
     private function snapshot(array $cards): array
     {
@@ -889,6 +890,7 @@ class ResearchTableService
             'suit' => $card->suit?->value,
             'value' => $card->value,
             'from_hand' => ! $card->isPublic(),
+            'restriction' => $card->restriction?->value,
         ], $cards);
     }
 

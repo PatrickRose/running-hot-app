@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EquationSide;
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
 use App\Support\Equation;
@@ -30,8 +31,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $turn_id
  * @property int $corporation_id
  * @property ResearchEquationStatus $status
- * @property array<int, array{suit: string|null, value: int, from_hand: bool}> $left_cards
- * @property array<int, array{suit: string|null, value: int, from_hand: bool}> $right_cards
+ * @property array<int, array{suit: string|null, value: int, from_hand: bool, restriction: string|null}> $left_cards
+ * @property array<int, array{suit: string|null, value: int, from_hand: bool, restriction: string|null}> $right_cards
  * @property int $cards_per_side
  * @property int $left_sum
  * @property int $right_sum
@@ -138,7 +139,7 @@ class ResearchEquation extends Model
     }
 
     /**
-     * @param  array<int, array{suit: string|null, value: int, from_hand: bool}>  $cards
+     * @param  array<int, array{suit: string|null, value: int, from_hand: bool, restriction: string|null}>  $cards
      * @return array<int, EquationCard>
      */
     private function equationCards(array $cards): array
@@ -147,6 +148,9 @@ class ResearchEquation extends Model
             $card['suit'] === null ? null : ResearchSuit::from($card['suit']),
             (int) $card['value'],
             (bool) $card['from_hand'],
+            $card['restriction'] === null
+                ? null
+                : ResearchCardRestriction::from($card['restriction']),
         ), $cards);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
 use App\Support\EquationCard;
@@ -36,7 +37,7 @@ use Illuminate\Support\Carbon;
  * @property int $value
  * @property ResearchZone $zone
  * @property int $position
- * @property string|null $restriction
+ * @property ResearchCardRestriction|null $restriction
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Corporation|null $corporation
@@ -57,6 +58,7 @@ class ResearchCard extends Model
         return [
             'suit' => ResearchSuit::class,
             'zone' => ResearchZone::class,
+            'restriction' => ResearchCardRestriction::class,
         ];
     }
 
@@ -116,7 +118,7 @@ class ResearchCard extends Model
      */
     public function toEquationCard(bool $fromHand): EquationCard
     {
-        return new EquationCard($this->suit, $this->value, $fromHand, $this->id);
+        return new EquationCard($this->suit, $this->value, $fromHand, $this->restriction);
     }
 
     /**

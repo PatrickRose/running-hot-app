@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Control;
 
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\UpdateResearchCardRequest;
@@ -31,12 +32,13 @@ class ResearchCardController extends Controller
         abort_if($card->game_id !== $game->id, 404);
 
         $suit = $request->string('suit')->toString();
+        $restriction = $request->string('restriction')->toString();
 
         $this->table->editCard(
             $card,
             $suit === '' ? null : ResearchSuit::from($suit),
             $request->integer('value'),
-            $request->string('restriction')->toString() ?: null,
+            $restriction === '' ? null : ResearchCardRestriction::from($restriction),
         );
 
         return back()->with('status', 'Research card is now '.$card->label().'.');

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Support\CardImage;
 use App\Support\TechnologyBlueprint;
@@ -191,7 +192,7 @@ class TechnologyType extends Model
      *     value_min: int,
      *     value_max: int,
      *     wild: bool,
-     *     restriction: string|null,
+     *     restriction: ResearchCardRestriction|null,
      *     requires_research_facilities: int,
      * }|null
      */
@@ -208,7 +209,7 @@ class TechnologyType extends Model
             'value_min' => (int) ($grant['value_min'] ?? 1),
             'value_max' => (int) ($grant['value_max'] ?? 1),
             'wild' => (bool) ($grant['wild'] ?? false),
-            'restriction' => $grant['restriction'] ?? null,
+            'restriction' => ResearchCardRestriction::tryFrom((string) ($grant['restriction'] ?? '')),
             'requires_research_facilities' => (int) ($grant['requires_research_facilities'] ?? 0),
         ];
     }

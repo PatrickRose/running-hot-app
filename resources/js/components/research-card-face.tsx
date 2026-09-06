@@ -45,9 +45,15 @@ export function ResearchCardFace({
                 className="text-lg"
             />
             {card.restriction && (
-                // Words the rulebook never defines — "No single" — so they are
-                // shown and not acted on. The table reads them.
-                <span className="w-full truncate text-[0.6rem] leading-none text-muted-foreground">
+                // The marking limits how the card may be played — "No single"
+                // cannot be alone in its set — and the server refuses an
+                // equation that breaks it. At this size only the printed words
+                // fit; what they mean travels in the title and the button's
+                // accessible name.
+                <span
+                    title={card.restriction_note ?? undefined}
+                    className="w-full truncate text-[0.6rem] leading-none text-muted-foreground"
+                >
                     {card.restriction}
                 </span>
             )}
@@ -84,9 +90,11 @@ export function ResearchCardButton({
             onClick={onClick}
             aria-pressed={selected}
             className="rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`${card.label}${card.restriction ? `, ${card.restriction}` : ''}${
-                hint ? ` — ${hint}` : ''
-            }`}
+            aria-label={`${card.label}${
+                card.restriction
+                    ? `, ${card.restriction}: ${card.restriction_note ?? ''}`
+                    : ''
+            }${hint ? ` — ${hint}` : ''}`}
         >
             <ResearchCardFace
                 card={card}

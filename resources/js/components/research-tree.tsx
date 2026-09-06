@@ -265,6 +265,14 @@ export function ResearchTree({
 }
 
 /**
+ * A sentence joined onto another with a dash, so it does not start mid-line
+ * with a capital.
+ */
+function lowerFirst(sentence: string): string {
+    return sentence.charAt(0).toLowerCase() + sentence.slice(1);
+}
+
+/**
  * Whether a row is one this Corporation could act on now.
  *
  * Affordability alone is not enough: a technology whose prerequisites are
@@ -592,7 +600,10 @@ function DeckCustomisationForm({
                     )}
                     {grant.restriction && (
                         <p className="text-sm text-muted-foreground">
-                            The card is printed “{grant.restriction}”.
+                            The card is printed “{grant.restriction}”
+                            {grant.restriction_note
+                                ? ` — ${lowerFirst(grant.restriction_note)}`
+                                : '.'}
                         </p>
                     )}
 

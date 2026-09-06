@@ -40,9 +40,13 @@ return new class extends Migration
 
             // What the card prints beyond its suit and value - "No single" on
             // the cards two of the deck customisation technologies add. The
-            // rulebook never defines those words, so they are shown and not
-            // acted on: the table reads them, exactly as it reads a Facility
-            // type's effect.
+            // rulebook prints the marking and never defines it; what it means
+            // is the designer's ruling, and App\Enums\ResearchCardRestriction
+            // holds it: a No single card cannot be the only card in its set.
+            //
+            // The column holds that enum's key rather than the printed words,
+            // because App\Support\Equation matches on it - a rule keyed off
+            // typed text breaks on a capital letter.
             $table->string('restriction')->nullable();
 
             $table->timestamps();

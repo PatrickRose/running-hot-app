@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Enums\ResearchCardRestriction;
+
 /**
  * The game's technology list - the tech trees of rulebook 3.2.2 - applied to
  * every new game by App\Actions\SeedTechnologies.
@@ -1574,7 +1576,7 @@ class TechnologyBlueprint
                 tree: self::COMMON,
                 description: 'Spend 4 research credits in any suit to add a “No single” card to your '
                     .'research deck in that suit. You choose a value for the card between 3-5',
-                deckGrant: self::deckGrant([4], 3, 5, restriction: 'No single'),
+                deckGrant: self::deckGrant([4], 3, 5, restriction: ResearchCardRestriction::NoSingle),
             ),
             self::technology(
                 code: 'RSR036',
@@ -1583,7 +1585,7 @@ class TechnologyBlueprint
                 description: 'If you have 3 research facilities, you may spend 8 research credits in '
                     .'any suit to add a “No single” card to your research deck in that suit. '
                     .'You choose a value for the card between 6-10',
-                deckGrant: self::deckGrant([8], 6, 10, restriction: 'No single', requiresResearchFacilities: 3),
+                deckGrant: self::deckGrant([8], 6, 10, restriction: ResearchCardRestriction::NoSingle, requiresResearchFacilities: 3),
             ),
             self::technology(
                 code: 'RSR037',
@@ -1736,7 +1738,7 @@ class TechnologyBlueprint
         int $valueMin,
         int $valueMax,
         bool $wild = false,
-        ?string $restriction = null,
+        ?ResearchCardRestriction $restriction = null,
         int $requiresResearchFacilities = 0,
     ): array {
         return [
@@ -1744,7 +1746,7 @@ class TechnologyBlueprint
             'value_min' => $valueMin,
             'value_max' => $valueMax,
             'wild' => $wild,
-            'restriction' => $restriction,
+            'restriction' => $restriction?->value,
             'requires_research_facilities' => $requiresResearchFacilities,
         ];
     }
