@@ -80,6 +80,7 @@ class CreateDefaultRoster
     private function createCorporations(Game $game): int
     {
         $created = 0;
+        $chairOrder = 0;
 
         foreach ($this->corporations() as $attributes) {
             // Read by CreateDefaultFacilities and SeedProtectionCardHoldings
@@ -88,8 +89,13 @@ class CreateDefaultRoster
             // reaches the insert and takes the whole seeder down.
             unset($attributes['facilities'], $attributes['protection_cards']);
 
+            // The Chair rotates in an order Council Control announces on the
+            // day (rulebook 3.1.1). Nothing derives it, so the roster's own
+            // order is written down as the starting rotation for Control to
+            // rearrange rather than left for something to guess at later.
             $corporation = Corporation::create([
                 'game_id' => $game->id,
+                'council_chair_order' => ++$chairOrder,
                 ...$attributes,
             ]);
 

@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property int $income
  * @property int $political_will
+ * @property int|null $council_chair_order
  * @property int $credits
  * @property int $cog_points
  * @property int $brain_points
@@ -27,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'game_id', 'name', 'income', 'political_will', 'credits',
+    'game_id', 'name', 'income', 'political_will', 'credits', 'council_chair_order',
     'cog_points', 'brain_points', 'leaf_points', 'maths_points',
 ])]
 class Corporation extends Model

@@ -39,6 +39,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Council
+    |--------------------------------------------------------------------------
+    |
+    | Failing to take your seat at the Council has "a negative impact on your
+    | Political Will" (rulebook 3.1.2), and that is the whole of what the rules
+    | say: no figure, and no mechanism. So this is only what Control's form is
+    | pre-filled with. Nothing charges it on its own - Control marks the seat
+    | absent and applies the penalty, and may type any figure over this one.
+    |
+    */
+
+    'council' => [
+        'absence_penalty' => env('COUNCIL_ABSENCE_PENALTY', 1),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Corporations
     |--------------------------------------------------------------------------
     |

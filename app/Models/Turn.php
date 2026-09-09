@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -33,5 +34,16 @@ class Turn extends Model
     public function phases(): HasMany
     {
         return $this->hasMany(Phase::class);
+    }
+
+    /**
+     * This turn's sitting of the Council (rulebook 3.1), which spans the Setup
+     * and Action phases and so belongs to the turn rather than to either.
+     *
+     * @return HasOne<CouncilSession, $this>
+     */
+    public function councilSession(): HasOne
+    {
+        return $this->hasOne(CouncilSession::class);
     }
 }

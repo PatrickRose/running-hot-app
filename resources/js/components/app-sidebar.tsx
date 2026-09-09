@@ -4,6 +4,7 @@ import {
     Building2,
     FlaskConical,
     FolderGit2,
+    Gavel,
     LayoutGrid,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -19,7 +20,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, facilities, research } from '@/routes';
+import { council, dashboard, facilities, research } from '@/routes';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -32,6 +33,11 @@ const mainNavItems: NavItem[] = [
         title: 'Facilities',
         href: facilities(),
         icon: Building2,
+    },
+    {
+        title: 'Council',
+        href: council(),
+        icon: Gavel,
     },
     {
         title: 'Research',
