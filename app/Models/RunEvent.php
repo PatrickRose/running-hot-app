@@ -53,6 +53,54 @@ class RunEvent extends Model
     use HasFactory;
 
     /**
+     * The kinds of thing that happen during a run.
+     *
+     * Constants rather than an enum because the column is deliberately a free
+     * string: Control correcting something mid-game may need to describe an act
+     * the application has no name for, and a cast would refuse to store it.
+     * These are the names the engine writes, and the ones anything reading the
+     * log back can rely on.
+     */
+    public const TYPE_SUBMITTED = 'submitted';
+
+    public const TYPE_ORDERED = 'ordered';
+
+    public const TYPE_BEGAN = 'began';
+
+    public const TYPE_ACTIVATED = 'activated';
+
+    /** Security attempted to activate and could not cover the cost (3.4.2). */
+    public const TYPE_ACTIVATION_FAILED = 'activation_failed';
+
+    /** Security chose not to activate, which only a Directing player may do. */
+    public const TYPE_ACTIVATION_DECLINED = 'activation_declined';
+
+    public const TYPE_BOOSTED = 'boosted';
+
+    public const TYPE_CHARGED = 'charged';
+
+    public const TYPE_CHALLENGE = 'challenge';
+
+    public const TYPE_CONSEQUENCE = 'consequence';
+
+    public const TYPE_IGNORED_END_THE_RUN = 'ignored_end_the_run';
+
+    public const TYPE_LEFT = 'left';
+
+    public const TYPE_INCAPACITATED = 'incapacitated';
+
+    public const TYPE_LEADER_CHANGED = 'leader_changed';
+
+    public const TYPE_CARD_PASSED = 'card_passed';
+
+    /** A Retry consumed at the Breather, sending the Runners at the same card again. */
+    public const TYPE_RETRIED = 'retried';
+
+    public const TYPE_SUCCEEDED = 'succeeded';
+
+    public const TYPE_FAILED = 'failed';
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
