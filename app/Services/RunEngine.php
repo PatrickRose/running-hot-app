@@ -10,6 +10,7 @@ use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Enums\RunStep;
 use App\Enums\Tracker;
+use App\Jobs\SyncRunChannelAccess;
 use App\Models\Character;
 use App\Models\Facility;
 use App\Models\FacilityCardActivation;
@@ -313,6 +314,12 @@ class RunEngine
                     'alerts_from_group_size' => $fromSize,
                 ],
             );
+
+            // Into the Facility's own Discord channels, and not a moment
+            // earlier: the target is Secret until the group goes in, so a
+            // Runner appearing in the channel beforehand would tell the whole
+            // server who was hitting what.
+            SyncRunChannelAccess::dispatch($run->id, granting: true);
 
             return $run->refresh();
         });
@@ -1167,6 +1174,8 @@ class RunEngine
             step: RunStep::Breather,
         );
 
+        SyncRunChannelAccess::dispatch($run->id, granting: false);
+
         return $run->refresh();
     }
 
@@ -1223,6 +1232,14 @@ class RunEngine
             step: RunStep::Breather,
             payload: ['reason' => $because, 'reward' => $reward],
         );
+
+        // Only where the group ever went in. A run submitted and never begun -
+        // which the end of the Action phase turns into a failure - was never
+        // granted anything, and asking Discord to remove an overwrite that was
+        // never added is a request per Runner per channel for nothing.
+        if ($run->started_at !== null) {
+            SyncRunChannelAccess::dispatch($run->id, granting: false);
+        }
 
         return $run->refresh();
     }
