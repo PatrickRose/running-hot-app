@@ -18,6 +18,9 @@ class ChannelPayload
     /**
      * @param  array<string, string>  $roleIds  role snowflakes, keyed by blueprint key
      * @param  array<string, string>  $channelIds  channel snowflakes, keyed by blueprint key
+     * @param  array<int, array<string, mixed>>  $keep  overwrites already on the
+     *                                                  channel that the blueprint does not
+     *                                                  describe and must not remove
      * @return array<string, mixed>
      */
     public static function for(
@@ -25,6 +28,7 @@ class ChannelPayload
         string $guildId,
         array $roleIds,
         array $channelIds,
+        array $keep = [],
     ): array {
         $payload = [
             'name' => $planned->name,
@@ -61,7 +65,12 @@ class ChannelPayload
             ];
         }
 
-        $payload['permission_overwrites'] = $overwrites;
+        // Overwrites the blueprint knows nothing about, carried through rather
+        // than dropped. The Runners on a run in progress hold one of these on
+        // the Facility's channels for the length of the run, and a provision
+        // run that re-sent only the roles would lock them out mid-Facility -
+        // which would be a reset rather than a reconcile.
+        $payload['permission_overwrites'] = [...$overwrites, ...array_values($keep)];
 
         return $payload;
     }

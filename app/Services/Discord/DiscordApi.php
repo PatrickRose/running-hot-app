@@ -39,6 +39,15 @@ class DiscordApi
     public const OVERWRITE_ROLE = 0;
 
     /**
+     * An overwrite naming one member rather than a role.
+     *
+     * Used for the Runners on a run: they are let into the Facility's channels
+     * for the duration of it and taken out again afterwards, which is a thing
+     * that happens to those people rather than to any role in the guild.
+     */
+    public const OVERWRITE_MEMBER = 1;
+
+    /**
      * What the bot must be granted in a guild to provision it.
      *
      * Create Instant Invite is for the join link handed to players who have not
@@ -190,6 +199,38 @@ class DiscordApi
     public function deleteChannel(string $channelId, ?string $reason = null): void
     {
         $this->send('delete', "/channels/{$channelId}", null, $reason);
+    }
+
+    /**
+     * Let one member (or role) into a channel, or change what they may do in it.
+     *
+     * An upsert: Discord replaces whatever overwrite that id already had, so
+     * this is safe to repeat and there is no "already granted" to check for.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function setChannelPermission(
+        string $channelId,
+        string $overwriteId,
+        array $payload,
+        ?string $reason = null,
+    ): void {
+        $this->send('put', "/channels/{$channelId}/permissions/{$overwriteId}", $payload, $reason);
+    }
+
+    /**
+     * Take an overwrite off a channel.
+     *
+     * Removing one that was never there is not an error, which is what makes it
+     * safe to revoke a run's access without having recorded whether it was
+     * granted.
+     */
+    public function deleteChannelPermission(
+        string $channelId,
+        string $overwriteId,
+        ?string $reason = null,
+    ): void {
+        $this->send('delete', "/channels/{$channelId}/permissions/{$overwriteId}", null, $reason);
     }
 
     /**

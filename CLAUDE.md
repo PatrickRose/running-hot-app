@@ -268,6 +268,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | The `#facility-list` embed, and posting it | `App\Support\Discord\FacilityListEmbed`, `App\Actions\PublishFacilityList` |
 | Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
 | A Facility's own channels | `App\Actions\ProvisionFacilityChannels`, `App\Jobs\SyncFacilityChannels` |
+| Letting the Runners into the Facility they are hitting | `App\Actions\GrantRunChannelAccess`, `App\Jobs\SyncRunChannelAccess` |
 | Handing a player their Discord roles | `App\Actions\SyncDiscordRolesForUser` |
 | Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
 | Inertia payload shaping | `App\Support\GamePresenter` |
@@ -328,7 +329,11 @@ Three independent mechanisms, and it is worth keeping them straight:
 
 **The bot holds the Control role, and takes it before making any channel.** Discord drops every permission in a channel its caller cannot view, and `@everyone` is the bot's only source of View Channel — so a category locked to one team locks the bot out of it too, and it then cannot create the channels that belong inside it. Every private channel in the blueprint already grants Control, so holding that role is all the access the bot needs. The role carries `permissions: 0` and only ever opens channels, so this grants the bot nothing at guild level. Do not reorder `giveBotTheControlRole` after `reconcileChannels`: provisioning dies on the first private category.
 
-**Every Facility gets a private text and voice channel**, which is where its Runs will happen. They sit in the Corporation's own category, beside the two channels its players talk in, so everything a Corporation owns is in one place. Locked to Control and the owning Corporation; the Runners attacking a Facility are added when a Run starts, because they choose their target in Secret (3.4.1) and access any earlier would leak who is hitting what.
+**Every Facility gets a private text and voice channel**, which is where its Runs will happen. They sit in the Corporation's own category, beside the two channels its players talk in, so everything a Corporation owns is in one place. Locked to Control and the owning Corporation; the Runners attacking a Facility are added when a Run starts, because they choose their target in Secret (3.4.1) and access any earlier would leak who is hitting what. `App\Actions\GrantRunChannelAccess` is that half, through `App\Jobs\SyncRunChannelAccess`.
+
+**A Runner's key to a Facility is a per-member overwrite, not a role.** It is something that happens to those four people for the next ten minutes rather than a standing fact about the guild, and a "currently running" role would have to be created, granted, revoked and cleaned up after a crash. They may read, write, connect and speak, because a Run is a conversation under time pressure and the voice channel is the point of having one. A Runner who walks away at the Breather keeps their access until the run ends: they already know the target, so nothing leaks, and the rulebook is neutral about leaving. A character nobody has claimed simply has no snowflake to grant anything to, which is normal.
+
+**Which is why a reconcile now carries member overwrites through.** `ProvisionDiscordGuild` re-sends every channel's whole permission table on every run, and the blueprint knows nothing about the Runners currently inside a Facility — so re-sending only the roles would lock a group out halfway down a stack. That is a reset rather than a reconcile, and `ChannelPayload::for()` takes a `$keep` list for exactly it.
 
 **A missing pair is visible and fixable.** Because the job is fail-soft, a Discord outage during a requisition leaves a Facility with no channels and nothing retrying, so the Control panel badges each Facility with whether its channels are on record and offers to build just that pair. A full provision run recovers them too — they are in the blueprint — but at the cost of re-PATCHing every channel and role in the guild, which is a heavy hammer for one missing channel mid-game.
 
@@ -675,8 +680,8 @@ technologies carry copy and destroy strengths but no Steal score, and the
 per-Facility Credits card does not exist — so a successful run records that it
 succeeded and the accesses are Control's to hand out. Building that substrate as
 a side effect of building the loop would decide how technology storage works for
-the wrong reasons. Also unbuilt: adding the Runners to their target
-Facility's Discord channels for the duration of the run.
+the wrong reasons. The Runners *are* let into their target Facility's
+Discord channels for the length of the run, which is the Discord half above.
 
 ## The card lists
 
@@ -827,6 +832,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, and the screen players work it from.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the screen players work it from, and the Runners being let into the Facility's own Discord channels for the length of it.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.
