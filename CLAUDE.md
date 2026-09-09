@@ -253,6 +253,9 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | A faction's logo and colour in one payload | `App\Support\FactionBadge`, `resources/js/components/faction-badge.tsx` |
 | What each icon in the game's font means | `App\Support\IconFont` |
 | The Run loop, and every consequence of it | `App\Services\RunEngine` |
+| What each side of a run may see | `App\Support\RunPresenter` |
+| Who may do what on a run | `App\Policies\RunPolicy` |
+| The run screen players work from | `App\Http\Controllers\RunController`, `resources/js/pages/runs.tsx` |
 | Run arithmetic: ordering, alerts, strength, dice | `App\Support\Runs\*` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | The Council's agenda, voting and attendance | `App\Services\CouncilService` |
@@ -633,14 +636,47 @@ a d8 and the order cannot be recomputed afterwards. Groups may cede their place
 or be "otherwise monetarily convinced" and footnote 10 sends anything unusual to
 Control, so `order_index` stays editable.
 
+**Players drive it and Control steps in, on the same routes.** `RunPolicy` is
+the whole boundary: `lead` for the Run Leader (roll, decide who takes a
+consequence, move the group on), `act` for any Runner still in (walking away is
+each Runner's own decision, not the Leader's), `defend` for the Corporation's
+own Security seat, and `submit` for anybody holding a Runner *or Freelancer* —
+3.4 hands the Facility game to a side rather than to one role. `order` is the
+one ability no player has, because a group that could order the queue could put
+itself at the front of it. `before()` gives Control every one of them, so a run
+never stalls on somebody being away from their laptop.
+
+**A run keeps two secrets, and `RunPresenter` is where they are kept.** Same
+shape of problem as `CouncilPresenter`, and the same answer: the two sides get
+views built separately rather than one payload with things taken out of it.
+- **The stack depth is Secret** (footnote 11), so `cards_remaining` is null for
+  the Runners. They find out by running out, which is what makes the Breather a
+  real decision — leaving costs you what you have already paid for, and you
+  cannot know whether you were one card from the end.
+- **A card is face down until it is Active.** Security reads their own stack
+  (3.4.2 keeps it Secret from everyone else, not from them) and so sees the card
+  they are deciding whether to pay for; the Runners get the kind and nothing
+  else until it is flipped. A card Security leaves off is one they get past
+  without ever learning the name of — which the *log* has to respect too, so
+  those lines read as the card being left off without naming it.
+- **Security cannot see a run that has not gone in yet**, because budgets are
+  set in Secret at the same moment targets are chosen (3.3.5, 3.4.1).
+
+**The challenge form asks for the skill and the printed strength.** It does not
+parse them, for the reason there is no parsed strength column: `Brute/Hack (2)`
+is the Runners' choice and `Hack (4+N) - where N is the number of cards
+underneath this` is not knowable from a column. The sentence is shown beside the
+form and the table converts it, which is what it does with the card in hand
+anyway.
+
 **Not modelled:** §3.4.3, the accesses a successful run buys. It has no
 substrate — which technologies a Facility is storing is not modelled,
 technologies carry copy and destroy strengths but no Steal score, and the
 per-Facility Credits card does not exist — so a successful run records that it
 succeeded and the accesses are Control's to hand out. Building that substrate as
 a side effect of building the loop would decide how technology storage works for
-the wrong reasons. Also unbuilt: the player-facing routes and screen, and adding
-the Runners to their target Facility's Discord channels for the duration.
+the wrong reasons. Also unbuilt: adding the Runners to their target
+Facility's Discord channels for the duration of the run.
 
 ## The card lists
 
@@ -791,6 +827,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and the Run loop itself: submitting and ordering the groups at a Facility, the four steps, every consequence and both ways a run can end.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, and the screen players work it from.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

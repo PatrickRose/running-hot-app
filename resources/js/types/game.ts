@@ -584,3 +584,159 @@ export type CouncilControlBoard = {
     absence_penalty: number;
     recess_seconds: number;
 };
+
+/**
+ * A Protection Card as the Runners standing in front of it may see it
+ * (rulebook 3.4.2).
+ *
+ * The optional half is the point rather than an afterthought: a card is face
+ * down until it is Active, so a Runner gets the shell and nothing else. Once it
+ * is flipped they get all of it, because they have to read the challenge to
+ * roll against it. Security, reading their own stack, always gets the whole
+ * thing.
+ */
+export type RunCard = {
+    id: number;
+    kind: 'physical' | 'cyber';
+    kind_label: string;
+    position: number;
+    active: boolean;
+    /** Whether Security has had its go at this card yet, either way. */
+    settled: boolean;
+    boosts: number;
+    next_boost_cost: number;
+    activation_cost: number | null;
+    name?: string;
+    code?: string | null;
+    /** The sentence the card prints, e.g. `Brute (6)`. Never parsed. */
+    challenge?: string;
+    consequence?: string;
+    charge_cost?: number | null;
+    charge_consequence?: string | null;
+    image_path?: string | null;
+};
+
+export type RunDiceRollView = {
+    roller: 'runners' | 'security';
+    roller_label: string;
+    pool: number;
+    die_faces: number;
+    faces: number[];
+    successes: number;
+    /** `6d8, 5+ — 1,2,2,3,4,4 (0 successes)`. */
+    readout: string;
+    reason: string | null;
+};
+
+export type RunEventView = {
+    id: number;
+    pass: number;
+    step: RunStep;
+    type: string;
+    description: string;
+    character: string | null;
+    at: string | null;
+    rolls: RunDiceRollView[];
+};
+
+export type RunStep = 'activate' | 'challenge' | 'consequence' | 'breather';
+
+export type RunConsequenceEffect =
+    'alert' | 'tag' | 'wound' | 'retry' | 'end_the_run';
+
+export type RunParticipantView = {
+    id: number;
+    character_id: number;
+    name: string;
+    position: number;
+    is_leader: boolean;
+    is_yours: boolean;
+    gang: Faction | null;
+    brawn: number;
+    hack: number;
+    body: number;
+    wounds: number;
+    tags: number;
+    left: boolean;
+    left_reason: string | null;
+};
+
+export type RunBudget = {
+    directed: boolean;
+    placed: number;
+    spent: number;
+    left: number;
+};
+
+export type RunView = {
+    id: number;
+    status: 'submitted' | 'running' | 'succeeded' | 'failed';
+    status_label: string;
+    facility: {
+        id: number;
+        name: string;
+        facility_type: string;
+        corporation: Faction;
+    };
+    order_index: number | null;
+    order_reason: string | null;
+    alerts: number;
+    alerts_spent: number;
+    alerts_available: number;
+    alert_strength_bonus: number;
+    next_alert_threshold: number;
+    cards_passed: number;
+    active_cards_passed: number;
+    ignored_end_the_run: number;
+    retry_pending: boolean;
+    pass: number;
+    step: RunStep;
+    step_label: string;
+    /**
+     * Null for the Runners. A Facility's stack depth is Secret (rulebook 3.4.1,
+     * footnote 11), so they find out by running out of cards.
+     */
+    cards_remaining: number | null;
+    card: RunCard | null;
+    leader_character_id: number | null;
+    participants: RunParticipantView[];
+    /** Null for the Runners: how much defence is left is the Corporation's. */
+    budget: RunBudget | null;
+    can_lead: boolean;
+    can_act: boolean;
+    can_defend: boolean;
+    log: RunEventView[];
+};
+
+export type RunTarget = {
+    id: number;
+    name: string;
+    facility_type: string;
+    corporation: Faction;
+};
+
+export type RunPartyMember = {
+    id: number;
+    name: string;
+    is_yours: boolean;
+    gang: Faction | null;
+    brawn: number;
+    hack: number;
+    body: number;
+    wounds: number;
+    tags: number;
+    incapacitated: boolean;
+};
+
+export type RunBoard = {
+    turn: number | null;
+    is_action_phase: boolean;
+    is_control: boolean;
+    can_submit: boolean;
+    targets: RunTarget[];
+    party: RunPartyMember[];
+    /** Runs this player is on, seen from inside the Facility. */
+    yours: RunView[];
+    /** Runs coming at this player's Facilities, seen from the Security desk. */
+    defending: RunView[];
+};
