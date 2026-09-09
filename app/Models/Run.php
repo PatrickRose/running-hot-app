@@ -30,6 +30,8 @@ use Illuminate\Support\Collection;
  * @property int $alerts
  * @property int $alerts_spent
  * @property int $cards_passed
+ * @property int $active_cards_passed
+ * @property bool $retry_pending
  * @property int $ignored_end_the_run
  * @property Carbon|null $started_at
  * @property Carbon|null $ended_at
@@ -54,6 +56,8 @@ use Illuminate\Support\Collection;
     'alerts',
     'alerts_spent',
     'cards_passed',
+    'active_cards_passed',
+    'retry_pending',
     'ignored_end_the_run',
     'started_at',
     'ended_at',
@@ -70,6 +74,7 @@ class Run extends Model
     {
         return [
             'status' => RunStatus::class,
+            'retry_pending' => 'boolean',
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
         ];
@@ -130,5 +135,18 @@ class Run extends Model
     public function activeParticipants(): Collection
     {
         return $this->participants->whereNull('left_at')->values();
+    }
+
+    /**
+     * Alerts Security still has in hand.
+     *
+     * The balance rather than the total, because Alerts do two jobs at once:
+     * they are temporary Credits and they are strength on every card the
+     * Runners have left. Spending them buys something now and makes the rest
+     * of the Facility easier, which is the whole tension (3.4.2).
+     */
+    public function alertsAvailable(): int
+    {
+        return max(0, $this->alerts - $this->alerts_spent);
     }
 }

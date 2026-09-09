@@ -252,6 +252,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Finding a faction's logo from its name | `App\Support\LogoImage` |
 | A faction's logo and colour in one payload | `App\Support\FactionBadge`, `resources/js/components/faction-badge.tsx` |
 | What each icon in the game's font means | `App\Support\IconFont` |
+| The Run loop, and every consequence of it | `App\Services\RunEngine` |
+| Run arithmetic: ordering, alerts, strength, dice | `App\Support\Runs\*` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | The Council's agenda, voting and attendance | `App\Services\CouncilService` |
 | What each person at the Council may see | `App\Support\CouncilPresenter` |
@@ -278,6 +280,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - **Wayfinder's generated modules are gitignored.** `resources/js/routes`, `resources/js/actions` and `resources/js/wayfinder` do not exist in a clean checkout, so `tsc` cannot resolve imports until `php artisan wayfinder:generate --with-form` (or `npm run build`) has run. Always pass `--with-form`: without it the `.form()` helpers vanish and starter-kit pages break.
 - **Feature tests need built frontend assets.** Rendering an Inertia page throws without a Vite manifest, so CI runs `composer setup` before the suite.
 - **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
+- **`Collection::sortBy()` given an array reads closures as *comparators*, not key extractors.** So `sortBy([fn ($x) => $x->a, fn ($x) => $x->b])` calls each closure with two items, ignores the second, and sorts by nothing — silently. It cost an hour of a run meeting its cyber stack before its physical one. Either sort by one closure returning an array, or write the ordering out; `RunEngine::encounterOrder` does the latter on purpose.
 
 ## Commands
 
@@ -557,6 +560,88 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 **Starting Facilities are per Corporation and the differences are mechanical**, not decorative. They live beside each Corporation in `config/running_hot.php`, from the briefing documents: DTC's second Security Facility widens every one of its stacks, Gordon's three Corporate Facilities make it the only Corporation storing six technologies per Facility, and Genetic Equity's three Research Facilities are its whole strategy. A Corporation the config says nothing about opens with none rather than a guessed set.
 
+## Runs
+
+The Runners' primary conflict (rulebook 3.4), and the loop the rest of the
+Facility game exists to feed. Four steps — **Activate → Challenge → Consequence
+→ Breather** — repeated until the stacks run out or the Runners back out.
+`App\Services\RunEngine` owns all of it; each of its public methods is one *act*,
+and who may perform which act is a policy question that lives elsewhere.
+
+**Failing a challenge does not stop the Runners.** This is the reading that
+shapes everything else, and it surprises everyone: 3.4.2 sends the Runners to
+the Breather "unless a Protection Card has an 'End the Run' consequence", so
+losing a check costs you the consequence and you *still get past the card*. A
+Facility is attrition, not a wall. Which is why Retry is one of the worst things
+a card can do to you — the same card again, with more Alerts standing — and why
+Alerts matter so much, since they make everything still ahead of you harder.
+
+**Two counts of cards passed, and they are not the same question.** The strength
+bonus is "for each 2 **Active** Protection Cards already passed"; the
+consolation payment of 3.4.4 is for "each 3 Protection Cards you managed to get
+past". A card Security could not afford to switch on is one the Runners walked
+straight past: it counts towards what they got through and makes nothing that
+follows it harder. `runs.cards_passed` and `runs.active_cards_passed` therefore
+both exist, and they only ever differ when Security ran out of budget.
+
+**The cursor is derived, never stored.** Which card, which pass, which step all
+come off the append-only event log — a pass ends when the Runners move on from a
+card or consume a Retry, so counting `card_passed` and `retried` events counts
+the passes that have finished. Same instinct as the Council reading the Chair's
+choice off the cards rather than a flag: a cursor kept beside the log is a second
+source of truth that can disagree with the thing players are shown.
+
+**Every roll is server-side and kept, with its faces.** A browser that rolls its
+own dice is a browser that can decide it won. `App\Services\Dice` is injected so
+tests can say what the dice did, and `tests/Support/FakeDice.php` throws when it
+runs dry rather than falling back to random — a test that quietly started rolling
+real dice would fail intermittently for a reason nobody would look for. A roll
+that decides a *choice* rather than a check (which Runner inherits the Run
+Leader's job) goes in the event payload instead of `run_dice_rolls`, because that
+table's threshold and successes would be meaningless for it. And a single
+remaining candidate is not rolled for at all: a one-sided die is not a die.
+
+**Alerts are not a Tracker, and Credits spent from a budget move no tracker
+either.** Alerts are a pool for the duration of one run and then gone, so there
+is no ledger to write and nothing outside the run can see them. Budget Credits
+were already taken off the Corporation when the budget was placed
+(`FacilityDefenceService::setSecurityBudget`), so spending only records how much
+of that escrow has gone — the apparent exception to "never write a tracker
+directly" is not one. Everything else — Wounds, Tags, the 3.4.4 payment — goes
+through `TrackerService` like anything else.
+
+**Alerts do two jobs, and that is the decision Security is there to make.** They
+are temporary Credits *and* a point of strength on every card the Runners have
+left, so spending them buys something now and makes the rest of the Facility
+easier. Which means the strength curve reads the Alerts *standing*, not the
+Alerts generated.
+
+**Ignoring an End the Run is priced on the count, not as a flag.** "For each
+'End the Run' that you have ignored (including this one), you take 1 Wound, 1
+Tag and 1 Alert" — so the first costs 1 of each and the second 2 of each, and it
+converts into a Retry.
+
+**Where the rulebook says "may", nothing moves.** Walking away at the Breather
+"may have an effect on your gang's Notoriety", so no Notoriety moves and the
+event says it is Control's call. Being incapacitated hands your permanent
+Equipment to the Security player, and since who owns which Equipment card is not
+modelled, the event says that too rather than the application guessing.
+
+**Ordering is a starting position, not the last word.** The seven tiebreakers of
+3.4.1 are run once and the deciding rule is written down, because the seventh is
+a d8 and the order cannot be recomputed afterwards. Groups may cede their place
+or be "otherwise monetarily convinced" and footnote 10 sends anything unusual to
+Control, so `order_index` stays editable.
+
+**Not modelled:** §3.4.3, the accesses a successful run buys. It has no
+substrate — which technologies a Facility is storing is not modelled,
+technologies carry copy and destroy strengths but no Steal score, and the
+per-Facility Credits card does not exist — so a successful run records that it
+succeeded and the accesses are Control's to hand out. Building that substrate as
+a side effect of building the loop would decide how technology storage works for
+the wrong reasons. Also unbuilt: the player-facing routes and screen, and adding
+the Runners to their target Facility's Discord channels for the duration.
+
 ## The card lists
 
 Three card families, all real data from the game's own card sheet, all seeded per game and all editable by Control. They live in `App\Support` beside the Facility type sheet rather than in `config/running_hot.php`, because three hundred cards do not read comfortably in a config file: `ProtectionCardBlueprint` (83), `EquipmentCardBlueprint` (74) and `TechnologyBlueprint` (144). `Game::booted` seeds all three when a game is created — none of them depends on the roster, so they arrive before it does.
@@ -706,6 +791,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, and the Council: the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and the Run loop itself: submitting and ordering the groups at a Facility, the four steps, every consequence and both ways a run can end.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.

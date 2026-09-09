@@ -2,6 +2,8 @@
 
 namespace App\Support\Runs;
 
+use App\Services\Dice;
+
 /**
  * The dice the Runners throw at a Protection Card.
  *
@@ -33,7 +35,12 @@ readonly class DicePool
     public const SUCCESS_ON = 5;
 
     /**
+     * The die has at least two faces, which is worth saying in the type
+     * because {@see Dice} must never be asked for a d1 - a
+     * one-sided die is not a die.
+     *
      * @param  array<int, int>  $fromOthers  dice added, keyed by character id
+     * @param  int<2, max>  $dieFaces
      */
     public function __construct(
         /** Dice from the Run Leader: their full skill. */
@@ -78,16 +85,29 @@ readonly class DicePool
         $skill = max(0, $skill);
 
         return $wounded
-            ? (int) ceil($skill / 4)
-            : intdiv($skill, 2);
+            ? max(0, (int) ceil($skill / 4))
+            : max(0, intdiv($skill, 2));
     }
 
     /**
      * Every die the Runners throw.
+     *
+     * Added up in a loop with a floor under each addend rather than with
+     * array_sum, so that a number of dice reaches the die roller as something
+     * that provably cannot be negative. The properties are public and a pool
+     * can be built by hand, so this is the place to hold that line.
+     *
+     * @return int<0, max>
      */
     public function total(): int
     {
-        return $this->fromLeader + array_sum($this->fromOthers);
+        $total = max(0, $this->fromLeader);
+
+        foreach ($this->fromOthers as $dice) {
+            $total += max(0, $dice);
+        }
+
+        return $total;
     }
 
     /**
