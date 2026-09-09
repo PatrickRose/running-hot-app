@@ -115,6 +115,8 @@ class AlertSchedule
      *
      * Note this rises with the Alerts Security is holding, so spending them
      * makes the rest of the Facility easier. That tension is the point.
+     *
+     * @return int<0, max>
      */
     public static function strengthBonus(int $alerts, ?int $override = null): int
     {

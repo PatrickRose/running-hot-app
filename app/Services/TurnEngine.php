@@ -32,6 +32,7 @@ class TurnEngine
         private readonly FacilityDefenceService $facilityDefence,
         private readonly PublishFacilityList $facilityList,
         private readonly CouncilService $council,
+        private readonly RunEngine $runs,
     ) {}
 
     /**
@@ -72,9 +73,16 @@ class TurnEngine
 
             $this->announcer->phaseEnded($phase);
 
-            // Any security budget Security did not spend goes back to the
-            // Corporation at the end of the Action phase (rulebook 3.3.5).
             if ($phase->type === PhaseType::Action) {
+                // A run that has not got through by the time the phase is
+                // called is unsuccessful (rulebook 3.4.5). Closed before the
+                // budgets go home, because failing a run can still pay a
+                // Runner out of 3.4.4 and the escrow has to settle after
+                // everything that might spend from it.
+                $this->runs->failUnfinishedRuns($phase->turn, $actor);
+
+                // Any security budget Security did not spend goes back to the
+                // Corporation at the end of the Action phase (rulebook 3.3.5).
                 $this->facilityDefence->returnUnspentBudgets($phase->turn, $actor);
             }
 

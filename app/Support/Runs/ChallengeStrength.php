@@ -18,6 +18,15 @@ namespace App\Support\Runs;
  */
 readonly class ChallengeStrength
 {
+    /**
+     * Every component is non-negative, which is what makes the total safe to
+     * hand straight to the die roller as a number of dice.
+     *
+     * @param  int<0, max>  $printed
+     * @param  int<0, max>  $fromCardsPassed
+     * @param  int<0, max>  $fromAlerts
+     * @param  int<0, max>  $fromBoosts
+     */
     public function __construct(
         /** What the card itself says, before anything happens to it. */
         public int $printed,
@@ -63,14 +72,18 @@ readonly class ChallengeStrength
      * sixth get +2. Counted from cards *passed* rather than the card's own
      * position, that is simply half, rounded down - facing the third card means
      * two are behind you.
+     *
+     * @return int<0, max>
      */
     public static function fromCardsPassed(int $cardsPassed): int
     {
-        return intdiv(max(0, $cardsPassed), 2);
+        return max(0, intdiv(max(0, $cardsPassed), 2));
     }
 
     /**
      * The number of d8s Security rolls against the Runners.
+     *
+     * @return int<0, max>
      */
     public function total(): int
     {
