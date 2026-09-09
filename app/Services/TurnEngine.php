@@ -15,6 +15,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Throwable;
 
 /**
  * Drives the 15/15/5 turn cycle (rulebook 2).
@@ -32,6 +33,7 @@ class TurnEngine
         private readonly FacilityDefenceService $facilityDefence,
         private readonly PublishFacilityList $facilityList,
         private readonly CouncilService $council,
+        private readonly ResearchTableService $researchTable,
     ) {}
 
     /**
@@ -216,6 +218,23 @@ class TurnEngine
             // five minutes later (rulebook 3.1.1). Opening the sitting here is
             // what anchors that second clock to the phase's own start.
             $this->council->openSession($turn, $now);
+        }
+
+        // "During the Action Phase, research players should make their way to
+        // the research table" (rulebook 3.2.1), so the cards are dealt as the
+        // phase opens rather than waiting on Research Control remembering to.
+        // Control re-deals, redraws the order and closes the table from its own
+        // panel; this only sets the table.
+        //
+        // Fail-soft, on the same terms as the announcements: a research game
+        // that could not be dealt is a sub-game Control deals by hand, and it
+        // must never be a phase that would not start.
+        if ($type === PhaseType::Action) {
+            try {
+                $this->researchTable->openSession($game, $turn);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
         }
 
         // Income and free Wound recovery land as Team Time opens, giving Control

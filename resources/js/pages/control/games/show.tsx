@@ -23,6 +23,7 @@ import { index as councilIndex } from '@/routes/control/council';
 import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
+import { index as researchIndex } from '@/routes/control/research';
 import type {
     CharacterSubject,
     ControlMember,
@@ -47,6 +48,14 @@ const CORPORATION_TRACKERS: Array<[string, string]> = [
     ['income', 'Income'],
     ['political_will', 'Political Will'],
     ['corporation_credits', 'Credits'],
+    // The four Research Point suits (rulebook 3.2.1). They are Trackers like
+    // the three above, so Control moves them from the same dialog and every
+    // change lands in the same ledger — which is what makes a research score
+    // overridable without a back door.
+    ['research_cog', 'Cog'],
+    ['research_brain', 'Brain'],
+    ['research_leaf', 'Leaf'],
+    ['research_maths', 'Maths'],
 ];
 
 export default function ControlGameShow({
@@ -108,6 +117,14 @@ export default function ControlGameShow({
                             }
                         >
                             Council
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(researchIndex.url({ game: game.id }))
+                            }
+                        >
+                            Research
                         </Button>
                         <Button
                             variant="outline"

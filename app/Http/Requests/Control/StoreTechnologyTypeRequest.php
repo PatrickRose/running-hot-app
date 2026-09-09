@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Control;
 
+use App\Enums\ResearchCardRestriction;
 use App\Models\Game;
 use App\Models\TechnologyType;
 use Illuminate\Foundation\Http\FormRequest;
@@ -46,7 +47,50 @@ class StoreTechnologyTypeRequest extends FormRequest
                     ->all(),
                 default => [],
             },
+            'deck_grant' => $this->deckGrant(),
         ]);
+    }
+
+    /**
+     * A proposal that adds a card to a research deck rather than producing a
+     * technology (rulebook 3.2.3), normalised or dropped entirely.
+     *
+     * The amounts are what make it one: a row with none is an ordinary
+     * technology, and the form sends a blank set of boxes for every one of
+     * those. So the whole block collapses to null unless somebody has priced
+     * it, and what survives is fully shaped rather than half-filled.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function deckGrant(): ?array
+    {
+        /** @var array<string, mixed> $grant */
+        $grant = is_array($this->input('deck_grant')) ? $this->input('deck_grant') : [];
+
+        /** @var array<int, mixed> $given */
+        $given = is_array($grant['amounts'] ?? null) ? $grant['amounts'] : [];
+
+        $amounts = array_values(array_filter(
+            array_map('intval', $given),
+            fn (int $amount): bool => $amount > 0,
+        ));
+
+        if ($amounts === []) {
+            return null;
+        }
+
+        $minimum = max(1, (int) ($grant['value_min'] ?? 1));
+
+        return [
+            'amounts' => $amounts,
+            'value_min' => $minimum,
+            'value_max' => max($minimum, (int) ($grant['value_max'] ?? $minimum)),
+            'wild' => filter_var($grant['wild'] ?? false, FILTER_VALIDATE_BOOL),
+            'restriction' => ResearchCardRestriction::tryFrom(
+                trim((string) ($grant['restriction'] ?? ''))
+            )?->value,
+            'requires_research_facilities' => max(0, (int) ($grant['requires_research_facilities'] ?? 0)),
+        ];
     }
 
     /**
@@ -99,6 +143,18 @@ class StoreTechnologyTypeRequest extends FormRequest
             // What a Runner has to beat to take it (3.2.6).
             'copy_strength' => ['nullable', 'integer', 'min:0', 'max:100'],
             'destroy_strength' => ['nullable', 'integer', 'min:0', 'max:100'],
+
+            // Deck customisation, where the proposal buys a research card rather
+            // than a technology (3.2.3). Null for every ordinary row, and
+            // normalised above - so what arrives here is either absent or whole.
+            'deck_grant' => ['nullable', 'array'],
+            'deck_grant.amounts' => ['required_with:deck_grant', 'array', 'min:1', 'max:4'],
+            'deck_grant.amounts.*' => ['integer', 'min:1', 'max:1000'],
+            'deck_grant.value_min' => ['required_with:deck_grant', 'integer', 'min:1', 'max:99'],
+            'deck_grant.value_max' => ['required_with:deck_grant', 'integer', 'min:1', 'max:99'],
+            'deck_grant.wild' => ['required_with:deck_grant', 'boolean'],
+            'deck_grant.restriction' => ['nullable', Rule::enum(ResearchCardRestriction::class)],
+            'deck_grant.requires_research_facilities' => ['required_with:deck_grant', 'integer', 'min:0', 'max:50'],
 
             'notes' => ['nullable', 'string', 'max:2000'],
         ];

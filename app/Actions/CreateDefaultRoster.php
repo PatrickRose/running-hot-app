@@ -20,9 +20,16 @@ use Illuminate\Support\Facades\DB;
  *
  * Applying the roster twice to the same game would violate the unique index on
  * a team's name, so a game that already has teams is left alone.
+ *
+ * The research decks come with the Corporations, because a Corporation without
+ * one cannot sit at the research table (rulebook 3.2.1) - and unlike the card
+ * catalogues they cannot be written when the game is created, since a private
+ * deck needs a Corporation to belong to.
  */
 class CreateDefaultRoster
 {
+    public function __construct(private readonly SeedResearchDecks $researchDecks) {}
+
     /**
      * The three roles every Corporation fields (rulebook 1.3).
      *
@@ -35,12 +42,18 @@ class CreateDefaultRoster
     ];
 
     /**
-     * @return array{corporations: int, gangs: int, characters: int, skipped: bool}
+     * @return array{corporations: int, gangs: int, characters: int, research_cards: int, skipped: bool}
      */
     public function handle(Game $game): array
     {
         if ($game->corporations()->exists() || $game->gangs()->exists() || $game->characters()->exists()) {
-            return ['corporations' => 0, 'gangs' => 0, 'characters' => 0, 'skipped' => true];
+            return [
+                'corporations' => 0,
+                'gangs' => 0,
+                'characters' => 0,
+                'research_cards' => 0,
+                'skipped' => true,
+            ];
         }
 
         return DB::transaction(function () use ($game): array {
@@ -48,10 +61,13 @@ class CreateDefaultRoster
                 + $this->createGangs($game)
                 + $this->createUnaffiliated($game);
 
+            $decks = $this->researchDecks->handle($game);
+
             return [
                 'corporations' => count($this->corporations()),
                 'gangs' => count($this->gangs()),
                 'characters' => $characters,
+                'research_cards' => $decks['public'] + $decks['private'],
                 'skipped' => false,
             ];
         });

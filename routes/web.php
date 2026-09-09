@@ -14,6 +14,11 @@ use App\Http\Controllers\Control\GameController;
 use App\Http\Controllers\Control\PhaseController;
 use App\Http\Controllers\Control\ProtectionCardHoldingController;
 use App\Http\Controllers\Control\ProtectionCardTypeController;
+use App\Http\Controllers\Control\ResearchCardController;
+use App\Http\Controllers\Control\ResearchController;
+use App\Http\Controllers\Control\ResearchEquationController;
+use App\Http\Controllers\Control\ResearchSessionController;
+use App\Http\Controllers\Control\TechnologyHoldingController;
 use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\CouncilBallotController;
@@ -22,6 +27,9 @@ use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
+use App\Http\Controllers\ResearchBoardController;
+use App\Http\Controllers\ResearchTableController;
+use App\Http\Controllers\ResearchTreeController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -52,6 +60,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('facilities.cards.quote');
     Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
         ->name('facilities.cards.remove');
+
+    // The research sub-game (rulebook 3.2). None of these names a Corporation:
+    // a player has exactly one, so the seat they hold decides which, and the
+    // CorporationPolicy decides whether they may act or only read.
+    Route::get('research', ResearchBoardController::class)->name('research');
+
+    Route::post('research/equations', [ResearchTableController::class, 'play'])
+        ->name('research.equations.play');
+    // Separate from playing, because the rulebook wants scoring to happen
+    // "while other players are taking their turns" - so an equation is played
+    // now and paid out whenever its player gets round to the arithmetic.
+    Route::post('research/equations/{equation}/score', [ResearchTableController::class, 'score'])
+        ->name('research.equations.score');
+    Route::post('research/leave', [ResearchTableController::class, 'leave'])
+        ->name('research.leave');
+    Route::post('research/rejoin', [ResearchTableController::class, 'rejoin'])
+        ->name('research.rejoin');
+
+    Route::post('research/technologies', [ResearchTreeController::class, 'research'])
+        ->name('research.technologies.store');
+    Route::post('research/deck', [ResearchTreeController::class, 'customiseDeck'])
+        ->name('research.deck.store');
+    Route::post('research/points', [ResearchTreeController::class, 'transferPoints'])
+        ->name('research.points.transfer');
 
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,
@@ -191,6 +223,60 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('technologies.update');
                 Route::delete('games/{game}/technologies/{technology}', [TechnologyTypeController::class, 'destroy'])
                     ->name('technologies.destroy');
+
+                // The research sub-game as Research Control runs it (rulebook
+                // 3.2): the table, what each equation paid, the technology
+                // cards Corporations hold, and the decks they play from.
+                Route::get('games/{game}/research', [ResearchController::class, 'index'])
+                    ->name('research.index');
+
+                Route::post('games/{game}/research/session', [ResearchSessionController::class, 'store'])
+                    ->name('research.session.store');
+                Route::post('games/{game}/research/session/close', [ResearchSessionController::class, 'close'])
+                    ->name('research.session.close');
+                Route::post('games/{game}/research/session/order', [ResearchSessionController::class, 'randomise'])
+                    ->name('research.session.order');
+                Route::post('games/{game}/research/session/advance', [ResearchSessionController::class, 'advance'])
+                    ->name('research.session.advance');
+                Route::post(
+                    'games/{game}/research/session/seats/{corporation}',
+                    [ResearchSessionController::class, 'seat'],
+                )->name('research.session.seat');
+
+                // Scoring is normally the player's. Unscoring is what makes it
+                // overridable: the points go back and it can be scored again,
+                // both movements in the ledger.
+                Route::post(
+                    'games/{game}/research/equations/{equation}/score',
+                    [ResearchEquationController::class, 'score'],
+                )->name('research.equations.score');
+                Route::post(
+                    'games/{game}/research/equations/{equation}/unscore',
+                    [ResearchEquationController::class, 'unscore'],
+                )->name('research.equations.unscore');
+                Route::post(
+                    'games/{game}/research/equations/{equation}/void',
+                    [ResearchEquationController::class, 'void'],
+                )->name('research.equations.void');
+
+                // Sharing a copy, and whatever a Run brought back (3.2.5,
+                // 3.2.6). All of it goes through Research Control at the table,
+                // so all of it is Control's here.
+                Route::post('games/{game}/technology-holdings', [TechnologyHoldingController::class, 'store'])
+                    ->name('technology-holdings.store');
+                Route::patch(
+                    'games/{game}/technology-holdings/{holding}',
+                    [TechnologyHoldingController::class, 'update'],
+                )->name('technology-holdings.update');
+                Route::delete(
+                    'games/{game}/technology-holdings/{holding}',
+                    [TechnologyHoldingController::class, 'destroy'],
+                )->name('technology-holdings.destroy');
+
+                // Upgrading a card in a deck, which the tree prices nowhere -
+                // so it is a custom proposal under 3.2.4.
+                Route::patch('games/{game}/research-cards/{card}', [ResearchCardController::class, 'update'])
+                    ->name('research-cards.update');
 
                 Route::post('games/{game}/protection-cards', [ProtectionCardTypeController::class, 'store'])
                     ->name('protection-cards.store');

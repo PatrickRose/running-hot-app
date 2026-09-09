@@ -27,11 +27,11 @@ namespace App\Support;
  * | H | Permanent       | equipment category   | App\Enums\EquipmentCategory
  * | I | Single use      | equipment category   | App\Enums\EquipmentCategory
  * | J | This run        | equipment category   | App\Enums\EquipmentCategory
+ * | Y | Wildcard        | a research card of any suit | App\Models\ResearchCard
  *
  * Drawn but not used yet:
  *
  * | G | Boost           | belongs to Runs, which are not built
- * | Y | Wildcard        | belongs to the research game, which is not built
  *
  * The font carries about twenty more icons on the remaining capitals. They are
  * not used in the game, so they have no meaning to record. It also carries
@@ -71,8 +71,8 @@ class IconFont
     public const BOOST = 'G';
 
     /**
-     * A card that counts as any research suit, for the research game of 3.2.1.
-     * Nothing shows it yet.
+     * A research card that counts as any suit (rulebook 3.2.1). The four suits
+     * above are what a card usually is; this is what a wild one shows instead.
      */
     public const WILDCARD = 'Y';
 
@@ -97,6 +97,7 @@ class IconFont
             self::PERMANENT => 'Permanent',
             self::SINGLE_USE => 'Single use',
             self::THIS_RUN => 'This run',
+            self::WILDCARD => 'Wildcard',
         ];
     }
 }

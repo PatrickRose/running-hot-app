@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import {
     BookOpen,
     Building2,
+    FlaskConical,
     FolderGit2,
     Gavel,
     LayoutGrid,
@@ -19,7 +20,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { council, dashboard, facilities } from '@/routes';
+import { council, dashboard, facilities, research } from '@/routes';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -37,6 +38,11 @@ const mainNavItems: NavItem[] = [
         title: 'Council',
         href: council(),
         icon: Gavel,
+    },
+    {
+        title: 'Research',
+        href: research(),
+        icon: FlaskConical,
     },
 ];
 
