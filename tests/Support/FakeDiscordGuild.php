@@ -334,6 +334,43 @@ class FakeDiscordGuild
             return Http::response(['code' => 'runninghot']);
         }
 
+        // One line of a channel's permission table:
+        // PUT/DELETE /channels/{c}/permissions/{overwrite}
+        //
+        // Kept as state rather than answered blankly, because the interesting
+        // question is what the channel's overwrites *are* afterwards - a run
+        // grants one per Runner and takes it away again, and a provision run
+        // in between must not carry them off.
+        if (preg_match('#^/channels/(\d+)/permissions/(\d+)$#', $path, $matches) === 1) {
+            [, $channelId, $overwriteId] = $matches;
+
+            if (! isset($this->channels[$channelId])) {
+                return Http::response(['message' => 'Unknown Channel', 'code' => 10003], 404);
+            }
+
+            $overwrites = array_values(array_filter(
+                $this->channels[$channelId]['permission_overwrites'] ?? [],
+                fn (array $overwrite): bool => ($overwrite['id'] ?? null) !== $overwriteId,
+            ));
+
+            if ($method === 'PUT') {
+                // An upsert: Discord replaces whatever that id already had.
+                $overwrites[] = [
+                    'id' => $overwriteId,
+                    'type' => (int) ($body['type'] ?? 0),
+                    'allow' => (string) ($body['allow'] ?? '0'),
+                    'deny' => (string) ($body['deny'] ?? '0'),
+                ];
+            }
+
+            // Removing an overwrite that was never there is not an error, which
+            // is what lets a run be revoked without having recorded whether it
+            // was ever granted.
+            $this->channels[$channelId]['permission_overwrites'] = $overwrites;
+
+            return Http::response(null, 204);
+        }
+
         if (preg_match('#^/channels/(\d+)$#', $path, $matches) === 1) {
             $channelId = $matches[1];
 

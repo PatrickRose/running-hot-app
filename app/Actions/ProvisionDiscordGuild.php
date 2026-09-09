@@ -274,9 +274,23 @@ class ProvisionDiscordGuild
             // A team's channel silently losing its lock is far worse than one
             // extra PATCH, and a wrong overwrite is invisible until a player
             // reads something they should not have.
+            //
+            // Rebuilt here rather than reusing the payload above, because it
+            // has to carry the channel's per-member overwrites through: the
+            // Runners on a run in progress hold one on the target Facility's
+            // channels, and re-sending only the roles would shut them out
+            // halfway down a stack.
+            $update = $this->channelPayload(
+                $planned,
+                $guildId,
+                $roleIds,
+                $channelIds,
+                self::memberOverwrites($existing),
+            );
+
             $this->lockoutAware(
                 $planned,
-                fn (): array => $this->api->updateChannel($resource->discord_id, $payload, $reason),
+                fn (): array => $this->api->updateChannel($resource->discord_id, $update, $reason),
             );
 
             if ($resource->name !== $planned->name) {
@@ -344,6 +358,7 @@ class ProvisionDiscordGuild
     /**
      * @param  array<string, string>  $roleIds
      * @param  array<string, string>  $channelIds
+     * @param  array<int, array<string, mixed>>  $keep  overwrites the blueprint does not own
      * @return array<string, mixed>
      */
     private function channelPayload(
@@ -351,8 +366,34 @@ class ProvisionDiscordGuild
         string $guildId,
         array $roleIds,
         array $channelIds,
+        array $keep = [],
     ): array {
-        return ChannelPayload::for($planned, $guildId, $roleIds, $channelIds);
+        return ChannelPayload::for($planned, $guildId, $roleIds, $channelIds, $keep);
+    }
+
+    /**
+     * The overwrites on a live channel that name a member rather than a role.
+     *
+     * These are not the blueprint's to own - a run in progress puts one on the
+     * target Facility's channels for each Runner - so a reconcile carries them
+     * through instead of taking them off.
+     *
+     * @param  array<string, mixed>  $channel
+     * @return array<int, array<string, mixed>>
+     */
+    private static function memberOverwrites(array $channel): array
+    {
+        $overwrites = $channel['permission_overwrites'] ?? [];
+
+        if (! is_array($overwrites)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $overwrites,
+            static fn (mixed $overwrite): bool => is_array($overwrite)
+                && (int) ($overwrite['type'] ?? DiscordApi::OVERWRITE_ROLE) === DiscordApi::OVERWRITE_MEMBER,
+        ));
     }
 
     /**
