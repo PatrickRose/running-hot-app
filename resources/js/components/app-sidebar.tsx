@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import {
     BookOpen,
     Building2,
+    Crosshair,
     FolderGit2,
     Gavel,
     LayoutGrid,
@@ -19,7 +20,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { council, dashboard, facilities } from '@/routes';
+import { council, dashboard, facilities, runs } from '@/routes';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -32,6 +33,11 @@ const mainNavItems: NavItem[] = [
         title: 'Facilities',
         href: facilities(),
         icon: Building2,
+    },
+    {
+        title: 'Runs',
+        href: runs(),
+        icon: Crosshair,
     },
     {
         title: 'Council',

@@ -22,6 +22,8 @@ use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
+use App\Http\Controllers\RunBoardController;
+use App\Http\Controllers\RunController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -52,6 +54,39 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('facilities.cards.quote');
     Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
         ->name('facilities.cards.remove');
+
+    // Runs (rulebook 3.4). One page for both sides of the Facility game,
+    // because plenty of people are on both at once - and what each of them may
+    // see is the RunPresenter's answer, since a run keeps two secrets: which
+    // Facility a group named, and how deep the stack is.
+    Route::get('runs', RunBoardController::class)->name('runs');
+
+    // Putting in for one. Guarded by the RunPolicy rather than a role
+    // middleware: the question is whether this player holds a character who
+    // could go on a run, which a Freelancer does as much as a Runner.
+    Route::post('runs', [RunController::class, 'store'])->name('runs.store');
+
+    // The queue at a Facility, which is Control's to settle (3.4.1) - a group
+    // that could order it could put itself first.
+    Route::post('facilities/{facility}/runs/order', [RunController::class, 'order'])
+        ->name('runs.order');
+
+    // One route per act of the loop, each authorised as its own thing: the
+    // Leader rolls and moves the group on, any Runner may walk away, and
+    // Security works the cards. Control reaches all of them through the same
+    // routes, because a run must not stall on somebody being at their laptop.
+    Route::post('runs/{run}/begin', [RunController::class, 'begin'])->name('runs.begin');
+    Route::post('runs/{run}/activate', [RunController::class, 'activate'])->name('runs.activate');
+    Route::post('runs/{run}/boost', [RunController::class, 'boost'])->name('runs.boost');
+    Route::post('runs/{run}/charge', [RunController::class, 'charge'])->name('runs.charge');
+    Route::post('runs/{run}/challenge', [RunController::class, 'challenge'])->name('runs.challenge');
+    Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
+        ->name('runs.consequences.store');
+    Route::post('runs/{run}/alerts', [RunController::class, 'triggerWithAlerts'])
+        ->name('runs.alerts.trigger');
+    Route::post('runs/{run}/ignore-end', [RunController::class, 'ignoreEnd'])->name('runs.ignore-end');
+    Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
+    Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,
