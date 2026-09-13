@@ -261,6 +261,14 @@ return [
     | skills while Notoriety does not apply to them. The press and the
     | government hold neither.
     |
+    | 'council_votes' seats a character at the Council in their own right, with
+    | that many votes. Rulebook 3.1 seats only the Corporations, so this is
+    | Control's ruling rather than a rule off the page: the Government player
+    | attends and votes with a bloc of five. It is not Political Will and not a
+    | tracker - nothing in the game spends it - so Control edits the number
+    | directly. Anybody given a number here gets a seat; everybody else has
+    | none.
+    |
     */
 
     'unaffiliated' => [
@@ -269,7 +277,7 @@ return [
         ['name' => 'Yale Pirit', 'role' => CharacterRole::Freelancer, 'brawn' => 5, 'hack' => 2, 'charisma' => 3, 'body' => 6],
         ['name' => 'Business Times', 'role' => CharacterRole::Press],
         ['name' => 'Th3 Undergr0und', 'role' => CharacterRole::Press],
-        ['name' => 'HM Government', 'role' => CharacterRole::Other],
+        ['name' => 'HM Government', 'role' => CharacterRole::Other, 'council_votes' => 5],
     ],
 
     /*

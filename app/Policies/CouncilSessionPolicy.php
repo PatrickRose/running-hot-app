@@ -12,7 +12,9 @@ use App\Models\User;
  *
  * The Council is the CEOs' sub-game, so the seat is the authority: a CEO votes
  * for their own Corporation, and the Chair's powers belong to whichever
- * Corporation holds the Chair this turn rather than to a person. Everything
+ * Corporation holds the Chair this turn rather than to a person. A seat Control
+ * has given somebody outright - HM Government's - votes and does nothing else:
+ * it never chairs, because the Chair rotates between the Corporations. Everything
  * else about the Council is public - the agenda is read out - so reading the
  * page needs no ability at all.
  */
@@ -55,11 +57,33 @@ class CouncilSessionPolicy
     }
 
     /**
-     * Vote at this sitting. Every CEO may, the Chair included.
+     * Vote at this sitting.
+     *
+     * Every CEO may, the Chair included - and so may anybody Control has given
+     * a seat of their own, which is how HM Government votes. That second case
+     * is a ruling rather than a rule: 3.1 seats only the Corporations.
      */
     public function vote(User $user, CouncilSession $session): bool
     {
-        return $this->holdsCeoSeat($user, $session, null);
+        return $this->holdsCeoSeat($user, $session, null)
+            || $this->holdsOwnSeat($user, $session);
+    }
+
+    /**
+     * A seat that belongs to the character rather than to a Corporation.
+     */
+    private function holdsOwnSeat(User $user, CouncilSession $session): bool
+    {
+        $game = $session->turn->game;
+
+        if ($game->status !== GameStatus::Running) {
+            return false;
+        }
+
+        return $game->characters()
+            ->where('user_id', $user->id)
+            ->whereNotNull('council_votes')
+            ->exists();
     }
 
     private function holdsCeoSeat(User $user, CouncilSession $session, ?int $corporationId): bool

@@ -6,17 +6,17 @@ import { store } from '@/routes/council/ballots';
 import type { CouncilItem, CouncilViewer } from '@/types/game';
 
 /**
- * A CEO's vote: how much Political Will, and behind which resolutions
- * (rulebook 3.1.2).
+ * A vote: how many, and behind which resolutions (rulebook 3.1.2).
  *
- * The Political Will may be split across the resolutions on the card, so this
- * is a figure per resolution rather than a choice of one. What the Corporation
- * holds is the cap on the total, and it is shown as it is spent — the server
- * refuses a vote that spreads more than the Corporation has, and being told
- * that after submitting would be a poor way to find out.
+ * The votes may be split across the resolutions on the card, so this is a
+ * figure per resolution rather than a choice of one. What the seat carries is
+ * the cap on the total, and it is counted down as it is spread — the server
+ * refuses a vote spreading more than the seat has, and being told that after
+ * submitting would be a poor way to find out.
  *
- * Nothing here is deducted. Political Will weights the vote; it is not spent on
- * it, so a Corporation votes with everything it has on every card.
+ * "Votes" rather than "Political Will" because a CEO and HM Government are both
+ * at this form: a Corporation's weight is its Political Will, the Government's
+ * is the bloc Control gave it, and neither is deducted by voting.
  */
 export function CouncilBallotForm({
     item,
@@ -37,7 +37,7 @@ export function CouncilBallotForm({
         0,
     );
 
-    const held = viewer.corporation?.political_will ?? 0;
+    const held = viewer.voter?.votes ?? 0;
     const overspent = total > held;
 
     return (

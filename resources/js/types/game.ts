@@ -754,8 +754,22 @@ export type AgendaCardView = {
 /** Political Will per resolution, keyed by resolution id. */
 export type BallotAllocations = Record<number, number>;
 
+/**
+ * A seat at the Council. A Corporation votes with its Political Will; a
+ * character Control has seated in their own right — HM Government — votes with
+ * its bloc. `votes` is whichever, because from the Chair's side of the table
+ * they weigh the same.
+ */
+export type CouncilVoter = Faction & {
+    /** Unique across both kinds of seat, unlike the bare row id. */
+    key: string;
+    id: number;
+    type: string;
+    votes: number;
+};
+
 export type CouncilVoteRecord = Faction & {
-    corporation_id: number;
+    voter_key: string;
     allocations: BallotAllocations;
 };
 
@@ -773,7 +787,7 @@ export type CouncilItem = {
     submitted: Array<
         Faction & {
             ballot_id: number;
-            corporation_id: number;
+            voter_key: string;
             submitted_at: string;
         }
     >;
@@ -821,7 +835,8 @@ export type CouncilViewer = {
     /** You hold a CEO seat, so there is a Corporation's vote for you to cast. */
     can_vote: boolean;
     can_submit_agenda: boolean;
-    corporation: (Faction & { id: number; political_will: number }) | null;
+    /** The seat you vote from, of either kind. Control holds none. */
+    voter: CouncilVoter | null;
     character_id: number | null;
 };
 

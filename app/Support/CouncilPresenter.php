@@ -157,7 +157,7 @@ class CouncilPresenter
             'can_chair' => false,
             'can_vote' => false,
             'can_submit_agenda' => false,
-            'corporation' => null,
+            'voter' => null,
             'character_id' => null,
         ];
 
@@ -175,9 +175,18 @@ class CouncilPresenter
             ->with('corporation')
             ->first();
 
+        // A seat Control has given somebody outright, which is how HM
+        // Government votes. Only looked for when there is no CEO seat: holding
+        // both would be two votes, and the Corporation's is the one 3.1 knows
+        // about.
+        $seated = $ceo !== null ? null : $game->characters()
+            ->where('user_id', $user->id)
+            ->whereNotNull('council_votes')
+            ->first();
+
         // Any character will do to write a custom agenda: 3.1.3 gives blank
         // cards to players rather than to CEOs.
-        $anyCharacter = $ceo ?? $game->characters()
+        $anyCharacter = $ceo ?? $seated ?? $game->characters()
             ->where('user_id', $user->id)
             ->first();
 
@@ -199,12 +208,41 @@ class CouncilPresenter
             'can_chair' => $session !== null && $user->can('chair', $session),
             'can_vote' => $session !== null && $seats->vote($user, $session),
             'can_submit_agenda' => $anyCharacter !== null && $user->can('create', [AgendaCard::class, $game]),
-            'corporation' => $ceo?->corporation === null ? null : [
-                'id' => $ceo->corporation->id,
-                ...FactionBadge::for($ceo->corporation->name),
-                'political_will' => $ceo->corporation->political_will,
-            ],
+            // The seat this viewer votes from, whichever kind it is. Control
+            // has none, which is why it is shown no ballot even though it may
+            // submit one on somebody's behalf.
+            'voter' => $this->voter($ceo !== null ? $ceo->corporation : $seated),
             'character_id' => $anyCharacter?->id,
+        ];
+    }
+
+    /**
+     * One seat at the Council, as everything that names a voter draws it.
+     *
+     * A Corporation and a seated character are drawn the same way on purpose:
+     * at the Council they are both blocs of votes, and a row of them has to
+     * line up. That is why HM Government gets a faction badge despite being a
+     * character - it is an organisation, which is the case the badge's own
+     * rule carves out.
+     *
+     * `votes` is Political Will for a Corporation and the bloc for a
+     * character. The page calls it neither, because from the Chair's side of
+     * the table they weigh the same.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function voter(Corporation|Character|null $voter): ?array
+    {
+        if ($voter === null) {
+            return null;
+        }
+
+        return [
+            'key' => $voter->getMorphClass().':'.$voter->getKey(),
+            'id' => $voter->getKey(),
+            'type' => $voter->getMorphClass(),
+            ...FactionBadge::for($voter->name),
+            'votes' => $this->council->votesFor($voter),
         ];
     }
 
@@ -214,24 +252,24 @@ class CouncilPresenter
      */
     private function items(CouncilSession $session, array $viewer, bool $privileged): array
     {
-        $ownCorporationId = $viewer['corporation']['id'] ?? null;
+        $ownVoterKey = $viewer['voter']['key'] ?? null;
 
         return $session->items()
             ->whereHas('card', fn ($query) => $query->whereIn('status', [
                 AgendaCardStatus::Tabled->value,
                 AgendaCardStatus::Voted->value,
             ]))
-            ->with(['card.resolutions', 'card.author', 'outcome', 'ballots.allocations', 'ballots.corporation'])
+            ->with(['card.resolutions', 'card.author', 'outcome', 'ballots.allocations', 'ballots.voter'])
             ->orderBy('id')
             ->get()
-            ->map(fn (CouncilAgendaItem $item): array => $this->item($item, $ownCorporationId, $privileged, (bool) $viewer['can_vote']))
+            ->map(fn (CouncilAgendaItem $item): array => $this->item($item, $ownVoterKey, $privileged, (bool) $viewer['can_vote']))
             ->all();
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function item(CouncilAgendaItem $item, ?int $ownCorporationId, bool $privileged, bool $canVote): array
+    private function item(CouncilAgendaItem $item, ?string $ownVoterKey, bool $privileged, bool $canVote): array
     {
         $live = $item->ballots->filter(fn (CouncilBallot $ballot): bool => ! $ballot->wasReturned());
         $tally = $this->council->tally($item);
@@ -242,9 +280,9 @@ class CouncilPresenter
         // result out, and is the default of 3.1.2.
         $breakdownVisible = $privileged || ($item->isResolved() && ! $item->secret);
 
-        $yours = $ownCorporationId === null
+        $yours = $ownVoterKey === null
             ? null
-            : $live->firstWhere('corporation_id', $ownCorporationId);
+            : $live->first(fn (CouncilBallot $ballot): bool => $ballot->voterKey() === $ownVoterKey);
 
         return [
             'id' => $item->id,
@@ -267,16 +305,16 @@ class CouncilPresenter
                     // says nothing about what is written on it, and the route
                     // that acts on it is the Chair's alone.
                     'ballot_id' => $ballot->id,
-                    'corporation_id' => $ballot->corporation_id,
-                    ...FactionBadge::for($ballot->corporation->name),
+                    'voter_key' => $ballot->voterKey(),
+                    ...FactionBadge::for($ballot->voterName()),
                     'submitted_at' => $ballot->submitted_at->toIso8601String(),
                 ])->values()->all(),
             'totals' => $breakdownVisible ? $tally['totals'] : null,
             'tied' => $breakdownVisible ? $tally['tied'] : null,
             'breakdown' => $breakdownVisible
                 ? $live->map(fn (CouncilBallot $ballot): array => [
-                    'corporation_id' => $ballot->corporation_id,
-                    ...FactionBadge::for($ballot->corporation->name),
+                    'voter_key' => $ballot->voterKey(),
+                    ...FactionBadge::for($ballot->voterName()),
                     'allocations' => $ballot->allocations
                         ->mapWithKeys(fn ($allocation): array => [
                             $allocation->agenda_resolution_id => $allocation->political_will,

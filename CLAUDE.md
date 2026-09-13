@@ -256,6 +256,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | What each icon in the game's font means | `App\Support\IconFont` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | The Council's agenda, voting and attendance | `App\Services\CouncilService` |
+| A Council seat that is not a Corporation | `characters.council_votes`, `App\Models\Character::sitsOnCouncil()` |
 | What each person at the Council may see | `App\Support\CouncilPresenter` |
 | Who may chair, and who may vote | `App\Policies\CouncilSessionPolicy`, `App\Policies\AgendaCardPolicy` |
 | The Council Chamber players read | `App\Http\Controllers\CouncilController`, `resources/js/pages/council.tsx` |
@@ -405,6 +406,29 @@ dropped goes back to the deck. That stops the moment the Chair keeps two:
 `chairHasChosen()` reads it off the cards rather than a flag, because a handed
 card that is no longer in the hand was either kept or discarded and either way
 the discard of 3.1.1 has happened.
+
+**Not every seat at the Council is a Corporation.** Rulebook 3.1 seats only the
+CEOs; HM Government sitting there with a bloc of five is Control's ruling, and
+the application holds it as `characters.council_votes` — a count on the
+character rather than a flag naming the Government, so a Press player or the
+Runner Representative of 3.1.3's own agenda card can be seated without new code.
+Null means no seat, which is almost everybody; a CEO's votes are their
+Corporation's Political Will and are not recorded there.
+
+It is deliberately **not** a tracker. Political Will is a Corporation's
+political capital and moves through `TrackerService` with a ledger behind it;
+this is the size of a bloc, which Control sets and nothing in the game spends —
+so the absence penalty of 3.1.2, which costs Political Will, does not reach the
+Government seat either. The register on the Control panel stays Corporations
+only for that reason.
+
+So `council_ballots.voter` is a morph rather than a `corporation_id`: a CEO
+votes for their Corporation, the Government votes for itself, and neither gets
+a nullable column it never uses. `CouncilService::votesFor()` is the one place
+that knows which weight a seat carries, and the pages say "votes" rather than
+"Political Will" because both kinds are at the same ballot form. The seat votes
+and does nothing else — it never chairs, because the Chair rotates between the
+Corporations.
 
 **Political Will weights a vote; it is never spent on one.** The rulebook has a
 CEO write down the Political Will they *have* (3.1.2) and nothing in 3.1 takes

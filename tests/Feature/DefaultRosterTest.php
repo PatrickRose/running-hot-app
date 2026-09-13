@@ -149,6 +149,40 @@ class DefaultRosterTest extends TestCase
     }
 
     /**
+     * HM Government sits at the Council with a bloc of five, and is the only
+     * seat there that is not a Corporation.
+     *
+     * Control's ruling rather than a rule from 3.1 - hence a number in the
+     * roster config rather than anything derived - so the roster is where it
+     * has to arrive.
+     */
+    public function test_the_government_opens_with_a_council_seat(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->roster()->handle($game);
+
+        $government = Character::query()
+            ->where('game_id', $game->id)
+            ->where('name', 'HM Government')
+            ->sole();
+
+        $this->assertTrue($government->sitsOnCouncil());
+        $this->assertSame(5, $government->council_votes);
+
+        // Nobody else has one: a CEO votes with their Corporation's Political
+        // Will, and everybody else does not vote at all.
+        $others = Character::query()
+            ->where('game_id', $game->id)
+            ->whereNot('name', 'HM Government')
+            ->get();
+
+        foreach ($others as $character) {
+            $this->assertNull($character->council_votes, $character->name);
+        }
+    }
+
+    /**
      * Corporate players spend their Corporation's Credits, not their own.
      */
     public function test_only_non_corporate_characters_start_with_credits(): void
