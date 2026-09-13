@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AgendaCardStatus;
 use App\Enums\AgendaItemSource;
+use App\Enums\CharacterRole;
 use App\Enums\CouncilAttendance;
 use App\Enums\PhaseType;
 use App\Enums\ResolutionAmendment;
@@ -1026,6 +1027,78 @@ class CouncilService
 
             return $item;
         });
+    }
+
+    // -----------------------------------------------------------------
+    // Seats that are not Corporations
+    // -----------------------------------------------------------------
+
+    /**
+     * Give a character a seat at the Council in their own right, or take one
+     * away by passing null.
+     *
+     * Control's ruling rather than a rule: 3.1 seats only the Corporations, and
+     * HM Government's bloc of five is the reason this exists. It is not a
+     * tracker and deliberately does not go through TrackerService - nothing in
+     * the game spends a bloc, so there is no movement for a ledger to explain.
+     */
+    public function seat(Character $character, ?int $votes): Character
+    {
+        // A CEO already votes, with their Corporation's Political Will. A
+        // second seat would be a second vote, and CouncilPresenter ignores it
+        // rather than paying it - so refusing is the honest answer instead of
+        // storing a number that quietly does nothing.
+        if ($character->role === CharacterRole::Ceo && $character->corporation_id !== null) {
+            throw ValidationException::withMessages([
+                'character_id' => sprintf(
+                    '%s votes as their Corporation already. A second seat would be a second vote.',
+                    $character->name,
+                ),
+            ]);
+        }
+
+        if ($votes !== null && $votes < 1) {
+            throw ValidationException::withMessages([
+                'votes' => 'A seat carries at least one vote. Take the seat away instead.',
+            ]);
+        }
+
+        $character->forceFill(['council_votes' => $votes])->save();
+
+        return $character;
+    }
+
+    /**
+     * Everybody holding a seat of their own, which is nobody until Control
+     * seats somebody.
+     *
+     * @return Collection<int, Character>
+     */
+    public function seated(Game $game): Collection
+    {
+        return $game->characters()
+            ->whereNotNull('council_votes')
+            ->with('corporation', 'gang')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Everybody who could be given one: anybody in the game who is not already
+     * seated and is not a CEO, since a CEO votes as their Corporation.
+     *
+     * @return Collection<int, Character>
+     */
+    public function seatable(Game $game): Collection
+    {
+        return $game->characters()
+            ->whereNull('council_votes')
+            ->where(fn ($query) => $query
+                ->whereNot('role', CharacterRole::Ceo)
+                ->orWhereNull('corporation_id'))
+            ->with('corporation', 'gang')
+            ->orderBy('name')
+            ->get();
     }
 
     // -----------------------------------------------------------------

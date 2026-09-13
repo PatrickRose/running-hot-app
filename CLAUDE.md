@@ -420,7 +420,16 @@ political capital and moves through `TrackerService` with a ledger behind it;
 this is the size of a bloc, which Control sets and nothing in the game spends —
 so the absence penalty of 3.1.2, which costs Political Will, does not reach the
 Government seat either. The register on the Control panel stays Corporations
-only for that reason.
+only for that reason, and "Seats at the Council" is a separate card beside it:
+the register is attendance, and the seats are who is entitled to be there at
+all.
+
+**A CEO is refused a second seat rather than quietly given a dead one.** They
+already vote with their Corporation's Political Will, and `CouncilPresenter`
+looks for a character seat only when there is no CEO seat — so a number stored
+against a CEO would sit there doing nothing. `CouncilService::seat()` therefore
+throws, and `seatable()` keeps them off the Control panel's list to begin
+with.
 
 So `council_ballots.voter` is a morph rather than a `corporation_id`: a CEO
 votes for their Corporation, the Government votes for itself, and neither gets

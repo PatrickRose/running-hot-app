@@ -30,15 +30,25 @@ import {
 } from '@/routes/control/council/agenda-cards';
 import { update as ruleOnAmendment } from '@/routes/control/council/amendments';
 import { store as applyPenalty } from '@/routes/control/council/penalties';
+import { store as seatSomebody } from '@/routes/control/council/seats';
 import { index, show } from '@/routes/control/games';
 import type {
     AgendaCardView,
     CouncilBoard,
     CouncilControlBoard,
+    CouncilSeatCandidate,
     CouncilSeatView,
     CouncilSessionView,
     GameSummary,
 } from '@/types/game';
+
+/**
+ * The shadcn Select is a listbox with its own state; these are plain selects in
+ * forms, styled to match the Input beside them — the same class the amendment
+ * form and the card holdings use.
+ */
+const SELECT_CLASS =
+    'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
 type Props = {
     game: GameSummary;
@@ -263,6 +273,40 @@ export default function ControlCouncil({ game, council, control }: Props) {
 
                 <Card>
                     <CardHeader>
+                        <CardTitle>Seats at the Council</CardTitle>
+                        <CardDescription>
+                            Rulebook 3.1 seats the five CEOs, who vote with
+                            their Corporation&rsquo;s Political Will. Anybody
+                            else is here because you put them here — HM
+                            Government and its bloc of five, or whoever a Runner
+                            Representative turns out to be. A seat votes and
+                            nothing else: it never takes the Chair.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3">
+                        {control.own_seats.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                Only the Corporations are at the Council.
+                            </p>
+                        ) : (
+                            control.own_seats.map((seat) => (
+                                <OwnSeat
+                                    key={seat.id}
+                                    gameId={game.id}
+                                    seat={seat}
+                                />
+                            ))
+                        )}
+
+                        <SeatSomebody
+                            gameId={game.id}
+                            seatable={control.seatable}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
                         <CardTitle>The agenda deck</CardTitle>
                         <CardDescription>
                             The game&rsquo;s own deck, seeded with every new
@@ -426,6 +470,162 @@ function DeckPicker({
                 )}
             </div>
         </div>
+    );
+}
+
+/**
+ * One seat that is not a Corporation: how many votes it carries, and the way
+ * back out.
+ *
+ * The number is editable in place rather than behind an edit mode, because
+ * changing it is the likely thing to want: a bloc is a judgement Control makes
+ * and may revise mid-game.
+ */
+function OwnSeat({
+    gameId,
+    seat,
+}: {
+    gameId: number;
+    seat: CouncilSeatCandidate;
+}) {
+    const [votes, setVotes] = useState(String(seat.votes ?? ''));
+    const changed = votes !== String(seat.votes ?? '');
+
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+            <div>
+                <p className="font-medium">{seat.name}</p>
+                <p className="text-muted-foreground">
+                    {seat.role_label}
+                    {seat.team && ` · ${seat.team}`}
+                </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+                <Label
+                    htmlFor={`votes-${seat.id}`}
+                    className="text-muted-foreground"
+                >
+                    Votes
+                </Label>
+                <Input
+                    id={`votes-${seat.id}`}
+                    type="number"
+                    min={1}
+                    className="w-20"
+                    value={votes}
+                    onChange={(event) => setVotes(event.target.value)}
+                />
+                <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!changed || votes === ''}
+                    onClick={() =>
+                        router.post(
+                            seatSomebody.url({ game: gameId }),
+                            { character_id: seat.id, votes: Number(votes) },
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    Set
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                        router.post(
+                            seatSomebody.url({ game: gameId }),
+                            { character_id: seat.id, votes: null },
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    Take the seat away
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Seating somebody new.
+ *
+ * The list is everybody in the game bar the CEOs, who vote as their
+ * Corporation already — offering one here would be offering a second vote, and
+ * the server refuses it rather than storing a number that does nothing.
+ */
+function SeatSomebody({
+    gameId,
+    seatable,
+}: {
+    gameId: number;
+    seatable: CouncilSeatCandidate[];
+}) {
+    const [characterId, setCharacterId] = useState('');
+    const [votes, setVotes] = useState('5');
+
+    if (seatable.length === 0) {
+        return null;
+    }
+
+    return (
+        <form
+            className="flex flex-wrap items-end gap-2 rounded-md border border-dashed p-3"
+            onSubmit={(event) => {
+                event.preventDefault();
+
+                router.post(
+                    seatSomebody.url({ game: gameId }),
+                    {
+                        character_id: Number(characterId),
+                        votes: Number(votes),
+                    },
+                    {
+                        preserveScroll: true,
+                        onSuccess: () => setCharacterId(''),
+                    },
+                );
+            }}
+        >
+            <div className="flex flex-col gap-1.5">
+                <Label htmlFor="seat-character">Give somebody a seat</Label>
+                <select
+                    id="seat-character"
+                    className={SELECT_CLASS}
+                    value={characterId}
+                    onChange={(event) => setCharacterId(event.target.value)}
+                >
+                    <option value="">Choose a character…</option>
+                    {seatable.map((character) => (
+                        <option key={character.id} value={character.id}>
+                            {character.name} — {character.role_label}
+                            {character.team && ` (${character.team})`}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <Label htmlFor="seat-votes">Votes</Label>
+                <Input
+                    id="seat-votes"
+                    type="number"
+                    min={1}
+                    className="w-20"
+                    value={votes}
+                    onChange={(event) => setVotes(event.target.value)}
+                />
+            </div>
+
+            <Button
+                type="submit"
+                size="sm"
+                disabled={characterId === '' || votes === ''}
+            >
+                Seat them
+            </Button>
+        </form>
     );
 }
 

@@ -866,6 +866,16 @@ export type CouncilSeatView = Faction & {
     action_penalty_applied: boolean;
 };
 
+/** A character Control may seat at the Council, or has seated. */
+export type CouncilSeatCandidate = {
+    id: number;
+    name: string;
+    role_label: string;
+    team: string | null;
+    /** Null for somebody who holds no seat yet. */
+    votes: number | null;
+};
+
 export type CouncilControlBoard = {
     deck: AgendaCardView[];
     with_control: AgendaCardView[];
@@ -880,6 +890,9 @@ export type CouncilControlBoard = {
         Faction & { id: number; chair_order: number | null; is_chair: boolean }
     >;
     seats: CouncilSeatView[];
+    /** Seats that are not Corporations — HM Government's, and any Control adds. */
+    own_seats: CouncilSeatCandidate[];
+    seatable: CouncilSeatCandidate[];
     /** What Control's penalty field is pre-filled with, not a rule. */
     absence_penalty: number;
     recess_seconds: number;

@@ -108,6 +108,15 @@ class CouncilPresenter
                     'is_chair' => $session?->chair_corporation_id === $corporation->id,
                 ])->all(),
             'seats' => $session === null ? [] : $this->seats($game, $session),
+            // Seats that are not Corporations, which the register above knows
+            // nothing about: the register is attendance, and this is who is
+            // entitled to be there at all.
+            'own_seats' => $this->council->seated($game)
+                ->map(fn (Character $character): array => $this->seatedCharacter($character))
+                ->all(),
+            'seatable' => $this->council->seatable($game)
+                ->map(fn (Character $character): array => $this->seatedCharacter($character))
+                ->all(),
             'absence_penalty' => (int) config('running_hot.council.absence_penalty'),
             'recess_seconds' => $game->council_recess_seconds,
         ];
@@ -213,6 +222,33 @@ class CouncilPresenter
             // submit one on somebody's behalf.
             'voter' => $this->voter($ceo !== null ? $ceo->corporation : $seated),
             'character_id' => $anyCharacter?->id,
+        ];
+    }
+
+    /**
+     * A character Control may seat, or has seated.
+     *
+     * The role travels with the name because the list is every character in the
+     * game: "Business Times" says more about whether to seat somebody when it
+     * says Press beside it.
+     *
+     * @return array<string, mixed>
+     */
+    private function seatedCharacter(Character $character): array
+    {
+        return [
+            'id' => $character->id,
+            'name' => $character->name,
+            'role_label' => $character->role->label(),
+            // Asked of the key rather than the relation: the relation is
+            // typed as the model it points at, and only the column knows a
+            // character belongs to no team at all.
+            'team' => match (true) {
+                $character->corporation_id !== null => $character->corporation->name,
+                $character->gang_id !== null => $character->gang->name,
+                default => null,
+            },
+            'votes' => $character->council_votes,
         ];
     }
 
