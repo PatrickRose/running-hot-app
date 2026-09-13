@@ -603,14 +603,15 @@ function DeckCustomisationForm({
                             This adds a wild card, which counts as any suit.
                         </p>
                     )}
-                    {grant.restriction && (
-                        <p className="text-sm text-muted-foreground">
-                            The card is printed “{grant.restriction}”
-                            {grant.restriction_note
-                                ? ` — ${lowerFirst(grant.restriction_note)}`
-                                : '.'}
+                    {grant.markings.map((marking) => (
+                        <p
+                            key={marking.label}
+                            className="text-sm text-muted-foreground"
+                        >
+                            The card is printed “{marking.label}” —{' '}
+                            {lowerFirst(marking.note)}
                         </p>
-                    )}
+                    ))}
 
                     <div>
                         <InputError

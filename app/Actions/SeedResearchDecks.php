@@ -2,12 +2,13 @@
 
 namespace App\Actions;
 
-use App\Enums\ResearchCardRestriction;
+use App\Enums\ResearchCardMarking;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
 use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\ResearchCard;
+use App\Support\CardMarking;
 use InvalidArgumentException;
 
 /**
@@ -130,7 +131,9 @@ class SeedResearchDecks
                 'value' => $card['value'],
                 'zone' => ResearchZone::Deck->value,
                 'position' => $position + 1,
-                'restriction' => $card['restriction'],
+                // insert() goes round the model, so the cast does not run:
+                // the list has to reach the driver already encoded.
+                'markings' => json_encode($card['markings']),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -147,7 +150,7 @@ class SeedResearchDecks
      * The run of numbers that makes up most of a deck.
      *
      * @param  array<string, mixed>  $shape
-     * @return array<int, array{suit: string|null, value: int, restriction: string|null}>
+     * @return array<int, array{suit: string|null, value: int, markings: array<int, array{marking: string, suit: string|null}>}>
      */
     private function fromShape(array $shape): array
     {
@@ -165,14 +168,14 @@ class SeedResearchDecks
                     $cards[] = [
                         'suit' => $suit->value,
                         'value' => (int) $value,
-                        'restriction' => null,
+                        'markings' => [],
                     ];
                 }
             }
         }
 
         for ($index = 0; $index < $wild; $index++) {
-            $cards[] = ['suit' => null, 'value' => $wildValue, 'restriction' => null];
+            $cards[] = ['suit' => null, 'value' => $wildValue, 'markings' => []];
         }
 
         return $cards;
@@ -184,16 +187,20 @@ class SeedResearchDecks
      * An entry is a value, and then what makes it particular: `suit` for one
      * card of that suit, `wild` for a card of none, and neither for one in each
      * of the four - which is what the shape above means by a value as well.
-     * `restriction` is a marking the card is printed with, and `copies` how
-     * many of whatever the entry describes.
+     * `markings` is a list of what the card is printed with - each a `marking`
+     * and, where the marking names one, a `suit` - and `copies` how many of
+     * whatever the entry describes. A list rather than one, because the two
+     * markings are about different halves of the equation and a card may carry
+     * both.
      *
      * A suit or a marking the application does not have stops the seed rather
-     * than being written as a null. A deck is Control's to describe and this is
-     * the one place a typo in it would be silent: a card that quietly lost its
-     * "No single" would go on being playable alone for the rest of the game.
+     * than being written as a null, and so does a Restricted that names no suit.
+     * A deck is Control's to describe and this is the one place a typo in it
+     * would be silent: a card that quietly lost its "No single" would go on
+     * being playable alone for the rest of the game.
      *
      * @param  array<string, mixed>  $shape
-     * @return array<int, array{suit: string|null, value: int, restriction: string|null}>
+     * @return array<int, array{suit: string|null, value: int, markings: array<int, array{marking: string, suit: string|null}>}>
      */
     private function fromList(array $shape, string $deck): array
     {
@@ -230,7 +237,7 @@ class SeedResearchDecks
                 default => ResearchSuit::all(),
             };
 
-            $restriction = $this->restriction($entry['restriction'] ?? null, $deck);
+            $markings = $this->markings($entry['markings'] ?? [], $deck);
             $copies = max(1, (int) ($entry['copies'] ?? 1));
 
             for ($copy = 0; $copy < $copies; $copy++) {
@@ -238,7 +245,7 @@ class SeedResearchDecks
                     $cards[] = [
                         'suit' => $suit?->value,
                         'value' => $value,
-                        'restriction' => $restriction?->value,
+                        'markings' => CardMarking::listToArray($markings),
                     ];
                 }
             }
@@ -266,26 +273,52 @@ class SeedResearchDecks
         return $suit;
     }
 
-    private function restriction(mixed $key, string $deck): ?ResearchCardRestriction
+    /**
+     * The markings one entry names, checked before they can reach a card.
+     *
+     * @param  mixed  $entries
+     * @return array<int, CardMarking>
+     */
+    private function markings($entries, string $deck): array
     {
-        if ($key === null || $key === '') {
-            return null;
+        if (! is_array($entries)) {
+            return [];
         }
 
-        $restriction = ResearchCardRestriction::tryFrom((string) $key);
+        $markings = [];
 
-        if ($restriction === null) {
-            throw new InvalidArgumentException(sprintf(
-                '%s marks a card "%s", which is not a marking the rules know. The markings are: %s.',
-                $deck,
-                (string) $key,
-                implode(', ', array_map(
-                    fn (ResearchCardRestriction $marking): string => $marking->value,
-                    ResearchCardRestriction::all(),
-                )),
-            ));
+        foreach ($entries as $entry) {
+            $key = is_array($entry) ? ($entry['marking'] ?? null) : $entry;
+            $marking = ResearchCardMarking::tryFrom((string) $key);
+
+            if ($marking === null) {
+                throw new InvalidArgumentException(sprintf(
+                    '%s marks a card "%s", which is not a marking the rules know. The markings are: %s.',
+                    $deck,
+                    (string) $key,
+                    implode(', ', array_map(
+                        fn (ResearchCardMarking $known): string => $known->value,
+                        ResearchCardMarking::all(),
+                    )),
+                ));
+            }
+
+            $suit = is_array($entry) ? ($entry['suit'] ?? null) : null;
+
+            if ($marking->namesASuit() && ($suit === null || $suit === '')) {
+                throw new InvalidArgumentException(sprintf(
+                    '%s marks a card "%s" without naming the suit the other side must be.',
+                    $deck,
+                    $marking->label(),
+                ));
+            }
+
+            $markings[] = new CardMarking(
+                $marking,
+                $marking->namesASuit() ? $this->suit((string) $suit, $deck) : null,
+            );
         }
 
-        return $restriction;
+        return $markings;
     }
 }

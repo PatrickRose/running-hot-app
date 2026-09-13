@@ -329,17 +329,27 @@ return [
     |
     |     'cards' => [
     |         // One 8 in each of the four suits, each marked "No single".
-    |         ['value' => 8, 'restriction' => 'no_single'],
+    |         ['value' => 8, 'markings' => [['marking' => 'no_single']]],
     |         // Two wild 3s.
     |         ['value' => 3, 'wild' => true, 'copies' => 2],
     |         // One 7 of Leaf, and nothing in the other suits.
     |         ['value' => 7, 'suit' => 'leaf'],
+    |         // A card printed with both markings at once.
+    |         ['value' => 6, 'suit' => 'leaf', 'markings' => [
+    |             ['marking' => 'no_single'],
+    |             ['marking' => 'restricted', 'suit' => 'cog'],
+    |         ]],
     |     ],
     |
-    | A marking is an App\Enums\ResearchCardRestriction value, and one the
-    | rules do not have stops the seed rather than being written as a null: a
-    | card that quietly lost its "No single" would go on being playable alone
-    | for the rest of the game.
+    | A card carries a list of markings rather than one, because the two the
+    | game prints are about different halves of the equation: 'no_single' says
+    | the card cannot be alone in its own set, and 'restricted' names the suit
+    | the *other* side has to be - so it needs a 'suit' of its own and says
+    | nothing without one. Both are App\Enums\ResearchCardMarking values.
+    |
+    | A marking the rules do not have, or a 'restricted' naming no suit, stops
+    | the seed rather than being written as a null: a card that quietly lost its
+    | "No single" would go on being playable alone for the rest of the game.
     |
     | The defaults keep the private decks to low cards and no wilds, because
     | that is what the tech tree implies a basic deck is - the six "Research

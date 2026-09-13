@@ -3,11 +3,11 @@
 namespace Tests\Feature;
 
 use App\Actions\SeedResearchDecks;
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\ResearchCard;
+use App\Support\CardMarking;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
@@ -86,7 +86,7 @@ class ResearchDeckSeedingTest extends TestCase
         $wild = $this->deck()->whereNull('suit')->sole();
 
         $this->assertSame(4, $wild->value);
-        $this->assertNull($wild->restriction);
+        $this->assertSame([], $wild->markings());
     }
 
     public function test_a_card_can_be_printed_with_a_marking(): void
@@ -95,7 +95,7 @@ class ResearchDeckSeedingTest extends TestCase
             'values' => [1],
             'copies' => 1,
             'cards' => [
-                ['value' => 8, 'restriction' => 'no_single'],
+                ['value' => 8, 'markings' => [['marking' => 'no_single']]],
             ],
         ]);
 
@@ -106,12 +106,12 @@ class ResearchDeckSeedingTest extends TestCase
         $this->assertCount(4, $marked);
 
         foreach ($marked as $card) {
-            $this->assertSame(ResearchCardRestriction::NoSingle, $card->restriction);
+            $this->assertEquals([CardMarking::noSingle()], $card->markings());
         }
 
         // And the ordinary cards are still ordinary.
         foreach ($this->deck()->where('value', 1) as $card) {
-            $this->assertNull($card->restriction);
+            $this->assertSame([], $card->markings());
         }
     }
 
@@ -122,7 +122,7 @@ class ResearchDeckSeedingTest extends TestCase
             'copies' => 0,
             'cards' => [
                 ['value' => 7, 'suit' => ResearchSuit::Leaf->value],
-                ['value' => 3, 'wild' => true, 'copies' => 2, 'restriction' => 'no_single'],
+                ['value' => 3, 'wild' => true, 'copies' => 2, 'markings' => [['marking' => 'no_single']]],
                 ['value' => 5, 'suit' => ResearchSuit::Cog->value, 'copies' => 3],
             ],
         ]);
@@ -137,7 +137,7 @@ class ResearchDeckSeedingTest extends TestCase
 
         foreach ($wilds as $wild) {
             $this->assertSame(3, $wild->value);
-            $this->assertSame(ResearchCardRestriction::NoSingle, $wild->restriction);
+            $this->assertEquals([CardMarking::noSingle()], $wild->markings());
         }
 
         $this->assertCount(3, $this->deck()->where('value', 5));
@@ -151,7 +151,7 @@ class ResearchDeckSeedingTest extends TestCase
                 'values' => [],
                 'copies' => 0,
                 'cards' => [
-                    ['value' => 9, 'wild' => true, 'restriction' => 'no_single'],
+                    ['value' => 9, 'wild' => true, 'markings' => [['marking' => 'no_single']]],
                 ],
             ],
         );
@@ -160,7 +160,46 @@ class ResearchDeckSeedingTest extends TestCase
 
         $this->assertNull($card->suit);
         $this->assertSame(9, $card->value);
-        $this->assertSame(ResearchCardRestriction::NoSingle, $card->restriction);
+        $this->assertEquals([CardMarking::noSingle()], $card->markings());
+    }
+
+    public function test_a_card_can_be_printed_with_both_markings(): void
+    {
+        $this->writeDecks([
+            'values' => [],
+            'copies' => 0,
+            'cards' => [
+                [
+                    'value' => 6,
+                    'suit' => ResearchSuit::Leaf->value,
+                    'markings' => [
+                        ['marking' => 'no_single'],
+                        ['marking' => 'restricted', 'suit' => ResearchSuit::Cog->value],
+                    ],
+                ],
+            ],
+        ]);
+
+        $card = $this->deck()->sole();
+
+        $this->assertEquals([
+            CardMarking::noSingle(),
+            CardMarking::restrictedTo(ResearchSuit::Cog),
+        ], $card->markings());
+    }
+
+    public function test_a_restricted_card_that_names_no_suit_stops_the_seed(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('without naming the suit the other side must be');
+
+        // Half a marking is worse on a card than none: "Restricted" with no
+        // suit would check nothing at all and nothing would say why.
+        $this->writeDecks([
+            'values' => [],
+            'copies' => 0,
+            'cards' => [['value' => 6, 'markings' => [['marking' => 'restricted']]]],
+        ]);
     }
 
     public function test_a_marking_the_rules_do_not_have_stops_the_seed(): void
@@ -174,7 +213,7 @@ class ResearchDeckSeedingTest extends TestCase
         $this->writeDecks([
             'values' => [],
             'copies' => 0,
-            'cards' => [['value' => 8, 'restriction' => 'No Single']],
+            'cards' => [['value' => 8, 'markings' => [['marking' => 'No Single']]]],
         ]);
     }
 
@@ -210,7 +249,7 @@ class ResearchDeckSeedingTest extends TestCase
         $this->writeDecks([
             'values' => [],
             'copies' => 0,
-            'cards' => [['restriction' => 'no_single']],
+            'cards' => [['markings' => [['marking' => 'no_single']]]],
         ]);
     }
 

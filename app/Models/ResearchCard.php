@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
+use App\Support\CardMarking;
 use App\Support\EquationCard;
 use App\Support\IconFont;
 use Database\Factories\ResearchCardFactory;
@@ -37,13 +37,13 @@ use Illuminate\Support\Carbon;
  * @property int $value
  * @property ResearchZone $zone
  * @property int $position
- * @property ResearchCardRestriction|null $restriction
+ * @property array<int, array{marking: string, suit: string|null}>|null $markings
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Corporation|null $corporation
  */
 #[Fillable([
-    'game_id', 'corporation_id', 'suit', 'value', 'zone', 'position', 'restriction',
+    'game_id', 'corporation_id', 'suit', 'value', 'zone', 'position', 'markings',
 ])]
 class ResearchCard extends Model
 {
@@ -58,7 +58,7 @@ class ResearchCard extends Model
         return [
             'suit' => ResearchSuit::class,
             'zone' => ResearchZone::class,
-            'restriction' => ResearchCardRestriction::class,
+            'markings' => 'array',
         ];
     }
 
@@ -118,7 +118,17 @@ class ResearchCard extends Model
      */
     public function toEquationCard(bool $fromHand): EquationCard
     {
-        return new EquationCard($this->suit, $this->value, $fromHand, $this->restriction);
+        return new EquationCard($this->suit, $this->value, $fromHand, $this->markings());
+    }
+
+    /**
+     * What this card is printed with, as objects.
+     *
+     * @return array<int, CardMarking>
+     */
+    public function markings(): array
+    {
+        return CardMarking::listFrom($this->markings);
     }
 
     /**

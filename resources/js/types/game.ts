@@ -439,17 +439,26 @@ export type FacilityBoard = {
  * the first amount unless it is wild, and its value is the player's choice
  * inside the range.
  */
+/**
+ * One marking printed on a research card (rulebook 3.2.1, 3.2.3).
+ *
+ * `label` is the words on the card — "No single", "Other side must be Cog" —
+ * and `note` is what they do. Both travel because neither explains itself at
+ * the size a card tile is drawn, so the label is shown and the note is what a
+ * tooltip and a screen reader get.
+ */
+export type CardMarkingSummary = {
+    label: string;
+    note: string;
+};
+
 export type DeckGrant = {
     amounts: number[];
     value_min: number;
     value_max: number;
     wild: boolean;
-    /**
-     * The marking printed on the card, e.g. "No single" — which the rulebook
-     * prints and never defines. What it does is `restriction_note`.
-     */
-    restriction: string | null;
-    restriction_note: string | null;
+    /** What the card is printed with, if anything. */
+    markings: CardMarkingSummary[];
     requires_research_facilities: number;
 };
 
@@ -465,10 +474,8 @@ export type ResearchCardSummary = {
     wild: boolean;
     /** "7 Leaf", or "Wild 4". */
     label: string;
-    /** The marking printed on the card, e.g. "No single". */
-    restriction: string | null;
-    /** What that marking does. Shown where there is room; read out where not. */
-    restriction_note: string | null;
+    /** What the card is printed with — it may carry more than one. */
+    markings: CardMarkingSummary[];
     zone: 'deck' | 'hand' | 'pool' | 'spent';
     zone_label: string;
 };

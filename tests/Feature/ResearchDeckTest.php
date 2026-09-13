@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\GameStatus;
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
 use App\Enums\Tracker;
@@ -16,6 +15,7 @@ use App\Models\TechnologyType;
 use App\Models\User;
 use App\Services\ResearchTableService;
 use App\Services\TrackerService;
+use App\Support\CardMarking;
 use App\Support\FacilityTypeBlueprint;
 use App\Support\TechnologyBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -82,7 +82,7 @@ class ResearchDeckTest extends TestCase
                 'value_min' => 3,
                 'value_max' => 5,
                 'wild' => false,
-                'restriction' => null,
+                'markings' => [],
                 'requires_research_facilities' => 0,
                 ...$grant,
             ],
@@ -106,12 +106,12 @@ class ResearchDeckTest extends TestCase
         /** @var TechnologyType $first */
         $first = $this->game->technologyTypes()->where('code', 'RSR035')->sole();
 
-        $this->assertSame([
+        $this->assertEquals([
             'amounts' => [4],
             'value_min' => 3,
             'value_max' => 5,
             'wild' => false,
-            'restriction' => ResearchCardRestriction::NoSingle,
+            'markings' => [CardMarking::noSingle()],
             'requires_research_facilities' => 0,
         ], $first->deckGrant());
 
@@ -128,14 +128,14 @@ class ResearchDeckTest extends TestCase
     {
         $card = $this->table()->customiseDeck(
             $this->corporation,
-            $this->entry(['restriction' => ResearchCardRestriction::NoSingle->value]),
+            $this->entry(['markings' => CardMarking::listToArray([CardMarking::noSingle()])]),
             [ResearchSuit::Leaf],
             4,
         );
 
         $this->assertSame(ResearchSuit::Leaf, $card->suit);
         $this->assertSame(4, $card->value);
-        $this->assertSame(ResearchCardRestriction::NoSingle, $card->restriction);
+        $this->assertEquals([CardMarking::noSingle()], $card->markings());
         // Into the deck, not the hand: buying a card is not a free draw.
         $this->assertSame(ResearchZone::Deck, $card->zone);
         $this->assertSame($this->corporation->id, $card->corporation_id);
@@ -252,11 +252,11 @@ class ResearchDeckTest extends TestCase
             'zone' => ResearchZone::Deck,
         ]);
 
-        $this->table()->editCard($card, ResearchSuit::Brain, 8, ResearchCardRestriction::NoSingle);
+        $this->table()->editCard($card, ResearchSuit::Brain, 8, [CardMarking::noSingle()]);
 
         $this->assertSame(ResearchSuit::Brain, $card->refresh()->suit);
         $this->assertSame(8, $card->value);
-        $this->assertSame(ResearchCardRestriction::NoSingle, $card->restriction);
+        $this->assertEquals([CardMarking::noSingle()], $card->markings());
     }
 
     public function test_control_writes_a_deck_customisation_row_of_its_own(): void
@@ -279,7 +279,7 @@ class ResearchDeckTest extends TestCase
                     'value_min' => '3',
                     'value_max' => '5',
                     'wild' => '0',
-                    'restriction' => ResearchCardRestriction::NoSingle->value,
+                    'markings' => [['marking' => 'no_single']],
                     'requires_research_facilities' => '2',
                 ],
             ])
@@ -288,12 +288,12 @@ class ResearchDeckTest extends TestCase
         /** @var TechnologyType $written */
         $written = $this->game->technologyTypes()->where('name', 'Bespoke deck card')->sole();
 
-        $this->assertSame([
+        $this->assertEquals([
             'amounts' => [6, 3],
             'value_min' => 3,
             'value_max' => 5,
             'wild' => false,
-            'restriction' => ResearchCardRestriction::NoSingle,
+            'markings' => [CardMarking::noSingle()],
             'requires_research_facilities' => 2,
         ], $written->deckGrant());
     }
@@ -316,7 +316,7 @@ class ResearchDeckTest extends TestCase
                     'value_min' => '',
                     'value_max' => '',
                     'wild' => '0',
-                    'restriction' => '',
+                    'markings' => [],
                     'requires_research_facilities' => '',
                 ],
             ])

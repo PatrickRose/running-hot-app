@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 
 /**
@@ -17,25 +16,78 @@ use App\Enums\ResearchSuit;
  * A wild card carries no suit. "Some cards are marked as wild and can be used
  * as any type", so its suit is not unknown, it is whichever the set needs.
  *
- * A restriction is the third thing the rules need, and the only one that is not
- * printed as a number: a No single card cannot be the only card in its set.
+ * Markings are the third thing the rules need, and the only one not printed as
+ * a number. A card may carry more than one, and the two kinds pull in opposite
+ * directions: No single is about the set holding the card, Restricted about the
+ * set facing it.
  */
 final readonly class EquationCard
 {
     /**
      * @param  ResearchSuit|null  $suit  null for a wild card
      * @param  bool  $fromHand  false for one of the six public cards
-     * @param  ResearchCardRestriction|null  $restriction  the marking on the card, if it carries one
+     * @param  array<int, CardMarking>  $markings  what the card is printed with
      */
     public function __construct(
         public ?ResearchSuit $suit,
         public int $value,
         public bool $fromHand = false,
-        public ?ResearchCardRestriction $restriction = null,
+        public array $markings = [],
     ) {}
 
     public function isWild(): bool
     {
         return $this->suit === null;
+    }
+
+    /**
+     * The fewest cards this card will tolerate in its own set.
+     *
+     * The strictest marking wins, so a card printed with two of them is held to
+     * both rather than to whichever was read last.
+     */
+    public function minimumSetSize(): int
+    {
+        $minimum = 1;
+
+        foreach ($this->markings as $marking) {
+            $minimum = max($minimum, $marking->minimumSetSize());
+        }
+
+        return $minimum;
+    }
+
+    /**
+     * The marking that forces this card's own set to be wider, if one does.
+     */
+    public function tooLonelyIn(int $setSize): ?CardMarking
+    {
+        foreach ($this->markings as $marking) {
+            if ($setSize < $marking->minimumSetSize()) {
+                return $marking;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every suit this card demands of the far side of the equation.
+     *
+     * @return array<int, ResearchSuit>
+     */
+    public function demandsOfTheOtherSide(): array
+    {
+        $suits = [];
+
+        foreach ($this->markings as $marking) {
+            $suit = $marking->demandsOfTheOtherSide();
+
+            if ($suit !== null) {
+                $suits[$suit->value] = $suit;
+            }
+        }
+
+        return array_values($suits);
     }
 }

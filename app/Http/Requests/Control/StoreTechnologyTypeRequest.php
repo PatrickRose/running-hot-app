@@ -2,9 +2,10 @@
 
 namespace App\Http\Requests\Control;
 
-use App\Enums\ResearchCardRestriction;
+use App\Http\Requests\ShapesCardMarkings;
 use App\Models\Game;
 use App\Models\TechnologyType;
+use App\Support\CardMarking;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,6 +19,8 @@ use Illuminate\Validation\Rule;
  */
 class StoreTechnologyTypeRequest extends FormRequest
 {
+    use ShapesCardMarkings;
+
     public function authorize(): bool
     {
         return $this->user()?->isControl() ?? false;
@@ -86,9 +89,9 @@ class StoreTechnologyTypeRequest extends FormRequest
             'value_min' => $minimum,
             'value_max' => max($minimum, (int) ($grant['value_max'] ?? $minimum)),
             'wild' => filter_var($grant['wild'] ?? false, FILTER_VALIDATE_BOOL),
-            'restriction' => ResearchCardRestriction::tryFrom(
-                trim((string) ($grant['restriction'] ?? ''))
-            )?->value,
+            'markings' => CardMarking::listToArray(
+                $this->shapeMarkings($this->filterBlankMarkings($grant['markings'] ?? null))
+            ),
             'requires_research_facilities' => max(0, (int) ($grant['requires_research_facilities'] ?? 0)),
         ];
     }
@@ -153,7 +156,7 @@ class StoreTechnologyTypeRequest extends FormRequest
             'deck_grant.value_min' => ['required_with:deck_grant', 'integer', 'min:1', 'max:99'],
             'deck_grant.value_max' => ['required_with:deck_grant', 'integer', 'min:1', 'max:99'],
             'deck_grant.wild' => ['required_with:deck_grant', 'boolean'],
-            'deck_grant.restriction' => ['nullable', Rule::enum(ResearchCardRestriction::class)],
+            ...$this->markingRules('deck_grant.markings'),
             'deck_grant.requires_research_facilities' => ['required_with:deck_grant', 'integer', 'min:0', 'max:50'],
 
             'notes' => ['nullable', 'string', 'max:2000'],

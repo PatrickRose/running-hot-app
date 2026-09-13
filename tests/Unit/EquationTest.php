@@ -3,8 +3,8 @@
 namespace Tests\Unit;
 
 use App\Enums\EquationSide;
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
+use App\Support\CardMarking;
 use App\Support\Equation;
 use App\Support\EquationCard;
 use Illuminate\Validation\ValidationException;
@@ -120,7 +120,7 @@ class EquationTest extends TestCase
         $this->expectException(ValidationException::class);
 
         $this->equation(
-            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, restriction: ResearchCardRestriction::NoSingle)],
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: [CardMarking::noSingle()])],
             [$this->card(ResearchSuit::Maths, 3)],
         )->validate();
     }
@@ -129,7 +129,7 @@ class EquationTest extends TestCase
     {
         $this->assertTrue($this->equation(
             [
-                $this->card(ResearchSuit::Leaf, 3, fromHand: true, restriction: ResearchCardRestriction::NoSingle),
+                $this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: [CardMarking::noSingle()]),
                 $this->card(ResearchSuit::Leaf, 4),
             ],
             [$this->card(ResearchSuit::Maths, 5), $this->card(ResearchSuit::Maths, 2)],
@@ -145,8 +145,138 @@ class EquationTest extends TestCase
 
         $this->equation(
             [$this->card(ResearchSuit::Leaf, 3, fromHand: true)],
-            [$this->card(ResearchSuit::Maths, 3, restriction: ResearchCardRestriction::NoSingle)],
+            [$this->card(ResearchSuit::Maths, 3, markings: [CardMarking::noSingle()])],
         )->validate();
+    }
+
+    public function test_a_restricted_card_forces_the_far_side_to_its_suit(): void
+    {
+        // "Other side must be Cog" is about the set facing the card rather than
+        // the set holding it, which is the whole difference between the two
+        // markings the game prints.
+        $this->expectException(ValidationException::class);
+
+        $this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: [
+                CardMarking::restrictedTo(ResearchSuit::Cog),
+            ])],
+            [$this->card(ResearchSuit::Maths, 3)],
+        )->validate();
+    }
+
+    public function test_a_restricted_card_is_happy_when_the_far_side_obeys(): void
+    {
+        $this->assertTrue($this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: [
+                CardMarking::restrictedTo(ResearchSuit::Cog),
+            ])],
+            [$this->card(ResearchSuit::Cog, 3)],
+        )->isValid());
+    }
+
+    public function test_a_restricted_card_says_nothing_about_its_own_side(): void
+    {
+        // The card itself is Leaf and demands Cog of the other side: it is not
+        // demanding anything of the set it is sitting in.
+        $this->assertTrue($this->equation(
+            [
+                $this->card(ResearchSuit::Leaf, 1, fromHand: true, markings: [
+                    CardMarking::restrictedTo(ResearchSuit::Cog),
+                ]),
+                $this->card(ResearchSuit::Leaf, 2),
+            ],
+            [$this->card(ResearchSuit::Cog, 1), $this->card(ResearchSuit::Cog, 2)],
+        )->isValid());
+    }
+
+    public function test_a_restricted_card_pins_a_wild_set_to_the_suit_it_names(): void
+    {
+        // A set of nothing but wilds could be any suit, so the marking decides
+        // it - and that has to hold at scoring time as well as at validation,
+        // or the player would be paid in a suit the equation could not be.
+        $equation = $this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: [
+                CardMarking::restrictedTo(ResearchSuit::Cog),
+            ])],
+            [$this->card(null, 3)],
+        );
+
+        $this->assertTrue($equation->isValid());
+        $this->assertSame(
+            [ResearchSuit::Cog],
+            $equation->suitsFor(EquationSide::Right),
+        );
+
+        $award = $equation->award(EquationSide::Right, ResearchSuit::Cog, [
+            ResearchSuit::Cog->value => 1,
+        ]);
+
+        $this->assertSame(4, $award[ResearchSuit::Cog->value]);
+    }
+
+    public function test_a_wild_set_pinned_by_a_marking_cannot_be_paid_in_another_suit(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: [
+                CardMarking::restrictedTo(ResearchSuit::Cog),
+            ])],
+            [$this->card(null, 3)],
+        )->award(EquationSide::Right, ResearchSuit::Maths, [
+            ResearchSuit::Maths->value => 1,
+        ]);
+    }
+
+    public function test_two_restricted_cards_naming_different_suits_cannot_both_be_met(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->equation(
+            [
+                $this->card(ResearchSuit::Leaf, 1, fromHand: true, markings: [
+                    CardMarking::restrictedTo(ResearchSuit::Cog),
+                ]),
+                $this->card(ResearchSuit::Leaf, 2, markings: [
+                    CardMarking::restrictedTo(ResearchSuit::Brain),
+                ]),
+            ],
+            [$this->card(null, 1), $this->card(null, 2)],
+        )->validate();
+    }
+
+    public function test_a_card_carries_both_markings_at_once(): void
+    {
+        // The two are about different halves of the equation, so a card may be
+        // printed with both and is held to both.
+        $markings = [
+            CardMarking::noSingle(),
+            CardMarking::restrictedTo(ResearchSuit::Cog),
+        ];
+
+        // Alone in its own set: refused by No single.
+        $this->assertFalse($this->equation(
+            [$this->card(ResearchSuit::Leaf, 3, fromHand: true, markings: $markings)],
+            [$this->card(ResearchSuit::Cog, 3)],
+        )->isValid());
+
+        // In company, but facing the wrong suit: refused by Restricted.
+        $this->assertFalse($this->equation(
+            [
+                $this->card(ResearchSuit::Leaf, 1, fromHand: true, markings: $markings),
+                $this->card(ResearchSuit::Leaf, 2),
+            ],
+            [$this->card(ResearchSuit::Maths, 1), $this->card(ResearchSuit::Maths, 2)],
+        )->isValid());
+
+        // Both satisfied.
+        $this->assertTrue($this->equation(
+            [
+                $this->card(ResearchSuit::Leaf, 1, fromHand: true, markings: $markings),
+                $this->card(ResearchSuit::Leaf, 2),
+            ],
+            [$this->card(ResearchSuit::Cog, 1), $this->card(ResearchSuit::Cog, 2)],
+        )->isValid());
     }
 
     public function test_an_unmarked_card_may_be_alone_in_its_set(): void
@@ -319,12 +449,15 @@ class EquationTest extends TestCase
         return new Equation($left, $right);
     }
 
+    /**
+     * @param  array<int, CardMarking>  $markings
+     */
     private function card(
         ?ResearchSuit $suit,
         int $value,
         bool $fromHand = false,
-        ?ResearchCardRestriction $restriction = null,
+        array $markings = [],
     ): EquationCard {
-        return new EquationCard($suit, $value, $fromHand, $restriction);
+        return new EquationCard($suit, $value, $fromHand, $markings);
     }
 }

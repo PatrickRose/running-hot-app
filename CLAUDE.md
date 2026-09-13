@@ -675,11 +675,13 @@ would bury the parts that are not. `cards` is those parts, an entry at a time: a
 card printed with a marking, a wild worth something other than the rest of them,
 two 3s against one 5. An entry naming no suit means one in each of the four,
 which is what a value in the shape means as well; `wild => true` is the card of
-no suit. Without `cards` a seeded deck could hold no marking at all, so the only
-"No single" card that could ever reach a game was one bought off the tech tree.
-A suit or a marking the application does not have stops the seed rather than
-being written as a null: a card that quietly lost its "No single" would go on
-being playable alone for the rest of the game, and nothing would say why.
+no suit, and `markings` is the list of what it is printed with. Without `cards` a
+seeded deck could hold no marking at all, so the only "No single" card that could
+ever reach a game was one bought off the tech tree. A suit or a marking the
+application does not have stops the seed rather than being written as a null, and
+so does a Restricted naming no suit: a card that quietly lost half its marking
+would go on being played wrongly for the rest of the game, and nothing would say
+why.
 
 **A card is a row, not a type.** A research card is a suit and a value and
 nothing else, so there is no catalogue to point at — two 3-of-Leaf cards are two
@@ -688,19 +690,44 @@ without either touching its twin. A null suit is a wild card rather than a
 missing one, and it draws the icon font's `Y`, which was drawn for this and had
 nothing to show it until now.
 
-**"No single" means the card cannot be alone in its set**, so the side of the
-equation holding it needs at least two cards. Two of the deck customisation rows
-sell a card printed with those words and the rulebook defines them nowhere — this
-is the designer's ruling rather than a reading, which is why it is written down
-here and in `App\Enums\ResearchCardRestriction` rather than inferred from
-anything.
+**A card carries two kinds of marking, and they are about opposite halves of the
+equation.** "No single" is about the set holding the card: it cannot be the only
+card there. "Restricted" is about the set facing it: the card names a suit and
+the other side has to be that suit, printed as "Other side must be Cog". The
+rulebook prints both and defines neither, so both are the designer's ruling
+rather than a reading — which is why they are written down here and in
+`App\Enums\ResearchCardMarking` rather than inferred from anything.
 
-**A card's marking is an enum, not the text it started as.** The equation rules
-act on it now, and a rule keyed off a string somebody typed breaks on a capital
-letter — so `restriction` holds a key and `label()` holds the printed words. That
+**A card carries a *list* of them, because nothing stops it printing both.** So
+`research_cards.markings` is json rather than a column, and `App\Support\CardMarking`
+is the pair of a kind and — where the kind needs one — the suit it names. The
+enum on its own is not a whole marking: a Restricted with no suit is a rule that
+would silently check nothing, so the value object's constructor refuses one and
+so does the deck seeder. Where the *strictest* marking should win, it does:
+`EquationCard::minimumSetSize()` takes the maximum rather than the last one read.
+
+**Restricted narrows `suitsFor()` rather than only being checked in `validate()`.**
+That is what makes it come out right at scoring time as well: a set of nothing
+but wilds facing "Other side must be Cog" *is* Cog, so Cog is what it pays in and
+nothing else can be claimed for it. Validation still reports the failure
+separately, against the *printed* suits, so the message names the card that did
+the restricting instead of calling the far set mixed. Two cards demanding
+different suits of the same set each look satisfiable alone — an all-wild set
+could be either — so the clash is caught by the narrowed set coming out empty,
+which is a check of its own.
+
+**A marking is an enum, not the text it started as.** The equation rules act on
+it, and a rule keyed off a string somebody typed breaks on a capital letter. That
 also makes it a choice rather than a free-text box wherever Control sets one: a
-marking the rules could not enforce would be worse on a card than no marking.
-Adding a second marking is a case, a `minimumSetSize()` and nothing else.
+marking the rules could not enforce would be worse on a card than no marking. A
+third marking is a case, a `minimumSetSize()` or a `demandsOfTheOtherSide()`, and
+a line in `CardMarking`.
+
+**A blank slot on a form is not a half-written marking.** The marking form has a
+slot per kind and an untouched Restricted posts an empty suit, so
+`ShapesCardMarkings::filterBlankMarkings()` drops it at the HTTP edge — while
+`CardMarking` and the deck seeder still refuse one, because in a config file
+somebody wrote by hand a blank suit really is a mistake.
 
 **Deck customisation is priced on the tree, and prices unlike anything else on
 it.** "4 research credits in any suit", "6 in any suit and 3 in another", "5 from

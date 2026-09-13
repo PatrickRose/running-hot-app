@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Enums\EquationSide;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
@@ -19,6 +18,7 @@ use App\Models\ResearchSession;
 use App\Models\TrackerAdjustment;
 use App\Services\ResearchTableService;
 use App\Services\TurnEngine;
+use App\Support\CardMarking;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -198,7 +198,7 @@ class ResearchTableTest extends TestCase
 
         [$hand, $pool] = $this->stack($corporation, ResearchSuit::Leaf, 3, ResearchSuit::Maths, 3);
 
-        $hand->forceFill(['restriction' => ResearchCardRestriction::NoSingle])->save();
+        $hand->forceFill(['markings' => CardMarking::listToArray([CardMarking::noSingle()])])->save();
 
         try {
             $this->table()->play($session, $corporation, [$hand->id], [$pool->id]);
@@ -226,7 +226,7 @@ class ResearchTableTest extends TestCase
         $hand[0]->forceFill([
             'suit' => ResearchSuit::Leaf,
             'value' => 3,
-            'restriction' => ResearchCardRestriction::NoSingle,
+            'markings' => CardMarking::listToArray([CardMarking::noSingle()]),
         ])->save();
         $hand[1]->forceFill(['suit' => ResearchSuit::Leaf, 'value' => 1])->save();
         $pool[0]->forceFill(['suit' => ResearchSuit::Maths, 'value' => 2])->save();
@@ -245,10 +245,10 @@ class ResearchTableTest extends TestCase
         // The marking is kept in the snapshot, so an equation still reads as
         // the equation that was played once its cards have been gathered back.
         $this->assertSame(
-            ResearchCardRestriction::NoSingle->value,
-            $equation->left_cards[0]['restriction'],
+            [['marking' => 'no_single', 'suit' => null]],
+            $equation->left_cards[0]['markings'],
         );
-        $this->assertNull($equation->left_cards[1]['restriction']);
+        $this->assertSame([], $equation->left_cards[1]['markings']);
     }
 
     public function test_a_corporation_whose_deck_runs_dry_leaves_the_table(): void

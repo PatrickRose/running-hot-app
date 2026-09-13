@@ -326,8 +326,7 @@ class ResearchPresenter
 
         return [
             ...$grant,
-            'restriction' => $grant['restriction']?->label(),
-            'restriction_note' => $grant['restriction']?->description(),
+            'markings' => self::markings($grant['markings']),
         ];
     }
 
@@ -415,12 +414,11 @@ class ResearchPresenter
                 'value' => $card->value,
                 'wild' => $card->isWild(),
                 'label' => $card->label(),
-                // The words on the card, and what they do. Both, because "No
-                // single" is not self-explanatory and the tile has room for
-                // three characters: the label is drawn and the note is what a
-                // screen reader and a tooltip get.
-                'restriction' => $card->restriction?->label(),
-                'restriction_note' => $card->restriction?->description(),
+                // The words on the card, and what they do. Both, because
+                // neither marking is self-explanatory and the tile has room
+                // for a few characters: the label is drawn and the note is
+                // what a screen reader and a tooltip get.
+                'markings' => self::markings($card->markings()),
                 'zone' => $card->zone->value,
                 'zone_label' => $card->zone->label(),
             ];
@@ -511,5 +509,23 @@ class ResearchPresenter
     {
         return $user->corporationIn($game, CharacterRole::Research)
             ?? $user->corporationIn($game);
+    }
+
+    /**
+     * What a card is printed with, as the page needs it.
+     *
+     * Both halves travel: the label is the words on the card and the note is
+     * what they do, because neither "No single" nor "Other side must be Cog"
+     * explains itself at the size a card tile is drawn.
+     *
+     * @param  array<int, CardMarking>  $markings
+     * @return array<int, array{label: string, note: string}>
+     */
+    private static function markings(array $markings): array
+    {
+        return array_values(array_map(fn (CardMarking $marking): array => [
+            'label' => $marking->label(),
+            'note' => $marking->description(),
+        ], $markings));
     }
 }

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
 use App\Support\CardImage;
+use App\Support\CardMarking;
 use App\Support\TechnologyBlueprint;
 use Database\Factories\TechnologyTypeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -228,7 +228,7 @@ class TechnologyType extends Model
      *     value_min: int,
      *     value_max: int,
      *     wild: bool,
-     *     restriction: ResearchCardRestriction|null,
+     *     markings: array<int, CardMarking>,
      *     requires_research_facilities: int,
      * }|null
      */
@@ -245,7 +245,7 @@ class TechnologyType extends Model
             'value_min' => (int) ($grant['value_min'] ?? 1),
             'value_max' => (int) ($grant['value_max'] ?? 1),
             'wild' => (bool) ($grant['wild'] ?? false),
-            'restriction' => ResearchCardRestriction::tryFrom((string) ($grant['restriction'] ?? '')),
+            'markings' => CardMarking::listFrom($grant['markings'] ?? []),
             'requires_research_facilities' => (int) ($grant['requires_research_facilities'] ?? 0),
         ];
     }

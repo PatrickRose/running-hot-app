@@ -235,25 +235,54 @@ export function TechnologyForm({
                             </div>
                             <div className="grid gap-1">
                                 <Label
-                                    htmlFor="technology-restriction"
+                                    htmlFor="technology-restricted-suit"
                                     className="text-xs"
                                 >
                                     Printed on the card
                                 </Label>
-                                {/* A list rather than a text field: the
-                                    equation rules act on this, and a marking
+                                {/* Choices rather than text fields: the
+                                    equation rules act on these, and a marking
                                     they cannot enforce would be worse on the
-                                    card than no marking at all. */}
+                                    card than no marking at all.
+
+                                    A slot per marking, because the two are
+                                    about different halves of the equation and
+                                    a card may carry both. Restricted names the
+                                    suit it demands, so the suit *is* the
+                                    choice — its kind rides along hidden, and
+                                    the request drops the pair when no suit is
+                                    picked. */}
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input
+                                        type="checkbox"
+                                        name="deck_grant[markings][0][marking]"
+                                        value="no_single"
+                                        className="size-4"
+                                    />
+                                    No single — cannot be alone in its set
+                                </label>
+                                <input
+                                    type="hidden"
+                                    name="deck_grant[markings][1][marking]"
+                                    value="restricted"
+                                />
                                 <select
-                                    id="technology-restriction"
-                                    name="deck_grant[restriction]"
+                                    id="technology-restricted-suit"
+                                    name="deck_grant[markings][1][suit]"
                                     defaultValue=""
                                     className={SELECT_CLASS}
                                 >
-                                    <option value="">No marking</option>
-                                    <option value="no_single">
-                                        No single — cannot be alone in its set
+                                    <option value="">
+                                        No restriction on the other side
                                     </option>
+                                    {suits.map((suit) => (
+                                        <option
+                                            key={suit.value}
+                                            value={suit.value}
+                                        >
+                                            Other side must be {suit.label}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                         </div>

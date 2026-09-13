@@ -20,12 +20,19 @@ use Illuminate\Validation\ValidationException;
  * number of cards. It is written "7 Leaf / 3 Maths", which is why the two sets
  * are called left and right rather than being numbered.
  *
- * A card may also carry a marking that limits how it is played: a No single
- * card cannot be the only card in its set. That is the one rule here the
- * rulebook does not state - it prints the marking on two of the cards deck
- * customisation sells and never says what it means - so it is the designer's
- * ruling rather than a reading, and it lives in
- * App\Enums\ResearchCardRestriction.
+ * A card may also carry markings that limit how it is played, and the two kinds
+ * pull in opposite directions. **No single** is about the set holding the card:
+ * it cannot be the only card there. **Restricted** is about the set facing it:
+ * the card names a suit and the other side has to be that suit. A card may be
+ * printed with both. Neither rule is one the rulebook states - it prints the
+ * markings and never says what they mean - so both are the designer's ruling
+ * rather than a reading, and they live in App\Enums\ResearchCardMarking and
+ * App\Support\CardMarking.
+ *
+ * Restricted narrows suitsFor() rather than only being checked in validate(),
+ * which is what makes it fall out correctly at scoring time too: a set of
+ * nothing but wilds facing a card marked "Other side must be Cog" is Cog, so it
+ * is Cog that it pays in.
  *
  * Scoring is two separate payments and they follow different rules:
  *
@@ -91,7 +98,7 @@ class Equation
         }
 
         foreach (EquationSide::all() as $side) {
-            if ($this->suitsFor($side) === []) {
+            if ($this->printedSuitsFor($side) === []) {
                 throw ValidationException::withMessages([
                     'equation' => sprintf(
                         'The %s side mixes suits. Every card in a set has to be the same type of research.',
@@ -105,19 +112,66 @@ class Equation
             $cards = $this->side($side);
 
             foreach ($cards as $card) {
-                $minimum = $card->restriction?->minimumSetSize() ?? 1;
+                $lonely = $card->tooLonelyIn(count($cards));
 
-                if (count($cards) < $minimum) {
+                if ($lonely !== null) {
                     throw ValidationException::withMessages([
                         'equation' => sprintf(
                             'A card marked "%s" needs at least %d cards in its set: %s',
-                            $card->restriction->label(),
-                            $minimum,
-                            lcfirst($card->restriction->description()),
+                            $lonely->label(),
+                            $lonely->minimumSetSize(),
+                            lcfirst($lonely->description()),
                         ),
                     ]);
                 }
             }
+        }
+
+        // Checked against the far side's own suits rather than against the
+        // narrowed ones, so the message names the card that did the
+        // restricting instead of reporting the set as mixed.
+        foreach (EquationSide::all() as $side) {
+            $facing = $this->printedSuitsFor($side->other());
+
+            foreach ($this->side($side) as $card) {
+                foreach ($card->demandsOfTheOtherSide() as $demanded) {
+                    if (! in_array($demanded, $facing, true)) {
+                        throw ValidationException::withMessages([
+                            'equation' => sprintf(
+                                'A card on the %s side is marked "Other side must be %s", and the %s side is not.',
+                                strtolower($side->label()),
+                                $demanded->label(),
+                                strtolower($side->other()->label()),
+                            ),
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // Each demand above was met on its own, which is not the same as all
+        // of them being met at once: two cards naming different suits of a set
+        // of wilds each look satisfiable and cannot both be.
+        foreach (EquationSide::all() as $side) {
+            if ($this->suitsFor($side) !== []) {
+                continue;
+            }
+
+            $demanded = [];
+
+            foreach ($this->side($side->other()) as $card) {
+                foreach ($card->demandsOfTheOtherSide() as $suit) {
+                    $demanded[$suit->value] = $suit->label();
+                }
+            }
+
+            throw ValidationException::withMessages([
+                'equation' => sprintf(
+                    'The %s side is asked to be two different suits at once: %s.',
+                    strtolower($side->label()),
+                    implode(' and ', array_values($demanded)),
+                ),
+            ]);
         }
 
         if (! $this->usesAHandCard()) {
@@ -142,7 +196,34 @@ class Equation
     }
 
     /**
-     * The suits one side may count as.
+     * The suits one side may count as, once the other side has had its say.
+     *
+     * Every card marked "Other side must be Cog" narrows the far set to Cog, so
+     * a set of nothing but wilds facing one is Cog and pays in Cog. Two such
+     * cards naming different suits narrow it to nothing, which is an equation
+     * that cannot be played - validate() says which card did it before this
+     * reports the set as mixed.
+     *
+     * @return array<int, ResearchSuit>
+     */
+    public function suitsFor(EquationSide $side): array
+    {
+        $suits = $this->printedSuitsFor($side);
+
+        foreach ($this->side($side->other()) as $card) {
+            foreach ($card->demandsOfTheOtherSide() as $demanded) {
+                $suits = array_values(array_filter(
+                    $suits,
+                    fn (ResearchSuit $suit): bool => $suit === $demanded,
+                ));
+            }
+        }
+
+        return $suits;
+    }
+
+    /**
+     * The suits a side could be from its own cards alone.
      *
      * One suit for a set with any real card in it, all four for a set that is
      * nothing but wilds, and none at all for a set that mixes suits - which is
@@ -150,7 +231,7 @@ class Equation
      *
      * @return array<int, ResearchSuit>
      */
-    public function suitsFor(EquationSide $side): array
+    public function printedSuitsFor(EquationSide $side): array
     {
         $suits = [];
 

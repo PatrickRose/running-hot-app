@@ -2,8 +2,9 @@
 
 namespace App\Http\Requests\Control;
 
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchSuit;
+use App\Http\Requests\ShapesCardMarkings;
+use App\Support\CardMarking;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,12 +15,22 @@ use Illuminate\Validation\Rule;
  * cards are marked as wild and can be used as any type" - which is why the
  * field is nullable rather than required.
  *
- * A restriction is a choice rather than free text, because the equation rules
- * act on it: a marking they could not enforce would be worse on the card than
- * no marking at all.
+ * A marking is a choice rather than free text, because the equation rules act
+ * on it: a marking they could not enforce would be worse on the card than no
+ * marking at all. A card may carry more than one - the two the game prints are
+ * about different halves of the equation - so this takes a list.
  */
 class UpdateResearchCardRequest extends FormRequest
 {
+    use ShapesCardMarkings;
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'markings' => $this->filterBlankMarkings($this->input('markings')),
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -28,7 +39,18 @@ class UpdateResearchCardRequest extends FormRequest
         return [
             'suit' => ['nullable', Rule::enum(ResearchSuit::class)],
             'value' => ['required', 'integer', 'min:1', 'max:99'],
-            'restriction' => ['nullable', Rule::enum(ResearchCardRestriction::class)],
+            ...$this->markingRules(),
         ];
+    }
+
+    /**
+     * @return array<int, CardMarking>
+     */
+    public function markings(): array
+    {
+        /** @var array<int, mixed> $submitted */
+        $submitted = $this->input('markings', []);
+
+        return $this->shapeMarkings($submitted);
     }
 }

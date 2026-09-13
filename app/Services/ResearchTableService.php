@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Actions\SeedResearchDecks;
 use App\Enums\EquationSide;
-use App\Enums\ResearchCardRestriction;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
@@ -18,6 +17,7 @@ use App\Models\ResearchSession;
 use App\Models\TechnologyType;
 use App\Models\Turn;
 use App\Models\User;
+use App\Support\CardMarking;
 use App\Support\Equation;
 use App\Support\EquationCard;
 use App\Support\FacilityTypeBlueprint;
@@ -584,7 +584,7 @@ class ResearchTableService
                 'value' => $value,
                 'zone' => ResearchZone::Deck,
                 'position' => 0,
-                'restriction' => $grant['restriction'],
+                'markings' => CardMarking::listToArray($grant['markings']),
             ]);
 
             $this->shuffleDeck($corporation->game, $corporation);
@@ -602,11 +602,14 @@ class ResearchTableService
      * Research Control names a price, takes the points with the tracker
      * controls, and edits the card here.
      */
+    /**
+     * @param  array<int, CardMarking>  $markings
+     */
     public function editCard(
         ResearchCard $card,
         ?ResearchSuit $suit,
         int $value,
-        ?ResearchCardRestriction $restriction = null,
+        array $markings = [],
     ): ResearchCard {
         if ($value < 1) {
             throw ValidationException::withMessages([
@@ -617,7 +620,7 @@ class ResearchTableService
         $card->forceFill([
             'suit' => $suit,
             'value' => $value,
-            'restriction' => $restriction,
+            'markings' => CardMarking::listToArray($markings),
         ])->save();
 
         return $card;
@@ -882,7 +885,7 @@ class ResearchTableService
      * The cards of one side, as they were when they were played.
      *
      * @param  array<int, ResearchCard>  $cards
-     * @return array<int, array{suit: string|null, value: int, from_hand: bool, restriction: string|null}>
+     * @return array<int, array{suit: string|null, value: int, from_hand: bool, markings: array<int, array{marking: string, suit: string|null}>}>
      */
     private function snapshot(array $cards): array
     {
@@ -890,7 +893,7 @@ class ResearchTableService
             'suit' => $card->suit?->value,
             'value' => $card->value,
             'from_hand' => ! $card->isPublic(),
-            'restriction' => $card->restriction?->value,
+            'markings' => CardMarking::listToArray($card->markings()),
         ], $cards);
     }
 
