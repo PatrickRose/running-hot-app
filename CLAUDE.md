@@ -260,6 +260,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | The rules of an equation, and what one pays | `App\Support\Equation` |
 | The research card game: dealing, playing, scoring, the deck | `App\Services\ResearchTableService` |
 | A game's starting research decks | `config/running_hot.php`, `App\Actions\SeedResearchDecks` |
+| The technologies a Corporation opens holding | `App\Support\TechnologyBlueprint`, `App\Actions\GrantStartingTechnologies` |
 | Spending Research Points, and everything after | `App\Services\TechnologyService` |
 | Research payload shaping | `App\Support\ResearchPresenter` |
 | The research table on screen | `resources/js/components/research-table.tsx` |
@@ -706,6 +707,32 @@ this technology can be placed in, you may not research them." Storage is 2 for
 every *Corporate* Facility the Corporation owns, so a Corporation with none can
 store nothing at all — which reads oddly until you notice it is exactly what "2
 multiplied by the number of Corporate Facilities you have" says.
+
+**A Corporation opens the game already holding technologies.** Twenty across the
+five, and they are the shape of each Corporation's position rather than a bonus:
+ANT's four pieces of Power, DTC's four of Arms, Genetic Equity's four of Miracle
+Genetics, McCullough's Factory and Construction Leader, and Gordon's three plot
+hooks. `App\Actions\GrantStartingTechnologies` runs from
+`CreateDefaultFacilities`, after the Facilities exist, because 3.2.2 houses every
+technology in a Facility and a starting card sitting nowhere would have the
+storage count wrong from the first turn. It writes a starting position rather
+than a change, exactly as the Facilities do: the cards are free, nothing goes
+through `TrackerService`, and no Research Points move because none were spent.
+Origin is **Researched**, which is what lets 3.2.7 give ANT a working Power on any
+single piece — a Corporation that stole one needs all four. Each card goes in the
+emptiest Facility that will take it, so four pieces of Power are not all in one
+building for one Run to take, and a card naming a Facility type goes in that type.
+
+**Which technologies those are is a column, because neither of the obvious
+markers works.** They cost nothing in every suit — but so do fourteen others, the
+six deck customisation rows among them. Seventeen of the twenty carry the words
+"Starting tech" in their description — but Gordon's three (`RGR094`–`RGR096`) carry
+real descriptions, and reading the marker off that column handed Gordon nothing.
+So `technology_types.starting` says it outright, seeded from
+`TechnologyBlueprint`, which also lets Control mark one on a Corporation they
+invented mid-game. A Corporation with nowhere to house one is *reported* by the
+action rather than thrown: a roster Control built with no Corporate Facility can
+store nothing at all, and that must not stop a game being created.
 
 **A copy is a discount, not a technology.** A card Research Control made for a
 partner (3.2.5) or a Run brought back (3.2.6) is a `technology_holdings` row with

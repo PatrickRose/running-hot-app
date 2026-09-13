@@ -304,6 +304,7 @@ class ResearchPresenter
             'split_group' => $type->split_group,
             'split_piece' => $type->split_piece,
             'split_pieces' => $type->split_pieces,
+            'starting' => $type->isStarting(),
             'is_deck_customisation' => $type->isDeckCustomisation(),
             'deck_grant' => $this->deckGrant($type),
         ];

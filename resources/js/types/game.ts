@@ -590,6 +590,8 @@ export type ResearchTechnologySummary = TechnologySummary & {
     split_group: string | null;
     split_piece: number | null;
     split_pieces: number | null;
+    /** A technology the Corporation opened the game already holding (3.2.2). */
+    starting: boolean;
     is_deck_customisation: boolean;
     deck_grant: DeckGrant | null;
 };

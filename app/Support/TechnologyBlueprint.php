@@ -93,6 +93,7 @@ class TechnologyBlueprint
      *     copy_strength: int|null,
      *     destroy_strength: int|null,
      *     deck_grant: array<string, mixed>|null,
+     *     starting: bool,
      * }>
      */
     public static function defaults(): array
@@ -306,6 +307,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR036',
@@ -315,6 +317,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR037',
@@ -324,6 +327,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR038',
@@ -333,6 +337,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR057',
@@ -418,6 +423,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR040',
@@ -427,6 +433,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR041',
@@ -436,6 +443,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR042',
@@ -445,6 +453,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR058',
@@ -682,6 +691,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR044',
@@ -691,6 +701,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR045',
@@ -700,6 +711,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR046',
@@ -709,6 +721,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR047',
@@ -984,18 +997,21 @@ class TechnologyBlueprint
                 name: 'Genetic Equity story',
                 tree: self::GORDON,
                 description: 'Rosales seems to be hiding something',
+                starting: true,
             ),
             self::technology(
                 code: 'RGR095',
                 name: 'Skarlo',
                 tree: self::GORDON,
                 description: 'A freelancer is looking for Skarlo',
+                starting: true,
             ),
             self::technology(
                 code: 'RGR096',
                 name: 'Slow roll',
                 tree: self::GORDON,
                 description: 'There’s rumours of a new virus being created',
+                starting: true,
             ),
             self::technology(
                 code: 'RMR002',
@@ -1112,6 +1128,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Factory facility. Unlock: Mini-factory facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR013',
@@ -1121,6 +1138,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Factory facility. Unlock: Mini-factory facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR014',
@@ -1130,6 +1148,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Factory facility. Unlock: Mini-factory facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR015',
@@ -1141,6 +1160,7 @@ class TechnologyBlueprint
                 requiresFacility: FacilityTypeBlueprint::FACTORY,
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR016',
@@ -1152,6 +1172,7 @@ class TechnologyBlueprint
                 requiresFacility: FacilityTypeBlueprint::FACTORY,
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR101',
@@ -1638,6 +1659,7 @@ class TechnologyBlueprint
      * @param  array<string, int>  $cost
      * @param  array<int, string>  $prerequisites
      * @param  array<string, mixed>|null  $deckGrant
+     * @param  bool  $starting  a technology the Corporation opens the game holding
      * @return array{
      *     code: string,
      *     name: string,
@@ -1656,6 +1678,7 @@ class TechnologyBlueprint
      *     copy_strength: int|null,
      *     destroy_strength: int|null,
      *     deck_grant: array<string, mixed>|null,
+     *     starting: bool,
      * }
      */
     private static function technology(
@@ -1670,6 +1693,7 @@ class TechnologyBlueprint
         ?int $copyStrength = null,
         ?int $destroyStrength = null,
         ?array $deckGrant = null,
+        bool $starting = false,
     ): array {
         return [
             'code' => $code,
@@ -1687,6 +1711,7 @@ class TechnologyBlueprint
             'copy_strength' => $copyStrength,
             'destroy_strength' => $destroyStrength,
             'deck_grant' => $deckGrant,
+            'starting' => $starting,
         ];
     }
 

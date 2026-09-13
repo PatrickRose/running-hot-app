@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Actions\SeedTechnologies;
 use App\Enums\ResearchSuit;
 use App\Enums\TechnologyHoldingStatus;
 use App\Enums\TechnologyOrigin;
@@ -10,6 +11,7 @@ use App\Models\Facility;
 use App\Models\TechnologyHolding;
 use App\Models\TechnologyType;
 use App\Models\User;
+use App\Support\TechnologyBlueprint;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +78,13 @@ class TechnologyService
      * The technologies a Corporation may research: its own tree plus the common
      * one (rulebook 3.2.2).
      *
+     * "Common" is the tree column rather than a missing Corporation. A tree
+     * whose Corporation this game does not have stays unattached
+     * (see {@see SeedTechnologies}), so reading null as common
+     * would open Augmented Nucleotech's whole tree to everybody in a game ANT
+     * is not playing in - which is the opposite of "each Corporation will
+     * receive their own tech tree".
+     *
      * @return Collection<int, TechnologyType>
      */
     public function treeFor(Corporation $corporation): Collection
@@ -83,8 +92,10 @@ class TechnologyService
         return $corporation->game
             ->technologyTypes()
             ->where(fn ($query) => $query
-                ->whereNull('corporation_id')
-                ->orWhere('corporation_id', $corporation->id))
+                ->where('corporation_id', $corporation->id)
+                ->orWhere(fn ($common) => $common
+                    ->whereNull('corporation_id')
+                    ->where('tree', TechnologyBlueprint::COMMON)))
             ->with('requiredFacilityType')
             ->orderBy('tree')
             ->orderBy('code')
@@ -495,7 +506,7 @@ class TechnologyService
             ]);
         }
 
-        if ($technology->corporation_id !== null && $technology->corporation_id !== $corporation->id) {
+        if (! $technology->isOnTreeFor($corporation)) {
             throw ValidationException::withMessages([
                 'technology_type_id' => $technology->name.' is not on '.$corporation->name.'\'s tree.',
             ]);

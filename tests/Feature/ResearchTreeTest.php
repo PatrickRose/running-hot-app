@@ -16,6 +16,7 @@ use App\Models\TechnologyType;
 use App\Services\TechnologyService;
 use App\Services\TrackerService;
 use App\Support\FacilityTypeBlueprint;
+use App\Support\TechnologyBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -428,6 +429,23 @@ class ResearchTreeTest extends TestCase
         $this->expectException(ValidationException::class);
 
         $this->technologies()->research($this->corporation, $theirs, $this->research);
+    }
+
+    public function test_an_unattached_rivals_tree_is_not_yours_to_research(): void
+    {
+        // A tree whose Corporation this game does not have keeps a null
+        // corporation_id, which is not the same as being common to everybody -
+        // and reading it as common would open a rival's whole tree.
+        $orphan = $this->technology('Amdumbla', ['cog' => 1], [
+            'tree' => TechnologyBlueprint::AUGMENTED_NUCLEOTECH,
+            'corporation_id' => null,
+        ]);
+
+        $this->assertFalse($this->technologies()->treeFor($this->corporation)->contains($orphan));
+
+        $this->expectException(ValidationException::class);
+
+        $this->technologies()->research($this->corporation, $orphan, $this->research);
     }
 
     public function test_the_tree_is_the_common_set_plus_your_own(): void

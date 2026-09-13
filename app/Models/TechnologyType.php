@@ -46,6 +46,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $required_facility_type_id
  * @property int|null $copy_strength
  * @property int|null $destroy_strength
+ * @property bool $starting
  * @property array<string, mixed>|null $deck_grant
  * @property string|null $notes
  * @property Carbon|null $created_at
@@ -57,7 +58,7 @@ use Illuminate\Support\Carbon;
     'description', 'effect',
     'cog_cost', 'brain_cost', 'leaf_cost', 'maths_cost',
     'prerequisites', 'required_facility_type_id',
-    'copy_strength', 'destroy_strength', 'deck_grant', 'notes',
+    'copy_strength', 'destroy_strength', 'deck_grant', 'starting', 'notes',
 ])]
 class TechnologyType extends Model
 {
@@ -72,6 +73,7 @@ class TechnologyType extends Model
         return [
             'prerequisites' => 'array',
             'deck_grant' => 'array',
+            'starting' => 'boolean',
         ];
     }
 
@@ -166,6 +168,40 @@ class TechnologyType extends Model
     public function isSplit(): bool
     {
         return $this->split_group !== null;
+    }
+
+    /**
+     * Whether this sits on one Corporation's tree (rulebook 3.2.2).
+     *
+     * Its own, or the set common to all of them. An unattached technology is
+     * not common: a tree whose Corporation this game does not have keeps a null
+     * corporation_id (see App\Actions\SeedTechnologies), and reading that as
+     * common would put Augmented Nucleotech's whole tree in front of every
+     * Corporation in a game ANT is not playing in. Control reassigns such a
+     * tree by naming a Corporation on it.
+     */
+    public function isOnTreeFor(Corporation $corporation): bool
+    {
+        if ($this->game_id !== $corporation->game_id) {
+            return false;
+        }
+
+        return $this->corporation_id === $corporation->id
+            || ($this->corporation_id === null && $this->isCommon());
+    }
+
+    /**
+     * Whether a Corporation opens the game already holding this
+     * (rulebook 3.2.2).
+     *
+     * Read off its own column rather than off the price or the description:
+     * fourteen other technologies are free without being anybody's starting
+     * position, and three of the twenty that are carry a real description
+     * instead of the words "Starting tech".
+     */
+    public function isStarting(): bool
+    {
+        return $this->starting;
     }
 
     /**

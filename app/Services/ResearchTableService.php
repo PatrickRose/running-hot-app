@@ -492,7 +492,7 @@ class ResearchTableService
             ]);
         }
 
-        if ($technology->corporation_id !== null && $technology->corporation_id !== $corporation->id) {
+        if (! $technology->isOnTreeFor($corporation)) {
             throw ValidationException::withMessages([
                 'technology_type_id' => $technology->name.' is not on '.$corporation->name.'\'s tree.',
             ]);

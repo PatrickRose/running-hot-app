@@ -164,6 +164,11 @@ export function ResearchTree({
                                                     {entry.split_pieces}
                                                 </Badge>
                                             )}
+                                            {entry.starting && (
+                                                <Badge variant="outline">
+                                                    Starting technology
+                                                </Badge>
+                                            )}
                                             {entry.researched_count > 0 && (
                                                 <Badge>
                                                     Researched
