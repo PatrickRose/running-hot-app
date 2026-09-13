@@ -145,12 +145,17 @@ class SchemaIdentifierLengthTest extends TestCase
     }
 
     /**
+     * Unqualified, which matters: the listing is schema-qualified by default,
+     * so a table comes back as "main.games" on SQLite and carries the whole
+     * database name on MySQL. Deriving a foreign key name from that measured
+     * the prefix as well and called a 46 character name 66.
+     *
      * @return array<int, string>
      */
     private function tables(): array
     {
         return array_values(array_filter(
-            Schema::getTableListing(),
+            Schema::getTableListing(schemaQualified: false),
             fn (string $table): bool => ! str_starts_with($table, 'sqlite_'),
         ));
     }
