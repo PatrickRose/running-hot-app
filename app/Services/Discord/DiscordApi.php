@@ -39,17 +39,52 @@ class DiscordApi
     public const OVERWRITE_ROLE = 0;
 
     /**
-     * What the bot must be granted in a guild to provision it.
+     * What the bot must be granted in a guild to provision it, under the names
+     * Discord's own permission picker gives them.
      *
      * Create Instant Invite is for the join link handed to players who have not
-     * joined yet; the rest are for building the server out. Deliberately no
-     * more than that: a bot that cannot kick, ban or read messages is an easier
-     * thing to invite to a server full of players.
+     * joined yet, and the three Manage permissions are for building the server
+     * out. Deliberately no more than that: a bot that cannot kick, ban or read
+     * messages is an easier thing to invite to a server full of players.
+     *
+     * The last four look redundant on a bot that never speaks and are the whole
+     * reason the private categories work. Discord applies only the overwrite
+     * bits the caller holds itself and drops the rest without saying so, so a
+     * bot without Connect cannot give Control the voice channel it has just
+     * made - it creates the category, keeps the @everyone denial, loses the
+     * grant, and reports success. Inherited from @everyone these are present by
+     * accident in a default server and absent in one whose @everyone has been
+     * locked down, which is what a server full of players looks like. Asked for
+     * outright they are there either way.
+     *
+     * @var array<string, int>
      */
-    public const BOT_PERMISSIONS = 1        // Create Instant Invite
-        | (1 << 4)                          // Manage Channels
-        | (1 << 28)                         // Manage Roles
-        | (1 << 29);                        // Manage Webhooks
+    public const REQUIRED_PERMISSIONS = [
+        'Create Instant Invite' => 1 << 0,
+        'Manage Channels' => 1 << 4,
+        'Manage Roles' => 1 << 28,
+        'Manage Webhooks' => 1 << 29,
+        'View Channels' => self::VIEW_CHANNEL,
+        'Send Messages' => self::SEND_MESSAGES,
+        'Connect' => self::CONNECT,
+        'Speak' => self::SPEAK,
+    ];
+
+    /**
+     * The same set as the single bitfield Discord's invite URL takes.
+     *
+     * Held apart from the map above rather than folded out of it because a
+     * constant expression may not call a function; DiscordApiTest is what keeps
+     * the two saying the same thing.
+     */
+    public const BOT_PERMISSIONS = (1 << 0)     // Create Instant Invite
+        | (1 << 4)                              // Manage Channels
+        | (1 << 28)                             // Manage Roles
+        | (1 << 29)                             // Manage Webhooks
+        | self::VIEW_CHANNEL
+        | self::SEND_MESSAGES
+        | self::CONNECT
+        | self::SPEAK;
 
     public function isConfigured(): bool
     {

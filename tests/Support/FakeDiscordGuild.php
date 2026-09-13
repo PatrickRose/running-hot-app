@@ -28,6 +28,16 @@ class FakeDiscordGuild
     /** @var array<string, array<string, mixed>> */
     public array $webhooks = [];
 
+    /**
+     * Whether to behave like a Discord that refuses the bot's grants.
+     *
+     * Discord applies only the overwrite bits the caller holds itself, so a bot
+     * short of one of them gets a channel back carrying its denials and none of
+     * its grants - no error, just a lock nobody holds the key to. Set this and
+     * the fake answers the same way.
+     */
+    public bool $dropsGrantsTheBotCannotMake = false;
+
     /** @var array<string, array<int, string>> member snowflake to role snowflakes */
     public array $members = [];
 
@@ -169,6 +179,24 @@ class FakeDiscordGuild
         return null;
     }
 
+    /**
+     * The overwrites Discord would keep out of the ones it was sent.
+     *
+     * @param  array<int, array<string, mixed>>  $overwrites
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyOverwrites(array $overwrites): array
+    {
+        if (! $this->dropsGrantsTheBotCannotMake) {
+            return $overwrites;
+        }
+
+        return array_values(array_filter(
+            $overwrites,
+            fn (array $overwrite): bool => (int) ($overwrite['allow'] ?? 0) === 0,
+        ));
+    }
+
     public function channelNamed(string $name): ?array
     {
         foreach ($this->channels as $channel) {
@@ -298,7 +326,7 @@ class FakeDiscordGuild
                     'type' => $body['type'],
                     'parent_id' => $body['parent_id'] ?? null,
                     'topic' => $body['topic'] ?? null,
-                    'permission_overwrites' => $body['permission_overwrites'] ?? [],
+                    'permission_overwrites' => $this->applyOverwrites($body['permission_overwrites'] ?? []),
                 ];
                 $this->channels[$channel['id']] = $channel;
 

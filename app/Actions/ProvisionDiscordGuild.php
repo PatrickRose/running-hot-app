@@ -12,6 +12,7 @@ use App\Services\Discord\DiscordNotConfiguredException;
 use App\Support\Discord\ChannelPayload;
 use App\Support\Discord\GuildBlueprint;
 use App\Support\Discord\PlannedChannel;
+use App\Support\Discord\PlannedOverwrite;
 use App\Support\Discord\PlannedRole;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -255,6 +256,7 @@ class ProvisionDiscordGuild
                         $planned,
                         fn (): array => $this->api->createChannel($guildId, $payload, $reason),
                     );
+                    $this->assertControlKeptSight($planned, $created, $roleIds);
                     $this->claim($claimed, (string) $created['id']);
                     $this->record($game, $planned->kind, $planned->key, (string) $created['id'], $planned->name);
                     $channelIds[$planned->key] = (string) $created['id'];
@@ -274,10 +276,11 @@ class ProvisionDiscordGuild
             // A team's channel silently losing its lock is far worse than one
             // extra PATCH, and a wrong overwrite is invisible until a player
             // reads something they should not have.
-            $this->lockoutAware(
+            $updated = $this->lockoutAware(
                 $planned,
                 fn (): array => $this->api->updateChannel($resource->discord_id, $payload, $reason),
             );
+            $this->assertControlKeptSight($planned, $updated, $roleIds);
 
             if ($resource->name !== $planned->name) {
                 $resource->update(['name' => $planned->name]);
@@ -448,6 +451,65 @@ class ProvisionDiscordGuild
         if (filled($invite['code'] ?? null)) {
             $game->update(['discord_invite_url' => 'https://discord.gg/'.$invite['code']]);
         }
+    }
+
+    /**
+     * That the channel Discord actually built still lets Control see it.
+     *
+     * Discord applies only the overwrite bits the caller holds itself and drops
+     * the rest without saying so. A bot missing one of them therefore creates a
+     * private category that keeps its @everyone denial, loses the grant meant to
+     * let Control back in, and comes back looking like a success - and since the
+     * bot reaches these channels through the Control role, the next thing to
+     * happen is that it cannot create the channels belonging inside. Provisioning
+     * then dies partway through a guild it has shut itself out of, and the 403
+     * Discord gives for that names a permission rather than the cause.
+     *
+     * So the grant is read back off the response Discord has already sent, which
+     * costs no extra call, and a missing one is said plainly here instead.
+     *
+     * @param  array<string, mixed>  $channel
+     * @param  array<string, string>  $roleIds
+     */
+    private function assertControlKeptSight(PlannedChannel $planned, array $channel, array $roleIds): void
+    {
+        $controlRoleId = $roleIds[GuildBlueprint::ROLE_CONTROL] ?? null;
+
+        $planningToGrantIt = collect($planned->overwrites)->contains(
+            fn (PlannedOverwrite $overwrite): bool => $overwrite->target === GuildBlueprint::ROLE_CONTROL
+                && ($overwrite->allow & DiscordApi::VIEW_CHANNEL) === DiscordApi::VIEW_CHANNEL,
+        );
+
+        if (! $planningToGrantIt || $controlRoleId === null) {
+            return;
+        }
+
+        // Narrowed rather than trusted: this is a decoded HTTP response, and
+        // the whole point of the check is that Discord may not have sent back
+        // what was asked of it.
+        $overwrites = $channel['permission_overwrites'] ?? [];
+
+        foreach (is_array($overwrites) ? $overwrites : [] as $overwrite) {
+            if (! is_array($overwrite)) {
+                continue;
+            }
+
+            $allow = (int) ($overwrite['allow'] ?? 0);
+
+            if ((string) ($overwrite['id'] ?? '') === $controlRoleId
+                && ($allow & DiscordApi::VIEW_CHANNEL) === DiscordApi::VIEW_CHANNEL) {
+                return;
+            }
+        }
+
+        throw new DiscordApiException(sprintf(
+            'Discord did not give the Control role sight of "%s". It drops the parts of an overwrite that '
+            .'grant permissions the bot does not hold itself, so this means the bot is missing one of them '
+            .'- View Channels, Send Messages, Connect or Speak - and every channel belonging inside would '
+            .'be built with the bot locked out of it. Add the bot to the server again from the Control '
+            .'panel, leaving every permission Discord asks for ticked, and provision again.',
+            $planned->name,
+        ));
     }
 
     /**
