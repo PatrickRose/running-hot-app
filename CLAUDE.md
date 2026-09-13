@@ -781,11 +781,35 @@ people can play from is a hand neither can plan with, which is the same reasonin
 that gives the defence board to Security alone. `App\Policies\CorporationPolicy`
 is the whole of that boundary.
 
-**The equation builder is clicks, not drags.** An equation is two sets and
-nothing in it is ordered, so a card is clicked into the first set, clicked again
-into the second, and a third time back out. The Facility board earns its
-drag-and-drop because the order of a stack *is* the rule; here dragging would be
-a second gesture saying the same thing.
+**The equation builder takes clicks and drags, and needs both.** Clicking cycles
+a card — into the first set, into the second, then back out — which is one
+control for every answer. Dragging a card from the pool or your hand into either
+tray says the same thing by pointing at it, which is what people reach for when
+two sets of cards are laid out in front of them. Neither covers the other:
+clicking is the only path for a keyboard, and dragging is the only way to move a
+card straight from the first set to the second without cycling it past a state
+nobody wanted.
+
+**So the research table registers no `KeyboardSensor`, and that is deliberate.**
+The cards are buttons, and a keyboard drag would capture Enter and Space from
+them to offer a slower way of doing what the click already does. For the same
+reason only dnd-kit's `listeners` go on the wrapper and never its `attributes`:
+those announce a draggable that answers to the keyboard, and they would also
+take the button's own accessible name and `aria-pressed` off it.
+
+**Touch holds where the Facility board measures distance.** The defence board
+pins its hand and gives its cards `touch-action: none`, because both ends of
+every gesture are on screen at once. The research cards sit in a page that
+scrolls, so a `TouchSensor` with a 200ms delay is what lets a swipe starting on a
+card scroll the page instead of picking the card up. The mouse still activates on
+6px of travel, so a click on a card is still a click.
+
+**A drop that misses, misses.** `closestCenter` — dnd-kit's usual suggestion, and
+what the Facility board falls back to — always finds a nearest target however far
+away the pointer is, so a card let go over empty space would silently join a set.
+The table requires the pointer to actually be inside a tray, which is also why
+the pool and the hand are drop targets in their own right: dropping a card back
+among the others is how it leaves the equation.
 
 **The research payload has a presenter of its own.** `App\Support\ResearchPresenter`
 rather than more of `GamePresenter`: a hand, a pool, a turn order, every equation

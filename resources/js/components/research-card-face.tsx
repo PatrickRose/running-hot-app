@@ -62,12 +62,13 @@ export function ResearchCardFace({
 }
 
 /**
- * The same tile, as something you can pick up.
+ * The same tile, as something you can choose.
  *
- * A button rather than a draggable: an equation is two sets rather than an
- * ordered stack, so what a player is doing is choosing cards and saying which
- * side each is on — and that is a click, on a phone as much as on a laptop.
- * Dragging would add a gesture without adding an answer.
+ * A real button, and it stays one even though the research table wraps it in a
+ * draggable: an equation is two sets rather than an ordered stack, so what a
+ * player is doing is saying which side each card is on, and a click says that
+ * on a phone, with a thumb or from a keyboard. Dragging is laid over the top of
+ * it there rather than in place of it — see `ResearchTable`.
  */
 export function ResearchCardButton({
     card,

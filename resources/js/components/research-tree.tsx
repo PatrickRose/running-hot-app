@@ -114,7 +114,7 @@ export function ResearchTree({
                         onClick={() => setReadyOnly((current) => !current)}
                     >
                         {readyOnly
-                            ? 'Showing what you can research'
+                            ? 'Showing what you can afford'
                             : 'Showing everything'}
                     </Button>
                 </div>
