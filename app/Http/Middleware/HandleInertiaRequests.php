@@ -2,11 +2,16 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Game;
+use App\Support\GamePresenter;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(private readonly GamePresenter $games) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -53,6 +58,25 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'status' => $request->session()->get('status'),
             ],
+            // The clock, on every page there is.
+            //
+            // A player needs to know how long is left wherever they are - at
+            // the research table, on the Facility board, reading the Council -
+            // so the phase is shared rather than passed to the handful of
+            // pages that happened to ask for it.
+            //
+            // always() rather than a plain closure, because the clock has to
+            // re-anchor to the server on a *partial* reload too: the research
+            // page polls `only: ['research']`, and an ordinary shared prop
+            // would be filtered straight out of that response. An always prop
+            // ignores the filter, so every poll any page already makes keeps
+            // the clock honest for free.
+            'phase' => Inertia::always(function (): ?array {
+                $game = Game::current();
+                $phase = $game?->currentPhase();
+
+                return $phase === null ? null : $this->games->phase($phase);
+            }),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

@@ -230,6 +230,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 
 **The clock is server-authoritative.** A phase stores an absolute `ends_at` that extensions and pauses mutate directly; remaining time is always derived from it. The browser only counts down between polls and must never be able to make a phase run long.
 
+**And it is on every page.** The whole game runs to the phase clock, so a player needs it wherever they are rather than on the handful of pages that happened to ask for a game: `HandleInertiaRequests` shares the phase and `AppSidebarHeader` draws it in a sticky header. It is shared with `Inertia::always()` rather than as a plain shared prop, because an ordinary one is filtered straight out of a partial reload — the research page polls `only: ['research']`, and the clock would have frozen between full visits. An always prop ignores the filter, so every poll any page already makes re-anchors the clock for free, and the header's own `only: ['phase']` poll covers the pages that do not poll at all.
+
 ## Naming decisions
 
 - **Brawn**, not Brute. The rulebook uses both for the same runner skill (p.19 vs p.24 and p.26). See `App\Enums\Tracker`.
@@ -867,6 +869,28 @@ away the pointer is, so a card let go over empty space would silently join a set
 The table requires the pointer to actually be inside a tray, which is also why
 the pool and the hand are drop targets in their own right: dropping a card back
 among the others is how it leaves the equation.
+
+**The research page polls, because the table is a table other people sit at.**
+The turn passes to you when somebody else plays, the pool refills under you and
+the sitting shuts when the phase is called — none of it anything your browser
+did. `usePoll(5000, { only: ['game', 'research'] })`, the same five seconds the
+dashboard and the Control panels use. A half-built equation survives it: the
+trays are local state keyed by card id, so a card another player has since spent
+simply drops out of the tray it was in, which is what has happened to it.
+
+**Leaving the table is not the player's.** The rulebook makes it a choice
+(3.2.1) and this application does not offer it: a seat is left by running your
+deck dry, and taken back by Control from its own panel.
+`ResearchTableService::leave()` and `rejoin()` are both still there and both
+still used — by the dry-deck path and by `Control\ResearchSessionController`
+— so what went is the player-facing routes, not the mechanism. The page still
+says *why* you are out; it just does not offer a way back in.
+
+**A refused score is shown on the form that was refused.** Several equations
+wait at once and they all report against the same three keys, so a page-level
+`errors` would put one form's refusal under every form on screen. Each
+`ScoreForm` therefore keeps its own, set from `router.post`'s `onError`. Same
+bug as the equation builder's dead Play button, one layer along.
 
 **The research payload has a presenter of its own.** `App\Support\ResearchPresenter`
 rather than more of `GamePresenter`: a hand, a pool, a turn order, every equation

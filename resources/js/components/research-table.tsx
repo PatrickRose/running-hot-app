@@ -34,7 +34,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { leave, rejoin } from '@/routes/research';
 import { play } from '@/routes/research/equations';
 import type {
     OwnResearch,
@@ -416,49 +415,13 @@ export function ResearchTable({
                         </div>
                     )}
 
-                    {own?.can_play && session.open && (
-                        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-                            {own.playing ? (
-                                <>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() =>
-                                            router.post(
-                                                leave.url(),
-                                                {},
-                                                { preserveScroll: true },
-                                            )
-                                        }
-                                    >
-                                        Leave the table
-                                    </Button>
-                                    <p className="text-sm text-muted-foreground">
-                                        You may leave and come back — 3.2.1
-                                        makes it a choice, not a forfeit.
-                                    </p>
-                                </>
-                            ) : (
-                                <>
-                                    <Button
-                                        type="button"
-                                        onClick={() =>
-                                            router.post(
-                                                rejoin.url(),
-                                                {},
-                                                { preserveScroll: true },
-                                            )
-                                        }
-                                    >
-                                        Sit back down
-                                    </Button>
-                                    <p className="text-sm text-muted-foreground">
-                                        {own.left_reason ??
-                                            'You are not playing.'}
-                                    </p>
-                                </>
-                            )}
-                        </div>
+                    {/* Out of the game, and there is no way back in from here:
+                        a seat is left by running your deck dry, and taken back
+                        by Control. What the page still owes you is why. */}
+                    {own?.can_play && session.open && !own.playing && (
+                        <p className="border-t pt-4 text-sm text-muted-foreground">
+                            {own.left_reason ?? 'You are not playing.'}
+                        </p>
                     )}
                 </CardContent>
             </Card>

@@ -12,7 +12,6 @@ use App\Models\ResearchSession;
 use App\Services\ResearchTableService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -76,35 +75,6 @@ class ResearchTableController extends Controller
         return back()->with('status', $description === []
             ? 'Equation scored for nothing.'
             : 'Scored: '.implode(', ', $description).'.');
-    }
-
-    /**
-     * Get up from the research table (rulebook 3.2.1).
-     */
-    public function leave(Request $request): RedirectResponse
-    {
-        [$corporation, $session] = $this->tableFor($request);
-
-        Gate::authorize('research', $corporation);
-
-        $this->table->leave($session, $corporation, 'Left the table');
-
-        return back()->with('status', $corporation->name.' has left the research table.');
-    }
-
-    /**
-     * Sit back down. Leaving is a choice rather than a forfeit, so coming back
-     * has to be one too.
-     */
-    public function rejoin(Request $request): RedirectResponse
-    {
-        [$corporation, $session] = $this->tableFor($request);
-
-        Gate::authorize('research', $corporation);
-
-        $this->table->rejoin($session, $corporation);
-
-        return back()->with('status', $corporation->name.' is back at the research table.');
     }
 
     /**

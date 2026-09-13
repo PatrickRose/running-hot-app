@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { GameIcon } from '@/components/game-icon';
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -89,6 +90,14 @@ function ScoreForm({
         openingBonus(equation),
     );
 
+    // Why this one was refused, held per form rather than read off the page.
+    // Several equations wait to be scored at once and they all report against
+    // the same keys, so a page-level `errors` would put one form's refusal
+    // under every form on screen - and leave the reader guessing which of them
+    // the server actually meant.
+    const [refusal, setRefusal] = useState<string | null>(null);
+    const [scoring, setScoring] = useState(false);
+
     const chooseSide = (next: 'left' | 'right') => {
         setSide(next);
 
@@ -112,10 +121,25 @@ function ScoreForm({
             allocation[key] = Number(value) || 0;
         }
 
+        setRefusal(null);
+        setScoring(true);
+
         router.post(
             score.url({ equation: equation.id }),
             { side, suit, bonus: allocation },
-            { preserveScroll: true },
+            {
+                preserveScroll: true,
+                onError: (errors) =>
+                    setRefusal(
+                        // Whichever of the three the server objected to. They
+                        // are one sentence each and only one arrives.
+                        errors.equation ??
+                            errors.suit ??
+                            errors.bonus ??
+                            'That score was refused.',
+                    ),
+                onFinish: () => setScoring(false),
+            },
         );
     };
 
@@ -232,11 +256,15 @@ function ScoreForm({
                     </div>
                 )}
 
+                <InputError className="mt-3" message={refusal ?? undefined} />
+
                 <Button
                     type="button"
                     className="mt-4"
                     onClick={submit}
-                    disabled={suit === '' || allocated !== equation.bonus}
+                    disabled={
+                        scoring || suit === '' || allocated !== equation.bonus
+                    }
                 >
                     Take the points
                 </Button>

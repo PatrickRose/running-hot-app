@@ -73,10 +73,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // now and paid out whenever its player gets round to the arithmetic.
     Route::post('research/equations/{equation}/score', [ResearchTableController::class, 'score'])
         ->name('research.equations.score');
-    Route::post('research/leave', [ResearchTableController::class, 'leave'])
-        ->name('research.leave');
-    Route::post('research/rejoin', [ResearchTableController::class, 'rejoin'])
-        ->name('research.rejoin');
 
     Route::post('research/technologies', [ResearchTreeController::class, 'research'])
         ->name('research.technologies.store');

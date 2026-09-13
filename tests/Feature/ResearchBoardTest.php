@@ -20,6 +20,7 @@ use App\Services\TrackerService;
 use App\Services\TurnEngine;
 use App\Support\FacilityTypeBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\Fluent\AssertableJson;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -358,12 +359,121 @@ class ResearchBoardTest extends TestCase
         $this->assertSame(4, $this->ant->refresh()->leaf_points);
     }
 
+    public function test_every_pending_equation_can_be_scored(): void
+    {
+        $session = $this->table()->openSession($this->game);
+        $user = $this->seat($this->gordon, CharacterRole::Research);
+
+        // Two equations waiting at once, which is the normal case: the
+        // rulebook has scoring happen while other players take their turns,
+        // so they pile up.
+        $equations = [];
+
+        foreach ([[3, 3], [4, 4]] as [$handValue, $poolValue]) {
+            $hand = $this->table()->hand($this->gordon)->first();
+            $pool = $this->table()->pool($this->game)->first();
+
+            $hand->forceFill(['suit' => ResearchSuit::Leaf, 'value' => $handValue])->save();
+            $pool->forceFill(['suit' => ResearchSuit::Maths, 'value' => $poolValue])->save();
+
+            $equations[] = $this->table()->play(
+                $session,
+                $this->gordon,
+                [$hand->id],
+                [$pool->id],
+                enforceTurn: false,
+            );
+        }
+
+        $this->assertCount(2, $equations);
+
+        foreach ($equations as $equation) {
+            $this->actingAs($user)
+                ->from(route('research'))
+                ->post(route('research.equations.score', $equation), [
+                    'side' => EquationSide::Left->value,
+                    'suit' => ResearchSuit::Leaf->value,
+                    'bonus' => [ResearchSuit::Leaf->value => $equation->bonus],
+                ])
+                ->assertSessionHasNoErrors();
+
+            $this->assertSame(
+                ResearchEquationStatus::Scored,
+                $equation->refresh()->status,
+                'Equation #'.$equation->id.' would not score.',
+            );
+        }
+
+        // 3 + 1 bonus, then 4 + 1 bonus.
+        $this->assertSame(9, $this->gordon->refresh()->leaf_points);
+    }
+
+    public function test_the_clock_is_shared_and_survives_a_partial_reload(): void
+    {
+        $this->table()->openSession($this->game);
+
+        $this->actingAs($this->seat($this->gordon, CharacterRole::Research))
+            ->get(route('research'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('phase.remaining_seconds')
+                // The research page polls `only: ['research']`, and an
+                // ordinary shared prop is filtered straight out of that - which
+                // would leave the header's clock frozen between full visits.
+                // always() is what keeps it in, and `game` going missing is
+                // what proves the filter really applied.
+                ->reloadOnly('research', fn (AssertableInertia $reload) => $reload
+                    ->has('phase.remaining_seconds')
+                    ->missing('game')));
+    }
+
+    public function test_a_player_cannot_get_up_from_the_table(): void
+    {
+        // Leaving is no longer the player's to choose. A seat is left by
+        // running your deck dry, and taken back by Control from its own panel -
+        // ResearchTableService still does both, and nothing player-facing
+        // reaches them.
+        $this->table()->openSession($this->game);
+
+        $user = $this->seat($this->gordon, CharacterRole::Research);
+
+        foreach (['/research/leave', '/research/rejoin'] as $path) {
+            $this->actingAs($user)->post($path)->assertNotFound();
+        }
+
+        $this->assertFalse(Route::has('research.leave'));
+        $this->assertFalse(Route::has('research.rejoin'));
+    }
+
+    public function test_control_still_takes_a_seat_out_and_puts_it_back(): void
+    {
+        $session = $this->table()->openSession($this->game);
+        $control = $this->control();
+
+        $this->actingAs($control)
+            ->post(route('control.research.session.seat', [$this->game, $this->gordon]), [
+                'playing' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $seat = $session->seats()->where('corporation_id', $this->gordon->id)->sole();
+
+        $this->assertFalse($seat->isPlaying());
+
+        $this->actingAs($control)
+            ->post(route('control.research.session.seat', [$this->game, $this->gordon]), [
+                'playing' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($seat->refresh()->isPlaying());
+    }
+
     public function test_a_security_player_may_not_play_the_research_game(): void
     {
         $this->table()->openSession($this->game);
 
         $this->actingAs($this->seat($this->gordon, CharacterRole::Security))
-            ->post(route('research.leave'))
+            ->post(route('research.equations.play'), ['left' => [], 'right' => []])
             ->assertForbidden();
     }
 

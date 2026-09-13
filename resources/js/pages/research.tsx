@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePoll } from '@inertiajs/react';
 import { FactionBadge } from '@/components/faction-badge';
 import Heading from '@/components/heading';
 import { ResearchCardFace } from '@/components/research-card-face';
@@ -41,6 +41,17 @@ type Props = {
  * Runner may watch it.
  */
 export default function Research({ game, research }: Props) {
+    // The table is a table other people are sitting at: the turn passes to you
+    // when somebody else plays, the pool refills under you, and the sitting
+    // shuts when the phase is called - none of which is anything this browser
+    // did. Five seconds is what the dashboard and the Control panels poll at.
+    //
+    // A half-built equation survives it. The trays are local state keyed by
+    // card id, so a partial reload re-renders around them; a card another
+    // player has since spent simply drops out of the tray it was in, which is
+    // what has happened to it.
+    usePoll(5000, { only: ['game', 'research'] });
+
     if (game === null || research === null) {
         return (
             <>
