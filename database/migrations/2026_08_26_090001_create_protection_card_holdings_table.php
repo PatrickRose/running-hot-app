@@ -33,7 +33,12 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['corporation_id', 'protection_card_type_id']);
+            // Named explicitly to stay inside MySQL's 64 character identifier
+            // limit; the derived name is 70.
+            $table->unique(
+                ['corporation_id', 'protection_card_type_id'],
+                'protection_card_holdings_corporation_card_unique',
+            );
         });
     }
 

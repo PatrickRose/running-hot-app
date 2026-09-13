@@ -31,7 +31,15 @@ return new class extends Migration
             $table->timestamps();
 
             // Only one copy of each card title per Facility (rulebook 3.3.4).
-            $table->unique(['facility_id', 'protection_card_type_id']);
+            //
+            // Named explicitly because the name Laravel derives from the table
+            // and both columns is 68 characters, and MySQL rejects an identifier
+            // over 64. SQLite has no such limit, so this only ever surfaces on a
+            // deployed database.
+            $table->unique(
+                ['facility_id', 'protection_card_type_id'],
+                'facility_protection_cards_facility_card_unique',
+            );
             $table->index(['facility_id', 'kind', 'position']);
         });
     }
