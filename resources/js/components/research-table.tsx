@@ -16,9 +16,10 @@ import type {
     DragEndEvent,
     DragStartEvent,
 } from '@dnd-kit/core';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { useCallback, useMemo, useState } from 'react';
 import { FactionBadge } from '@/components/faction-badge';
+import InputError from '@/components/input-error';
 import {
     ResearchCardButton,
     ResearchCardFace,
@@ -94,6 +95,13 @@ export function ResearchTable({
 }) {
     const [assigned, setAssigned] = useState<Record<number, Side>>({});
     const [dragging, setDragging] = useState<ResearchCardSummary | null>(null);
+
+    // Why the server would not take the equation. App\Support\Equation reports
+    // every refusal against one key, because the page is one builder rather
+    // than two fields — a player is told what is wrong with the thing they are
+    // holding, not which half of it.
+    const refusal = usePage<{ errors: Record<string, string> }>().props.errors
+        .equation;
 
     const cards = useMemo(() => {
         const byId = new Map<number, ResearchCardSummary>();
@@ -374,6 +382,8 @@ export function ResearchTable({
                                     total(left) === total(right) &&
                                     ' — balanced, so this pays a bonus as well'}
                             </p>
+
+                            <InputError className="mt-3" message={refusal} />
 
                             <div className="mt-3 flex flex-wrap gap-2">
                                 <Button

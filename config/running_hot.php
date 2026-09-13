@@ -317,9 +317,29 @@ return [
     | "Each Corporation's research deck begins as a fairly basic deck" is all
     | 3.2.3 says about what is in one, and the rulebook never describes the
     | public deck at all. So this is a starting position for Control to set
-    | rather than a rule being encoded, and it is written as a shape rather than
-    | as a list of cards: 'values' is one card of each value in every suit,
-    | 'copies' repeats that, and 'wild' adds that many cards of no suit.
+    | rather than a rule being encoded.
+    |
+    | Two ways of saying what is in a deck, and they add together. The bulk of
+    | one is a shape: 'values' is one card of each value in every suit, 'copies'
+    | repeats that, and 'wild' adds that many cards of no suit. 'cards' is for
+    | everything the shape cannot say, written one entry at a time - a card
+    | printed with a marking, a wild worth something other than the rest of
+    | them, or two 3s against one 5. An entry is a value plus what makes it
+    | particular:
+    |
+    |     'cards' => [
+    |         // One 8 in each of the four suits, each marked "No single".
+    |         ['value' => 8, 'restriction' => 'no_single'],
+    |         // Two wild 3s.
+    |         ['value' => 3, 'wild' => true, 'copies' => 2],
+    |         // One 7 of Leaf, and nothing in the other suits.
+    |         ['value' => 7, 'suit' => 'leaf'],
+    |     ],
+    |
+    | A marking is an App\Enums\ResearchCardRestriction value, and one the
+    | rules do not have stops the seed rather than being written as a null: a
+    | card that quietly lost its "No single" would go on being playable alone
+    | for the rest of the game.
     |
     | The defaults keep the private decks to low cards and no wilds, because
     | that is what the tech tree implies a basic deck is - the six "Research
@@ -345,6 +365,7 @@ return [
             'copies' => 1,
             'wild' => 0,
             'wild_value' => 3,
+            'cards' => [],
         ],
 
         'public_deck' => [
@@ -352,6 +373,7 @@ return [
             'copies' => 2,
             'wild' => 2,
             'wild_value' => 3,
+            'cards' => [],
         ],
 
         'corporations' => [

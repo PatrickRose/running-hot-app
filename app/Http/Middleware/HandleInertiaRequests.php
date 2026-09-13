@@ -41,6 +41,18 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            // What a controller said as it redirected back. Ninety-odd of them
+            // end in `->with('status', ...)` and none of it reached the page
+            // before this, so an install, a reorder or a played equation all
+            // happened in silence.
+            //
+            // Under `flash` rather than as a bare `status`, because the auth
+            // pages take a `status` prop of their own and pass it to a panel on
+            // the page. Sharing it at the top level would have those messages
+            // shown twice, once in the panel and once as a toast.
+            'flash' => [
+                'status' => $request->session()->get('status'),
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

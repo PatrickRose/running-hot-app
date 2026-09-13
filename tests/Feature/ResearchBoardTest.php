@@ -21,6 +21,7 @@ use App\Services\TurnEngine;
 use App\Support\FacilityTypeBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\Fluent\AssertableJson;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -200,6 +201,80 @@ class ResearchBoardTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame(4, $this->gordon->refresh()->leaf_points);
+    }
+
+    /**
+     * An equation the server will not take has to say why.
+     *
+     * Every refusal in App\Support\Equation is reported against `equation`,
+     * which is the key the builder reads: two cards out of the public pool and
+     * none of your own is a legal-looking equation that 3.2.1 does not allow,
+     * and a Play button that quietly does nothing is indistinguishable from a
+     * broken page.
+     */
+    public function test_a_refused_equation_comes_back_with_a_reason_the_page_can_show(): void
+    {
+        $session = $this->table()->openSession($this->game);
+        $user = $this->seat($this->gordon, CharacterRole::Research);
+
+        $this->table()->randomiseOrder($session);
+        $session->seats()->where('corporation_id', $this->ant->id)->update(['left_at' => now()]);
+        $this->table()->advanceTurn($session->refresh());
+
+        [$first, $second] = $this->table()->pool($this->game)->take(2)->all();
+
+        $first->forceFill(['suit' => ResearchSuit::Cog, 'value' => 3])->save();
+        $second->forceFill(['suit' => ResearchSuit::Cog, 'value' => 5])->save();
+
+        $response = $this->actingAs($user)
+            ->from(route('research'))
+            ->post(route('research.equations.play'), [
+                'left' => [$first->id],
+                'right' => [$second->id],
+            ]);
+
+        $response->assertSessionHasErrors('equation');
+
+        $this->assertStringContainsString(
+            'from your hand',
+            (string) session('errors')->first('equation'),
+        );
+
+        $this->assertSame(0, $this->gordon->researchEquations()->count());
+    }
+
+    /**
+     * And an equation it does take has to say so.
+     *
+     * `->with('status', ...)` is how most of the application reports what it
+     * just did, and none of it reached the browser until it was shared: the
+     * message was written, flashed and thrown away one redirect later.
+     */
+    public function test_what_a_controller_said_reaches_the_page(): void
+    {
+        $session = $this->table()->openSession($this->game);
+        $user = $this->seat($this->gordon, CharacterRole::Research);
+
+        $this->table()->randomiseOrder($session);
+        $session->seats()->where('corporation_id', $this->ant->id)->update(['left_at' => now()]);
+        $this->table()->advanceTurn($session->refresh());
+
+        $hand = $this->table()->hand($this->gordon)->first();
+        $pool = $this->table()->pool($this->game)->first();
+
+        $hand->forceFill(['suit' => ResearchSuit::Leaf, 'value' => 3])->save();
+        $pool->forceFill(['suit' => ResearchSuit::Maths, 'value' => 3])->save();
+
+        $this->actingAs($user)
+            ->from(route('research'))
+            ->followingRedirects()
+            ->post(route('research.equations.play'), [
+                'left' => [$hand->id],
+                'right' => [$pool->id],
+            ])
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('flash.status', fn (?string $status): bool => $status !== null
+                    && str_contains($status, 'Equation played')));
     }
 
     public function test_one_corporation_cannot_score_anothers_equation(): void

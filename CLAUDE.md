@@ -285,6 +285,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - **Wayfinder's generated modules are gitignored.** `resources/js/routes`, `resources/js/actions` and `resources/js/wayfinder` do not exist in a clean checkout, so `tsc` cannot resolve imports until `php artisan wayfinder:generate --with-form` (or `npm run build`) has run. Always pass `--with-form`: without it the `.form()` helpers vanish and starter-kit pages break.
 - **Feature tests need built frontend assets.** Rendering an Inertia page throws without a Vite manifest, so CI runs `composer setup` before the suite.
 - **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
+- **`->with('status', ...)` only arrives because `HandleInertiaRequests` shares it.** Ninety-odd controllers end a redirect that way and none of it reached the browser until it was: the message was written, flashed, and thrown away one redirect later, so an install, a reorder and a played equation all happened in silence. It is shared under `flash` rather than as a bare `status` because the auth pages take a `status` prop of their own and draw it in a panel, and `use-flash-toast` reads it off the *visit* rather than out of a render — two identical messages in a row are normal, and a toast keyed on a changed value would show the second one nothing.
+- **A refusal has to be drawn somewhere.** A page posting with `router.post` gets no `errors` of its own the way an Inertia `<Form>` does, so it has to read them off `usePage()`. The research table is the one that had to learn this: `App\Support\Equation` reports every refusal against `equation`, nothing rendered that key, and an equation the rules would not take looked exactly like a dead button.
 
 ## Commands
 
@@ -665,6 +667,19 @@ and `SeedResearchDecks` writes it when the roster is created. The shipped
 defaults keep the private decks to low cards and no wilds, because that is what
 the tech tree implies a basic deck is: the six "Research deck" rows sell 3-5s,
 then 6-10s, and only then wilds.
+
+**A deck is described two ways at once, and it needs both.** The shape —
+`values`, `copies`, `wild` — is the run of numbers that makes up the bulk of one,
+because most of a deck is the same values four times over and writing that out
+would bury the parts that are not. `cards` is those parts, an entry at a time: a
+card printed with a marking, a wild worth something other than the rest of them,
+two 3s against one 5. An entry naming no suit means one in each of the four,
+which is what a value in the shape means as well; `wild => true` is the card of
+no suit. Without `cards` a seeded deck could hold no marking at all, so the only
+"No single" card that could ever reach a game was one bought off the tech tree.
+A suit or a marking the application does not have stops the seed rather than
+being written as a null: a card that quietly lost its "No single" would go on
+being playable alone for the rest of the game, and nothing would say why.
 
 **A card is a row, not a type.** A research card is a suit and a value and
 nothing else, so there is no catalogue to point at — two 3-of-Leaf cards are two
