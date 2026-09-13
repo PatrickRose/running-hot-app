@@ -55,9 +55,16 @@ class HandleInertiaRequests extends Middleware
             // pages take a `status` prop of their own and pass it to a panel on
             // the page. Sharing it at the top level would have those messages
             // shown twice, once in the panel and once as a toast.
-            'flash' => [
+            // always(), for a sharper reason than it looks. A partial reload
+            // does not carry an ordinary shared prop, so the client keeps the
+            // one it already had - and the toast listener, which fires on every
+            // successful visit, then re-announced the same message on every
+            // five-second poll for as long as the page stayed open. Resolved on
+            // every response, this is null again the moment the flash has been
+            // read, and the toast fires exactly once.
+            'flash' => Inertia::always([
                 'status' => $request->session()->get('status'),
-            ],
+            ]),
             // The clock, on every page there is.
             //
             // A player needs to know how long is left wherever they are - at

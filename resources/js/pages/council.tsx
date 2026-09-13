@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePoll } from '@inertiajs/react';
 import { useState } from 'react';
 import { AgendaCardPanel } from '@/components/agenda-card-panel';
 import { AgendaComposer } from '@/components/agenda-composer';
@@ -36,6 +36,12 @@ type Props = {
  * with no part in a section simply does not see it.
  */
 export default function Council({ game, council }: Props) {
+    // The Chamber is a room full of other people: the Chair puts a card up,
+    // somebody declares a vote secret, a ballot lands, the recess clock runs
+    // out. None of it is anything this browser did, and a CEO watching a stale
+    // page is a CEO who misses the vote. Five seconds, as everywhere else.
+    usePoll(5000, { only: ['game', 'council'] });
+
     if (game === null || council === null) {
         return (
             <>

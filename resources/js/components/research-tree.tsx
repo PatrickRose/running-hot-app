@@ -1,6 +1,7 @@
 import { Form } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import { CardFace } from '@/components/card-face';
+import { GameIcon } from '@/components/game-icon';
 import InputError from '@/components/input-error';
 import { ResearchSuitCost } from '@/components/research-suit-cost';
 import { Badge } from '@/components/ui/badge';
@@ -97,6 +98,36 @@ export function ResearchTree({
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+                {/* What you have to spend, kept on screen while you read what
+                    things cost. The tree is long and the totals are at the top
+                    of the page, so buying meant scrolling up, remembering four
+                    numbers and scrolling back down.
+
+                    top-16 clears the app header, which is sticky itself and
+                    sits above this. The negative margin lets the strip span the
+                    card's own padding, so the rows underneath scroll behind an
+                    edge rather than past a floating box. */}
+                <dl className="sticky top-16 z-20 -mx-6 flex flex-wrap items-center gap-x-4 gap-y-1 border-y bg-background/95 px-6 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <dt className="sr-only">Research Points</dt>
+                    {suits.map((suit) => (
+                        <dd
+                            key={suit.value}
+                            className="flex items-center gap-1.5 text-sm"
+                        >
+                            <GameIcon glyph={suit.glyph} label={suit.label} />
+                            <span
+                                aria-hidden="true"
+                                className="text-muted-foreground"
+                            >
+                                {suit.label}
+                            </span>
+                            <span className="font-mono font-semibold tabular-nums">
+                                {points[suit.value] ?? 0}
+                            </span>
+                        </dd>
+                    ))}
+                </dl>
+
                 <div className="flex flex-wrap items-end gap-3">
                     <div className="grid gap-2">
                         <Label htmlFor="tree-filter">Search</Label>

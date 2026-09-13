@@ -8,11 +8,13 @@ use App\Enums\GameStatus;
 use App\Enums\PhaseType;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
+use App\Enums\ResearchZone;
 use App\Models\ControlMember;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityType;
 use App\Models\Game;
+use App\Models\ResearchSeat;
 use App\Models\TechnologyType;
 use App\Models\User;
 use App\Services\ResearchTableService;
@@ -275,7 +277,14 @@ class ResearchBoardTest extends TestCase
             ])
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('flash.status', fn (?string $status): bool => $status !== null
-                    && str_contains($status, 'Equation played')));
+                    && str_contains($status, 'Equation played'))
+                // And gone by the next request. The page polls every five
+                // seconds, the toast listener fires on every successful visit,
+                // and a flash the partial reload did not carry would be the
+                // same message announced again for as long as the page stayed
+                // open - which is what an ordinary shared prop did.
+                ->reloadOnly('research', fn (AssertableInertia $reload) => $reload
+                    ->where('flash.status', null)));
     }
 
     public function test_one_corporation_cannot_score_anothers_equation(): void
@@ -424,6 +433,36 @@ class ResearchBoardTest extends TestCase
                 ->reloadOnly('research', fn (AssertableInertia $reload) => $reload
                     ->has('phase.remaining_seconds')
                     ->missing('game')));
+    }
+
+    public function test_a_dry_deck_puts_you_out_for_the_rest_of_the_sitting(): void
+    {
+        // "You have no cards left in your deck when you try to draw up your
+        // hand limit" ends that player's game (3.2.1) - so it ends it. There is
+        // no player-facing way back to the table, and the next sitting is what
+        // gathers the cards and deals again.
+        $session = $this->table()->openSession($this->game);
+        $user = $this->seat($this->gordon, CharacterRole::Research);
+
+        $this->gordon->researchCards()->inZone(ResearchZone::Deck)->delete();
+
+        $hand = $this->table()->hand($this->gordon)->first();
+        $pool = $this->table()->pool($this->game)->first();
+
+        $hand->forceFill(['suit' => ResearchSuit::Leaf, 'value' => 3])->save();
+        $pool->forceFill(['suit' => ResearchSuit::Maths, 'value' => 3])->save();
+
+        $this->table()->play($session, $this->gordon, [$hand->id], [$pool->id], enforceTurn: false);
+
+        $seat = $session->seats()->where('corporation_id', $this->gordon->id)->sole();
+
+        $this->assertFalse($seat->isPlaying());
+        $this->assertSame(ResearchSeat::REASON_DECK_EMPTY, $seat->left_reason);
+
+        // And nothing the player can reach puts them back.
+        $this->actingAs($user)->post('/research/rejoin')->assertNotFound();
+
+        $this->assertFalse($seat->refresh()->isPlaying());
     }
 
     public function test_a_player_cannot_get_up_from_the_table(): void

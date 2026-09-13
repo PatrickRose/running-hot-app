@@ -287,7 +287,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - **Wayfinder's generated modules are gitignored.** `resources/js/routes`, `resources/js/actions` and `resources/js/wayfinder` do not exist in a clean checkout, so `tsc` cannot resolve imports until `php artisan wayfinder:generate --with-form` (or `npm run build`) has run. Always pass `--with-form`: without it the `.form()` helpers vanish and starter-kit pages break.
 - **Feature tests need built frontend assets.** Rendering an Inertia page throws without a Vite manifest, so CI runs `composer setup` before the suite.
 - **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
-- **`->with('status', ...)` only arrives because `HandleInertiaRequests` shares it.** Ninety-odd controllers end a redirect that way and none of it reached the browser until it was: the message was written, flashed, and thrown away one redirect later, so an install, a reorder and a played equation all happened in silence. It is shared under `flash` rather than as a bare `status` because the auth pages take a `status` prop of their own and draw it in a panel, and `use-flash-toast` reads it off the *visit* rather than out of a render — two identical messages in a row are normal, and a toast keyed on a changed value would show the second one nothing.
+- **`->with('status', ...)` only arrives because `HandleInertiaRequests` shares it.** Ninety-odd controllers end a redirect that way and none of it reached the browser until it was: the message was written, flashed, and thrown away one redirect later, so an install, a reorder and a played equation all happened in silence. It is shared under `flash` rather than as a bare `status` because the auth pages take a `status` prop of their own and draw it in a panel, and `use-flash-toast` reads it off the *visit* rather than out of a render — two identical messages in a row are normal, and a toast keyed on a changed value would show the second one nothing. It has to be an `Inertia::always()` prop, and that is not tidiness: a partial reload does not carry an ordinary shared prop, so the client keeps the one it already had, and a listener firing on every successful visit then re-announced the same message on every five-second poll for as long as the page stayed open. Resolved on every response, it is null again the moment the flash has been read.
 - **A refusal has to be drawn somewhere.** A page posting with `router.post` gets no `errors` of its own the way an Inertia `<Form>` does, so it has to read them off `usePage()`. The research table is the one that had to learn this: `App\Support\Equation` reports every refusal against `equation`, nothing rendered that key, and an equation the rules would not take looked exactly like a dead button.
 
 ## Commands
@@ -496,6 +496,13 @@ player writes the card, Control adds its remarks and gives it *back*, and only
 then does the player submit it to the Chair — the rulebook has the player submit
 it once they and Control agree, so agreeing is the player's to do too. Any
 player may write one: 3.1.3 hands blank cards to players rather than to CEOs.
+
+**The Chamber polls, for the reason the research table does.** It is a room full
+of other people: the Chair puts a card up, somebody declares a vote secret, a
+ballot lands, the recess clock runs out — none of it anything the reader's
+browser did, and a CEO watching a stale page is a CEO who misses the vote.
+`usePoll(5000, { only: ['game', 'council'] })`, the same five seconds as
+everywhere else.
 
 **Not modelled:** what a resolution actually *does*. The Council decides things
 about Procatorion, and the consequences are Control's to apply with the tracker
@@ -878,9 +885,14 @@ dashboard and the Control panels use. A half-built equation survives it: the
 trays are local state keyed by card id, so a card another player has since spent
 simply drops out of the tray it was in, which is what has happened to it.
 
-**Leaving the table is not the player's.** The rulebook makes it a choice
-(3.2.1) and this application does not offer it: a seat is left by running your
-deck dry, and taken back by Control from its own panel.
+**Leaving the table is not the player's, and a dry deck is final.** The rulebook
+makes leaving a choice (3.2.1) and this application does not offer it: a seat is
+left by running your deck dry, and taken back by Control from its own panel.
+"You have no cards left in your deck when you try to draw up your hand limit"
+ends that player's game, so it ends it — there is no player-facing way back to
+the table, and the next sitting is what gathers the cards and deals again.
+Control can still seat somebody mid-sitting, because Control can always
+override; nobody else can.
 `ResearchTableService::leave()` and `rejoin()` are both still there and both
 still used — by the dry-deck path and by `Control\ResearchSessionController`
 — so what went is the player-facing routes, not the mechanism. The page still
@@ -891,6 +903,14 @@ wait at once and they all report against the same three keys, so a page-level
 `errors` would put one form's refusal under every form on screen. Each
 `ScoreForm` therefore keeps its own, set from `router.post`'s `onError`. Same
 bug as the equation builder's dead Play button, one layer along.
+
+**What you have to spend is kept on screen while you read what things cost.**
+The tech tree is long and the four totals were at the top of the page, so buying
+meant scrolling up, remembering four numbers and scrolling back down — the strip
+is sticky inside the tree's own card instead. It sits at `top-16` to clear the
+app header, which is sticky itself and drawn above it, and spans the card's
+padding with a negative margin so the rows scroll behind an edge rather than
+past a floating box.
 
 **The research payload has a presenter of its own.** `App\Support\ResearchPresenter`
 rather than more of `GamePresenter`: a hand, a pool, a turn order, every equation
