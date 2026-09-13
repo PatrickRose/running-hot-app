@@ -378,12 +378,42 @@ return [
             'cards' => [],
         ],
 
+        /*
+        | The shared deck, and it is the same in every suit. Almost all of it is
+        | marked: five cards demanding each suit of the other side, five that
+        | cannot be played alone, and only seven plain cards a suit. The wilds
+        | are all No single.
+        |
+        | 138 cards - 32 in each of the four suits, and ten of no suit.
+        |
+        | Written entirely as `cards`, so the shape above it contributes
+        | nothing: every card here is marked or counted in a way the shape
+        | cannot say.
+        */
         'public_deck' => [
-            'values' => [1, 2, 3, 4, 5],
-            'copies' => 2,
-            'wild' => 2,
-            'wild_value' => 3,
-            'cards' => [],
+            'values' => [],
+            'copies' => 0,
+
+            'cards' => [
+                // One of each value in every suit, and it cannot be alone.
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'no_single']]],
+
+                // The same again for each suit the other side may be held to.
+                // A Leaf card demanding Leaf is a real card: it makes both sets
+                // the same suit.
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'leaf']]],
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'brain']]],
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'maths']]],
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'cog']]],
+
+                // The seven a suit holds with nothing printed on them.
+                ['value' => 1, 'copies' => 3],
+                ['value' => 2, 'copies' => 2],
+                ['value' => 3, 'copies' => 2],
+
+                // And the wilds: two of every value, all No single.
+                ['values' => [1, 2, 3, 4, 5], 'wild' => true, 'copies' => 2, 'markings' => [['marking' => 'no_single']]],
+            ],
         ],
 
         /*

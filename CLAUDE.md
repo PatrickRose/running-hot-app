@@ -694,14 +694,20 @@ Corporation out for the rest of the evening rather than the rest of the phase. S
 each sitting begins by gathering and shuffling. It is the only way the game is
 playable more than once.
 
-**What is in a deck is Control's, because the rulebook does not say.** "Each
-Corporation's research deck begins as a fairly basic deck" is the whole of it,
-and the public deck is never described at all. `config/running_hot.php` therefore
-holds both as a shape — values, copies, wilds — with a per-Corporation override,
-and `SeedResearchDecks` writes it when the roster is created. The shipped
-defaults keep the private decks to low cards and no wilds, because that is what
-the tech tree implies a basic deck is: the six "Research deck" rows sell 3-5s,
-then 6-10s, and only then wilds.
+**Both decks are real, and the rulebook describes neither.** "Each Corporation's
+research deck begins as a fairly basic deck" is the whole of what 3.2.3 says,
+and the public deck is never mentioned at all — so both lists are the designer's,
+they live in `config/running_hot.php`, and `SeedResearchDecks` writes them when
+the roster is created. `private_deck` is now only the fallback for a Corporation
+the config does not name.
+
+**The public deck is 138 cards and almost all of it is marked**, which is what
+makes it the *shared* deck: a card off the table usually says something about how
+the equation has to be built. Each of the four suits holds the same 32 — one of
+every value that cannot be played alone, one of every value demanding each of the
+four suits of the other side (its own included, which makes both sets the same
+suit), and only seven plain cards: three 1s, two 2s, two 3s. Then ten wilds, two
+of every value, every one of them No single.
 
 **A Corporation's deck is two major suits and two minor ones**, and the shape of
 each is the same for all five — so `research.suit_decks` holds both once and a
@@ -733,7 +739,12 @@ which is what a value in the shape means as well; `wild => true` is the card of
 no suit, and `markings` is the list of what it is printed with. `major` is the
 third way, above, and the entries in `suit_decks` read exactly as a `cards` entry
 does except that they name no suit: the suit is the assignment, stamped on as
-they are read. Without `cards` a
+they are read.
+
+An entry may also carry `values`, a list, which is the same entry said of several
+values at once. That is what the public deck needs and why it exists: five cards
+demanding Cog of the other side are one line rather than five, and the twenty
+restricted entries a suit holds read as four lines rather than twenty. Without `cards` a
 seeded deck could hold no marking at all, so the only "No single" card that could
 ever reach a game was one bought off the tech tree. A suit or a marking the
 application does not have stops the seed rather than being written as a null, and

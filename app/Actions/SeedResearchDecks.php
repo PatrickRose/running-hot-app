@@ -248,9 +248,10 @@ class SeedResearchDecks
     /**
      * The cards a deck names one at a time.
      *
-     * An entry is a value, and then what makes it particular: `suit` for one
-     * card of that suit, `wild` for a card of none, and neither for one in each
-     * of the four - which is what the shape above means by a value as well.
+     * An entry is a value - or `values`, the same entry said of several at
+     * once - and then what makes it particular: `suit` for one card of that
+     * suit, `wild` for a card of none, and neither for one in each of the four,
+     * which is what the shape above means by a value as well.
      * `markings` is a list of what the card is printed with - each a `marking`
      * and, where the marking names one, a `suit` - and `copies` how many of
      * whatever the entry describes. A list rather than one, because the two
@@ -274,9 +275,23 @@ class SeedResearchDecks
         $cards = [];
 
         foreach ($entries as $entry) {
-            $value = (int) ($entry['value'] ?? 0);
+            // `values` is the same entry said of several values at once, which
+            // is what a run of them marked alike needs: five cards demanding
+            // Cog of the other side are one line rather than five.
+            $values = isset($entry['values']) && is_array($entry['values'])
+                ? array_map('intval', $entry['values'])
+                : [(int) ($entry['value'] ?? 0)];
 
-            if ($value < 1) {
+            foreach ($values as $value) {
+                if ($value < 1) {
+                    throw new InvalidArgumentException(sprintf(
+                        '%s names a card with no value. Every card is worth at least 1.',
+                        $deck,
+                    ));
+                }
+            }
+
+            if ($values === []) {
                 throw new InvalidArgumentException(sprintf(
                     '%s names a card with no value. Every card is worth at least 1.',
                     $deck,
@@ -306,11 +321,13 @@ class SeedResearchDecks
 
             for ($copy = 0; $copy < $copies; $copy++) {
                 foreach ($suits as $suit) {
-                    $cards[] = [
-                        'suit' => $suit?->value,
-                        'value' => $value,
-                        'markings' => CardMarking::listToArray($markings),
-                    ];
+                    foreach ($values as $value) {
+                        $cards[] = [
+                            'suit' => $suit?->value,
+                            'value' => $value,
+                            'markings' => CardMarking::listToArray($markings),
+                        ];
+                    }
                 }
             }
         }

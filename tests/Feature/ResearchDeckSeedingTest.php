@@ -344,6 +344,70 @@ class ResearchDeckSeedingTest extends TestCase
         }
     }
 
+    /**
+     * The public deck the six-card pool is dealt from.
+     *
+     * Almost all of it is marked, which is what makes it the shared deck: a
+     * card off the table usually says something about how the equation has to
+     * be built, and only seven cards a suit say nothing at all.
+     */
+    public function test_the_public_deck_is_the_real_one(): void
+    {
+        $this->game->researchCards()->delete();
+        app(SeedResearchDecks::class)->handle($this->game);
+
+        $public = $this->game->researchCards()->whereNull('corporation_id')->get();
+
+        $this->assertCount(138, $public);
+
+        foreach (ResearchSuit::all() as $suit) {
+            $inSuit = $public->where('suit', $suit);
+
+            $this->assertCount(32, $inSuit, $suit->value.' is the wrong size');
+
+            // Seven plain: three 1s, two 2s, two 3s.
+            $this->assertSame(
+                [1, 1, 1, 2, 2, 3, 3],
+                $inSuit->filter(fn (ResearchCard $card): bool => $card->markings() === [])
+                    ->pluck('value')->sort()->values()->all(),
+                $suit->value.' has the wrong plain cards',
+            );
+
+            // One of each value cannot be played alone.
+            $this->assertSame(
+                [1, 2, 3, 4, 5],
+                $inSuit->filter(fn (ResearchCard $card): bool => $card->markings() == [CardMarking::noSingle()])
+                    ->pluck('value')->sort()->values()->all(),
+                $suit->value.' has the wrong No single cards',
+            );
+
+            // And one of each value demanding each suit of the other side -
+            // including its own, which makes both sets the same suit.
+            foreach (ResearchSuit::all() as $demanded) {
+                $this->assertSame(
+                    [1, 2, 3, 4, 5],
+                    $inSuit->filter(fn (ResearchCard $card): bool => $card->markings() == [
+                        CardMarking::restrictedTo($demanded),
+                    ])->pluck('value')->sort()->values()->all(),
+                    $suit->value.' does not demand '.$demanded->value.' correctly',
+                );
+            }
+        }
+
+        // Ten wilds, two of every value, every one of them No single.
+        $wilds = $public->whereNull('suit');
+
+        $this->assertCount(10, $wilds);
+        $this->assertSame(
+            [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+            $wilds->pluck('value')->sort()->values()->all(),
+        );
+
+        foreach ($wilds as $wild) {
+            $this->assertEquals([CardMarking::noSingle()], $wild->markings());
+        }
+    }
+
     public function test_a_marking_the_rules_do_not_have_stops_the_seed(): void
     {
         $this->expectException(InvalidArgumentException::class);
