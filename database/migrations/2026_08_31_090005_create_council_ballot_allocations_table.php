@@ -27,7 +27,12 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['council_ballot_id', 'agenda_resolution_id']);
+            // Named explicitly to stay inside MySQL's 64 character identifier
+            // limit; the derived name is 72.
+            $table->unique(
+                ['council_ballot_id', 'agenda_resolution_id'],
+                'council_ballot_allocations_ballot_resolution_unique',
+            );
         });
     }
 
