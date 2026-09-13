@@ -548,6 +548,17 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 
 **Players read the Facilities at `/facilities`, in two tiers, and the line between them is the point.** Everyone sees the same public list the embed carries — Corporation, Facility name, type, building. A player holding a Corporate seat additionally sees *their own* Corporation's stacks in full, because 3.4.2 makes a stack Secret from everyone else, not from the Corporation that installed it. So a Runner learns nothing there that reconnaissance would otherwise have to buy, and a Security player cannot read a rival's stack. `GamePresenter::facilityBoard()` decides which tier a viewer gets, from the Corporate characters they have claimed rather than from a column.
 
+**A Facility reads as what it holds and then how it is protected.** The
+technologies stored in one are on `/facilities` beside its stacks, on exactly
+the same tier line: 3.4.2 keeps a Facility's contents Secret from *outside* the
+Corporation, so that reconnaissance costs something — not from the people who
+put them there. So `GamePresenter::facility()` carries them and the public list
+in `facilityBoard()`, which is assembled separately, names none of it;
+`FacilityBoardTest` asserts that from both ends, as it already did for card
+titles. They were only ever on `/research` before, which is the wrong page for
+them: a Runner is coming for the technologies, and the person deciding what to
+defend is looking at the Facility board.
+
 **Security arranges their own stacks; everyone else reads.** That page used to be read-only, on the reasoning that Security hands Control a requisition slip at the table. It is not any more: a Security player drags cards between their hand and their own Corporation's Facilities at `/facilities`, and Control is left for the rulings only Control can make. `FacilityPolicy::defend` is the whole of the boundary — the Corporation's *Security* seat, in a running game, and nobody else. The CEO and the Research player still see those stacks (3.4.2 keeps them Secret from outside the Corporation, not from inside it) and still cannot move them, because a board three people can drag at once is a board nobody can trust. Control keeps every power it had, through `before()` and through its own routes, so a ruling mid-game never waits on the Security player being at their laptop.
 
 **The rules did not move with the routes.** `App\Http\Controllers\FacilityDefenceController` is a thin thing: every write goes through `FacilityDefenceService`, so a full stack is still refused, a card the Corporation does not hold is still refused, and every Credit still lands in the `tracker_adjustments` ledger with the Security player's name against it rather than Control's. Do not let a player-facing route grow its own copy of a rule.

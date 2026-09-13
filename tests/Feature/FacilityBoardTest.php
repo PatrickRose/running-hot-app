@@ -150,6 +150,79 @@ class FacilityBoardTest extends TestCase
         }
     }
 
+    public function test_a_corporate_player_sees_what_is_stored_in_their_facilities(): void
+    {
+        // ANT opens holding all four pieces of Power, housed across its own
+        // Facilities. A Runner is coming for them, so the people who own them
+        // need to be able to see where they are.
+        $board = $this->boardFor($this->playerFor('Augmented Nucleotech', CharacterRole::Security));
+
+        $names = [];
+        $capacities = [];
+
+        foreach ($board['own']['facilities'] as $facility) {
+            $capacities[] = $facility['technology_capacity'];
+
+            foreach ($facility['technologies'] as $technology) {
+                $names[] = $technology['name'];
+                $this->assertTrue($technology['usable']);
+            }
+        }
+
+        sort($names);
+
+        $this->assertSame([
+            'Power (Part 1/4)', 'Power (Part 2/4)',
+            'Power (Part 3/4)', 'Power (Part 4/4)',
+        ], $names);
+
+        // Every Facility reports the same capacity, because storage comes from
+        // the count of Corporate Facilities rather than from the Facility
+        // holding the card.
+        $this->assertCount(1, array_unique($capacities));
+    }
+
+    public function test_the_public_list_never_names_a_stored_technology(): void
+    {
+        // 3.4.2 makes a Facility's contents Secret so that reconnaissance costs
+        // something. A technology's title in the public list would hand every
+        // Runner the one thing a Run is for.
+        $board = $this->boardFor($this->runner());
+        $json = json_encode($board['public']);
+
+        $this->assertIsString($json);
+        $this->assertGreaterThan(0, $this->game->technologyHoldings()->count());
+
+        foreach ($this->game->technologyHoldings()->with('technologyType')->get() as $holding) {
+            $this->assertStringNotContainsString($holding->technologyType->name, $json);
+        }
+
+        foreach ($board['public'] as $row) {
+            foreach ($row['facilities'] as $facility) {
+                $this->assertArrayNotHasKey('technologies', $facility);
+            }
+        }
+    }
+
+    public function test_a_rivals_stored_technologies_are_not_yours_to_read(): void
+    {
+        $board = $this->boardFor($this->playerFor('Gordon', CharacterRole::Security));
+
+        $this->assertSame('Gordon', $board['own']['name']);
+
+        // Gordon's own three are there; ANT's Power is not.
+        $stored = [];
+
+        foreach ($board['own']['facilities'] as $facility) {
+            foreach ($facility['technologies'] as $technology) {
+                $stored[] = $technology['name'];
+            }
+        }
+
+        $this->assertContains('Skarlo', $stored);
+        $this->assertNotContains('Power (Part 1/4)', $stored);
+    }
+
     public function test_the_public_list_never_carries_a_card_title(): void
     {
         $board = $this->boardFor($this->runner());

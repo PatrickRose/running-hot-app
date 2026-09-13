@@ -344,6 +344,31 @@ export type FacilitySummary = {
     channels: FacilityChannels | null;
     stacks: ProtectionStack[];
     security: FacilitySecurityState;
+    /** How many technologies this Facility can hold (rulebook 3.2.2). */
+    technology_capacity: number;
+    /**
+     * What is stored in it. Present only for the Corporation that owns the
+     * Facility and for Control — 3.4.2 keeps the contents Secret from outside
+     * the Corporation so that reconnaissance costs something, not from the
+     * people who put them there.
+     */
+    technologies: StoredTechnology[];
+};
+
+/** A technology card sitting in a Facility (rulebook 3.2.2). */
+export type StoredTechnology = {
+    id: number;
+    name: string;
+    code: string | null;
+    status: string;
+    status_label: string;
+    origin_label: string;
+    /**
+     * 3.2.7 in one boolean: a claimed copy is paper until it is paid for, and a
+     * stolen piece of a split technology does nothing until its thief holds
+     * every piece.
+     */
+    usable: boolean;
 };
 
 /**
