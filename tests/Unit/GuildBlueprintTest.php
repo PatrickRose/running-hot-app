@@ -201,4 +201,36 @@ class GuildBlueprintTest extends TestCase
 
         $this->assertSame(['role:gang:'.$gang->id], (new GuildBlueprint($game))->roleKeysForUser($user));
     }
+
+    /**
+     * Every permission the blueprint hands out is one the bot asks the server
+     * for when it is added.
+     *
+     * Discord applies only the overwrite bits the caller holds itself and drops
+     * the rest in silence, so a fifth permission granted on a channel and not
+     * added to the invite would not fail here or anywhere - it would quietly
+     * build a channel missing the grant it was given for.
+     */
+    public function test_nothing_is_granted_that_the_bot_never_asked_the_server_for(): void
+    {
+        $game = Game::factory()->create();
+        Corporation::factory()->for($game)->create();
+        Gang::factory()->for($game)->create();
+
+        $granted = 0;
+
+        foreach ((new GuildBlueprint($game))->channels() as $planned) {
+            foreach ($planned->overwrites as $overwrite) {
+                $granted |= $overwrite->allow;
+            }
+        }
+
+        $this->assertNotSame(0, $granted, 'No channel granted anything, so this proved nothing.');
+
+        $this->assertSame(
+            $granted,
+            $granted & DiscordApi::BOT_PERMISSIONS,
+            'A channel grants a permission the bot never asked the server for.',
+        );
+    }
 }

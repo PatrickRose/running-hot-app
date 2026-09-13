@@ -14,6 +14,7 @@ use App\Models\Game;
 use App\Models\Gang;
 use App\Models\User;
 use App\Services\Discord\DiscordApi;
+use App\Services\Discord\DiscordApiException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\Support\FakeDiscordGuild;
@@ -215,6 +216,43 @@ class DiscordGuildProvisioningTest extends TestCase
 
         $this->assertNotNull($everyone);
         $this->assertSame('1024', $everyone['deny']);
+
+        // And the two roles that are supposed to see it are let back in. The
+        // denial on its own was all this asserted once, which is exactly how a
+        // category nobody could see reached a real server: the bot reaches
+        // these channels through the Control role, so a category missing that
+        // grant locks out the thing that has to build the channels inside it.
+        foreach (['Control', 'The Kestrels'] as $name) {
+            $roleId = $guild->roleNamed($name)['id'];
+
+            $granted = collect($category['permission_overwrites'])->firstWhere('id', $roleId);
+
+            $this->assertNotNull($granted, "{$name} has no overwrite on the category at all.");
+            $this->assertSame(
+                DiscordApi::VIEW_CHANNEL,
+                (int) $granted['allow'] & DiscordApi::VIEW_CHANNEL,
+                "{$name} was not granted sight of the category.",
+            );
+        }
+    }
+
+    /**
+     * Discord keeps the denials and drops the grants when the bot is short of a
+     * permission it is trying to hand out, which reads as a success and leaves a
+     * category nobody - the bot included - can see.
+     */
+    public function test_provisioning_stops_when_discord_drops_the_control_grant(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $guild->dropsGrantsTheBotCannotMake = true;
+        $game = $this->gameWithRoster($guild);
+
+        try {
+            app(ProvisionDiscordGuild::class)->handle($game);
+            $this->fail('Provisioning reported success into a guild the bot had shut itself out of.');
+        } catch (DiscordApiException $exception) {
+            $this->assertStringContainsString('did not give the Control role sight of', $exception->getMessage());
+        }
     }
 
     public function test_provisioning_records_everything_it_made(): void

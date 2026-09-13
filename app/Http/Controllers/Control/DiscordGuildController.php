@@ -302,17 +302,10 @@ class DiscordGuildController extends Controller
             return [];
         }
 
-        $names = [
-            'Create Instant Invite' => 1 << 0,
-            'Manage Channels' => 1 << 4,
-            'Manage Roles' => 1 << 28,
-            'Manage Webhooks' => 1 << 29,
-        ];
-
         $granted = (int) $granted;
 
         return array_keys(array_filter(
-            $names,
+            DiscordApi::REQUIRED_PERMISSIONS,
             fn (int $bit): bool => ($granted & $bit) !== $bit,
         ));
     }
