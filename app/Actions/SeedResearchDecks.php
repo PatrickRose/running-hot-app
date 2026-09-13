@@ -91,14 +91,19 @@ class SeedResearchDecks
     /**
      * Turn one deck's description into rows, shuffled.
      *
-     * Two ways of saying what is in a deck, and they add together. The bulk of
-     * one is a shape - `values` is one card of each value in every suit,
+     * Three ways of saying what is in a deck, and they add together. The bulk
+     * of one is a shape - `values` is one card of each value in every suit,
      * `copies` repeats that, `wild` adds that many cards of no suit - because
      * most of a deck is the same run of numbers four times over and writing it
      * out would bury the parts that are not. `cards` is those parts: entries
      * written one at a time, which is the only way to say that a card carries a
      * marking, that a wild is worth something other than the rest of them, or
      * that there are two 3s and one 5.
+     *
+     * `major` is the third, and it is the Corporations' own: a deck is two
+     * major suits and two minor ones, the shape of each is the same for every
+     * Corporation, so the shapes are written once in `research.suit_decks` and
+     * a Corporation names only the suits it majors in.
      *
      * The shuffle is here rather than left to the first deal, so a deck that
      * has been written down but not yet dealt is already in a random order -
@@ -115,6 +120,7 @@ class SeedResearchDecks
 
         $cards = array_merge(
             $this->fromShape($shape),
+            $this->fromSuits($shape, $deck),
             $this->fromList($shape, $deck),
         );
 
@@ -179,6 +185,64 @@ class SeedResearchDecks
         }
 
         return $cards;
+    }
+
+    /**
+     * The cards a deck gets from majoring in some suits and not others.
+     *
+     * The shape of a major suit and of a minor one is the same for every
+     * Corporation - only which two are which differs - so both live in
+     * `research.suit_decks` and are stamped with the suit as they are read.
+     * Every suit a deck does not name is minor, which makes two majors the
+     * game's own shape rather than something enforced here: a Corporation
+     * Control invents may major in one or in three and gets the deck that
+     * implies.
+     *
+     * @param  array<string, mixed>  $shape
+     * @return array<int, array{suit: string|null, value: int, markings: array<int, array{marking: string, suit: string|null}>}>
+     */
+    private function fromSuits(array $shape, string $deck): array
+    {
+        if (! isset($shape['major'])) {
+            return [];
+        }
+
+        /** @var array<int, mixed> $named */
+        $named = is_array($shape['major']) ? $shape['major'] : [];
+
+        $major = [];
+
+        foreach ($named as $key) {
+            $major[] = $this->suit((string) $key, $deck)->value;
+        }
+
+        /** @var array<string, mixed> $shapes */
+        $shapes = config('running_hot.research.suit_decks', []);
+
+        $cards = [];
+
+        foreach (ResearchSuit::all() as $suit) {
+            $rows = in_array($suit->value, $major, true)
+                ? ($shapes['major'] ?? [])
+                : ($shapes['minor'] ?? []);
+
+            if (! is_array($rows)) {
+                continue;
+            }
+
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                // The suit is the assignment, so it is stamped on rather than
+                // read: a per-suit shape that named one would be describing
+                // something other than the suit it was filed under.
+                $cards[] = array_merge($row, ['suit' => $suit->value]);
+            }
+        }
+
+        return $this->fromList(['cards' => $cards], $deck);
     }
 
     /**

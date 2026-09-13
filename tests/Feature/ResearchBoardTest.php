@@ -55,6 +55,10 @@ class ResearchBoardTest extends TestCase
         config([
             'running_hot.research.private_deck' => ['values' => [1, 2, 3], 'copies' => 1, 'wild' => 0],
             'running_hot.research.public_deck' => ['values' => [1, 2, 3], 'copies' => 1, 'wild' => 0],
+            // Cleared as well, or the roster's real entries would win: the
+            // five Corporations major in two suits each, and a deck full of
+            // No single cards is no use to a test playing one card a side.
+            'running_hot.research.corporations' => [],
         ]);
 
         $this->game = Game::factory()->create(['status' => GameStatus::Running]);

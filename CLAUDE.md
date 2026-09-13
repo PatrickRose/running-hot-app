@@ -703,14 +703,37 @@ defaults keep the private decks to low cards and no wilds, because that is what
 the tech tree implies a basic deck is: the six "Research deck" rows sell 3-5s,
 then 6-10s, and only then wilds.
 
-**A deck is described two ways at once, and it needs both.** The shape —
+**A Corporation's deck is two major suits and two minor ones**, and the shape of
+each is the same for all five — so `research.suit_decks` holds both once and a
+Corporation names only which two it majors in. Thirty-six cards: fourteen in
+each major suit (3×1, 2×2, 2×3, 1×4, 1×5, and a No single at every value) and
+four in each minor (1 and 2, one plain and one No single each). The pairs come
+off the briefings and are what make the five research games different from one
+another: ANT Maths and Cog, DTC Maths and Brain, McCullough Cog and Leaf, Gordon
+Cog and Brain, Genetic Equity Brain and Leaf.
+
+Every suit a Corporation does not name is minor, which makes *two* majors the
+game's own shape rather than something enforced — a Corporation Control invents
+may major in one or in three and gets the deck that implies. One named nowhere
+gets `private_deck`, which is the fallback rather than anybody's real deck.
+
+**A test that pins a deck has to clear `research.corporations` as well.** The
+named entries win over `private_deck`, so a test setting a flat deck and not
+clearing them gets thirty-six cards full of No single instead — which fails
+nowhere near the setup that caused it, as several did the moment the real decks
+landed.
+
+**A deck is described three ways, and they add together.** The shape —
 `values`, `copies`, `wild` — is the run of numbers that makes up the bulk of one,
 because most of a deck is the same values four times over and writing that out
 would bury the parts that are not. `cards` is those parts, an entry at a time: a
 card printed with a marking, a wild worth something other than the rest of them,
 two 3s against one 5. An entry naming no suit means one in each of the four,
 which is what a value in the shape means as well; `wild => true` is the card of
-no suit, and `markings` is the list of what it is printed with. Without `cards` a
+no suit, and `markings` is the list of what it is printed with. `major` is the
+third way, above, and the entries in `suit_decks` read exactly as a `cards` entry
+does except that they name no suit: the suit is the assignment, stamped on as
+they are read. Without `cards` a
 seeded deck could hold no marking at all, so the only "No single" card that could
 ever reach a game was one bought off the tech tree. A suit or a marking the
 application does not have stops the seed rather than being written as a null, and

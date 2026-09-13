@@ -386,8 +386,54 @@ return [
             'cards' => [],
         ],
 
+        /*
+        | A Corporation's deck is two major suits and two minor ones, and the
+        | shape of each is the same for all five - so it is written once here
+        | and a Corporation says only which two it majors in. Thirty-six cards:
+        | fourteen in each major suit, four in each minor.
+        |
+        | Entries name no suit of their own, because the suit is the assignment.
+        | Otherwise they read exactly as a `cards` entry does, so a marking goes
+        | on one the same way it goes on any other card.
+        */
+        'suit_decks' => [
+
+            'major' => [
+                ['value' => 1, 'copies' => 3],
+                ['value' => 1, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 2, 'copies' => 2],
+                ['value' => 2, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 3, 'copies' => 2],
+                ['value' => 3, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 4],
+                ['value' => 4, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 5],
+                ['value' => 5, 'markings' => [['marking' => 'no_single']]],
+            ],
+
+            'minor' => [
+                ['value' => 1],
+                ['value' => 1, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 2],
+                ['value' => 2, 'markings' => [['marking' => 'no_single']]],
+            ],
+
+        ],
+
+        /*
+        | Which two suits each Corporation majors in. Every suit it does not
+        | name is minor, so two majors is the game's own shape rather than
+        | something enforced - a Corporation Control invents may major in one or
+        | in three, and gets the deck that implies.
+        |
+        | A Corporation named nowhere here gets 'private_deck' above.
+        */
         'corporations' => [
-            // 'Genetic Equity' => ['values' => [1, 2, 3, 4, 5, 6], 'copies' => 1],
+            'Augmented Nucleotech' => ['major' => ['maths', 'cog']],
+            'Digital Tactical Control' => ['major' => ['maths', 'brain']],
+            'Genetic Equity' => ['major' => ['brain', 'leaf']],
+            'Gordon' => ['major' => ['cog', 'brain']],
+            'McCullough Calibrated Mechanical' => ['major' => ['cog', 'leaf']],
         ],
 
     ],

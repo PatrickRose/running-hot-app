@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CreateDefaultRoster;
 use App\Actions\SeedResearchDecks;
 use App\Enums\ResearchSuit;
 use App\Models\Corporation;
@@ -200,6 +201,147 @@ class ResearchDeckSeedingTest extends TestCase
             'copies' => 0,
             'cards' => [['value' => 6, 'markings' => [['marking' => 'restricted']]]],
         ]);
+    }
+
+    /**
+     * The deck the five Corporations actually open with.
+     *
+     * Two major suits and two minor, the same shape for every Corporation, so
+     * the shapes are written once in config and a Corporation names only which
+     * two it majors in.
+     */
+    public function test_a_corporation_gets_a_major_and_minor_deck(): void
+    {
+        config([
+            'running_hot.research.corporations' => [
+                'Gordon' => ['major' => ['cog', 'brain']],
+            ],
+        ]);
+
+        $this->game->researchCards()->delete();
+        app(SeedResearchDecks::class)->handle($this->game);
+
+        // Fourteen in each major suit, four in each minor.
+        $this->assertCount(36, $this->deck());
+
+        foreach ([ResearchSuit::Cog, ResearchSuit::Brain] as $major) {
+            $this->assertCount(14, $this->deck()->where('suit', $major), $major->value.' is not major');
+        }
+
+        foreach ([ResearchSuit::Leaf, ResearchSuit::Maths] as $minor) {
+            $this->assertCount(4, $this->deck()->where('suit', $minor), $minor->value.' is not minor');
+        }
+
+        $cog = $this->deck()->where('suit', ResearchSuit::Cog);
+
+        // 3x1, 2x2, 2x3, 1x4, 1x5 plain, and one No single at every value.
+        $this->assertSame(
+            [1, 1, 1, 2, 2, 3, 3, 4, 5],
+            $cog->filter(fn (ResearchCard $card): bool => $card->markings() === [])
+                ->pluck('value')->sort()->values()->all(),
+        );
+
+        $this->assertSame(
+            [1, 2, 3, 4, 5],
+            $cog->filter(fn (ResearchCard $card): bool => $card->markings() !== [])
+                ->each(fn (ResearchCard $card) => $this->assertEquals(
+                    [CardMarking::noSingle()],
+                    $card->markings(),
+                ))
+                ->pluck('value')->sort()->values()->all(),
+        );
+
+        // A minor suit is 1 and 2, one plain and one marked each.
+        $leaf = $this->deck()->where('suit', ResearchSuit::Leaf);
+
+        $this->assertSame(
+            [1, 2],
+            $leaf->filter(fn (ResearchCard $card): bool => $card->markings() === [])
+                ->pluck('value')->sort()->values()->all(),
+        );
+        $this->assertSame(
+            [1, 2],
+            $leaf->filter(fn (ResearchCard $card): bool => $card->markings() !== [])
+                ->pluck('value')->sort()->values()->all(),
+        );
+    }
+
+    public function test_every_corporation_in_the_roster_has_its_two_majors(): void
+    {
+        // Straight off the briefings, and the pairs are what make the five
+        // research games different from one another.
+        $expected = [
+            'Augmented Nucleotech' => ['cog', 'maths'],
+            'Digital Tactical Control' => ['brain', 'maths'],
+            'Genetic Equity' => ['brain', 'leaf'],
+            'Gordon' => ['brain', 'cog'],
+            'McCullough Calibrated Mechanical' => ['cog', 'leaf'],
+        ];
+
+        /** @var array<string, array<string, mixed>> $configured */
+        $configured = config('running_hot.research.corporations');
+
+        foreach ($expected as $name => $majors) {
+            $named = $configured[$name]['major'] ?? [];
+            sort($named);
+
+            $this->assertSame($majors, $named, $name.' majors in the wrong suits');
+        }
+    }
+
+    public function test_a_suit_named_major_that_does_not_exist_stops_the_seed(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('names a suit "spades" that does not exist');
+
+        config(['running_hot.research.corporations' => [
+            'Gordon' => ['major' => ['spades']],
+        ]]);
+
+        $this->game->researchCards()->delete();
+        app(SeedResearchDecks::class)->handle($this->game);
+    }
+
+    public function test_a_real_roster_deals_all_five_decks(): void
+    {
+        // End to end, through the roster a game actually opens with rather than
+        // through a config this test wrote: every Corporation gets thirty-six
+        // cards, fourteen in each of the two suits its briefing majors in.
+        $game = Game::factory()->create();
+
+        app(CreateDefaultRoster::class)->handle($game);
+
+        /** @var array<string, array<int, string>> $majors */
+        $majors = [
+            'Augmented Nucleotech' => ['maths', 'cog'],
+            'Digital Tactical Control' => ['maths', 'brain'],
+            'Genetic Equity' => ['brain', 'leaf'],
+            'Gordon' => ['cog', 'brain'],
+            'McCullough Calibrated Mechanical' => ['cog', 'leaf'],
+        ];
+
+        foreach ($majors as $name => $major) {
+            $corporation = $game->corporations()->where('name', $name)->sole();
+            $deck = $corporation->researchCards()->get();
+
+            $this->assertCount(36, $deck, $name.'\'s deck is the wrong size');
+
+            foreach (ResearchSuit::all() as $suit) {
+                $this->assertCount(
+                    in_array($suit->value, $major, true) ? 14 : 4,
+                    $deck->where('suit', $suit),
+                    $name.' has the wrong number of '.$suit->value,
+                );
+            }
+
+            // Fourteen marked cards a deck: one at each of the five values in
+            // each major suit, and one at each of 1 and 2 in each minor.
+            $this->assertCount(
+                14,
+                $deck->filter(fn (ResearchCard $card): bool => $card->markings() !== []),
+                $name.' has the wrong number of marked cards',
+            );
+        }
     }
 
     public function test_a_marking_the_rules_do_not_have_stops_the_seed(): void
