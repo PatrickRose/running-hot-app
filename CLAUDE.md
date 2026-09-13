@@ -645,12 +645,27 @@ doing sums. Control's override is `unscore()`, which hands the points back and
 returns the equation to Pending so it can be scored again — both movements in the
 ledger, so the tokens on the table stay reconcilable.
 
-**A sitting is dealt as the Action phase opens**, because that is when the
-rulebook has research players make their way to the table. It is fail-soft, on
-the same terms as the Discord announcements: a research game that could not be
-dealt is a sub-game Control deals by hand, and it must never be a phase that
-would not start. Control re-deals, redraws the order and closes the table from
-its own panel.
+**A sitting is dealt as the Action phase opens and shut when it ends.** The
+rulebook has research players make their way to the table during the Action
+phase, and "the phase end is called" is one of the two ways the game ends
+(3.2.1) — so the table exists for exactly that phase and `TurnEngine` owns both
+ends of it. Nothing closed it at first, and a sitting then stayed open through
+Team Time and the next Setup, still taking equations. Control re-deals, redraws
+the order and closes the table from its own panel as well.
+
+**Opening is fail-soft; closing is not, and the asymmetry is the point.**
+Dealing seeds decks, gathers every card, seats the Corporations and deals them a
+hand — a lot to go wrong, and none of it may stop a phase from starting, so a
+throw is reported and the phase opens anyway with a sub-game Control deals by
+hand. Closing writes one column, and swallowing a failure there would leave open
+exactly the table the call exists to shut. `finish()` closes it too: ending the
+game is the one path to a completed phase that does not go through `advance()`.
+
+**Closing the table does not stop scoring, and must not.** An equation is played
+in one phase and scored "while other players are taking their turns", possibly
+several turns later — so `score()` asks only whether the equation is still
+Pending, and the pending list hangs off the Corporation rather than off the
+sitting. What closing stops is playing another one.
 
 **Dealing gathers every card back first, and that is a reading rather than a
 rule.** The rulebook has a deck that runs dry end that player's game, and says

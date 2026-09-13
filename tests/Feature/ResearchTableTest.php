@@ -101,6 +101,97 @@ class ResearchTableTest extends TestCase
         $this->assertCount(6, $this->table()->pool($this->game));
     }
 
+    public function test_the_action_phase_ending_closes_the_table(): void
+    {
+        // "The phase end is called" is one of the two ways the research game
+        // ends (3.2.1). Nothing used to shut it, so a sitting stayed open
+        // through Team Time and the following Setup.
+        $engine = app(TurnEngine::class);
+
+        $engine->advance($engine->start($this->game));
+
+        $session = $this->table()->currentSession($this->game->refresh());
+
+        $this->assertNotNull($session);
+
+        $engine->advance($this->game->refresh()->currentPhase());
+
+        $this->assertNull($this->table()->currentSession($this->game->refresh()));
+        $this->assertFalse($session->refresh()->isOpen());
+        $this->assertNull($session->current_order);
+    }
+
+    public function test_a_closed_table_will_not_take_another_equation(): void
+    {
+        $engine = app(TurnEngine::class);
+
+        $engine->advance($engine->start($this->game));
+
+        $session = $this->table()->currentSession($this->game->refresh());
+        $corporation = $this->firstToPlay($session);
+
+        [$hand, $pool] = $this->stack($corporation, ResearchSuit::Leaf, 3, ResearchSuit::Maths, 3);
+
+        $engine->advance($this->game->refresh()->currentPhase());
+
+        try {
+            $this->table()->play($session->refresh(), $corporation, [$hand->id], [$pool->id]);
+            $this->fail('A closed research table should not have taken an equation.');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('closed', $exception->getMessage());
+        }
+
+        // Refused before anything moved.
+        $this->assertSame(ResearchZone::Hand, $hand->refresh()->zone);
+        $this->assertSame(0, $session->equations()->count());
+    }
+
+    public function test_an_equation_already_played_still_scores_after_the_table_closes(): void
+    {
+        // The whole point of scoring being its own act: it "can and should be
+        // done while other players are taking their turns" (3.2.1), so a player
+        // who has not got round to their sums does not lose them when the phase
+        // is called.
+        $engine = app(TurnEngine::class);
+
+        $engine->advance($engine->start($this->game));
+
+        $session = $this->table()->currentSession($this->game->refresh());
+        $corporation = $this->firstToPlay($session);
+
+        [$hand, $pool] = $this->stack($corporation, ResearchSuit::Leaf, 3, ResearchSuit::Maths, 3);
+
+        $equation = $this->table()->play($session, $corporation, [$hand->id], [$pool->id]);
+
+        $engine->advance($this->game->refresh()->currentPhase());
+
+        $this->table()->score(
+            $equation->refresh(),
+            EquationSide::Left,
+            ResearchSuit::Leaf,
+            [ResearchSuit::Leaf->value => 1],
+        );
+
+        $this->assertSame(ResearchEquationStatus::Scored, $equation->refresh()->status);
+        $this->assertSame(4, $corporation->refresh()->leaf_points);
+    }
+
+    public function test_finishing_the_game_closes_the_table(): void
+    {
+        // The one path to a completed phase that does not go through advance().
+        $engine = app(TurnEngine::class);
+
+        $engine->advance($engine->start($this->game));
+
+        $session = $this->table()->currentSession($this->game->refresh());
+
+        $this->assertNotNull($session);
+
+        $engine->finish($this->game->refresh());
+
+        $this->assertFalse($session->refresh()->isOpen());
+    }
+
     public function test_playing_an_equation_spends_its_cards_and_draws_back_up(): void
     {
         $session = $this->table()->openSession($this->game);

@@ -76,8 +76,15 @@ class TurnEngine
 
             // Any security budget Security did not spend goes back to the
             // Corporation at the end of the Action phase (rulebook 3.3.5).
+            //
+            // And the research table shuts with it: "the phase end is called"
+            // is one of the two ways the research game ends (3.2.1), and the
+            // table is only ever open during the Action phase. Nothing else
+            // closed it, so a sitting stayed open through Team Time and the
+            // next Setup and went on accepting equations.
             if ($phase->type === PhaseType::Action) {
                 $this->facilityDefence->returnUnspentBudgets($phase->turn, $actor);
+                $this->closeResearchTable($phase->turn->game);
             }
 
             $next = $phase->type->next();
@@ -182,11 +189,38 @@ class TurnEngine
             ])->save();
         }
 
+        // The game ending ends the phase, so it ends the research game too -
+        // this is the one path to a completed phase that does not go through
+        // advance().
+        $this->closeResearchTable($game);
+
         $game->forceFill(['status' => GameStatus::Finished])->save();
 
         $this->announcer->gameFinished($game);
 
         return $game;
+    }
+
+    /**
+     * Shut the research table, if one is open.
+     *
+     * Deliberately not fail-soft, where opening one is. Dealing a sitting seeds
+     * decks, gathers every card, seats the Corporations and deals them a hand,
+     * and none of that may stop a phase from starting - closing one writes a
+     * single column, and swallowing a failure here would leave open exactly the
+     * table this exists to shut.
+     *
+     * Scoring is untouched by it. An equation is played in one phase and scored
+     * "while other players are taking their turns" (3.2.1), so a closed table
+     * still pays out: what closing stops is playing another one.
+     */
+    protected function closeResearchTable(Game $game): void
+    {
+        $session = $this->researchTable->currentSession($game);
+
+        if ($session !== null) {
+            $this->researchTable->closeSession($session);
+        }
     }
 
     protected function startPhase(Turn $turn, PhaseType $type, ?User $actor = null): Phase
