@@ -82,6 +82,17 @@ class Facility extends Model
         return $this->hasMany(FacilityProtectionCard::class);
     }
 
+    /**
+     * The technologies stored here (rulebook 3.2.2). A claimed copy counts
+     * against the storage limit just as a researched one does.
+     *
+     * @return HasMany<TechnologyHolding, $this>
+     */
+    public function technologyHoldings(): HasMany
+    {
+        return $this->hasMany(TechnologyHolding::class);
+    }
+
     /** @return HasMany<FacilityTurnState, $this> */
     public function turnStates(): HasMany
     {

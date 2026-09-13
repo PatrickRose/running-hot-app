@@ -23,7 +23,7 @@ export function PhaseClock({
     className,
 }: {
     phase: PhaseSummary;
-    size?: 'default' | 'large';
+    size?: 'compact' | 'default' | 'large';
     className?: string;
 }) {
     return (
@@ -42,7 +42,7 @@ function PhaseCountdown({
     className,
 }: {
     phase: PhaseSummary;
-    size: 'default' | 'large';
+    size: 'compact' | 'default' | 'large';
     className?: string;
 }) {
     // Anchored once at mount, so remaining time is derived rather than synced.
@@ -66,24 +66,46 @@ function PhaseCountdown({
     const expired = remaining === 0;
     const urgent = remaining > 0 && remaining <= 60;
 
+    const digits = (
+        <span
+            className={cn(
+                'font-mono font-semibold tabular-nums',
+                size === 'large' && 'text-6xl',
+                size === 'default' && 'text-3xl',
+                size === 'compact' && 'text-lg leading-none',
+                phase.status === 'paused' && 'text-muted-foreground',
+                urgent && 'text-amber-600 dark:text-amber-500',
+                expired && 'text-red-600 dark:text-red-500',
+            )}
+            aria-live="polite"
+        >
+            {formatDuration(remaining)}
+        </span>
+    );
+
+    // Laid out along the line rather than down the page, for the one place the
+    // clock has a header's height to live in and no more. The label goes
+    // before the digits and is dropped on a narrow screen, where the time left
+    // is the half worth keeping.
+    if (size === 'compact') {
+        return (
+            <div className={cn('flex items-center gap-2', className)}>
+                <span className="hidden text-xs whitespace-nowrap text-muted-foreground sm:inline">
+                    Turn {phase.turn} &middot; {phase.type_label}
+                    {phase.status === 'paused' && ' (paused)'}
+                </span>
+                {digits}
+            </div>
+        );
+    }
+
     return (
         <div className={cn('flex flex-col', className)}>
             <span className="text-sm text-muted-foreground">
                 Turn {phase.turn} &middot; {phase.type_label}
                 {phase.status === 'paused' && ' (paused)'}
             </span>
-            <span
-                className={cn(
-                    'font-mono font-semibold tabular-nums',
-                    size === 'large' ? 'text-6xl' : 'text-3xl',
-                    phase.status === 'paused' && 'text-muted-foreground',
-                    urgent && 'text-amber-600 dark:text-amber-500',
-                    expired && 'text-red-600 dark:text-red-500',
-                )}
-                aria-live="polite"
-            >
-                {formatDuration(remaining)}
-            </span>
+            {digits}
             {expired && phase.status === 'running' && (
                 <span className="text-xs text-red-600 dark:text-red-500">
                     Time is up — waiting on the phase to roll over.

@@ -36,6 +36,10 @@ use Illuminate\Support\Str;
  * A game that already has Facilities is left alone, so applying it twice cannot
  * hand a Corporation a second Armoury and quietly widen every stack in the
  * game.
+ *
+ * The technologies each Corporation opens holding (rulebook 3.2.2) come last,
+ * because every one of them has to be housed in a Facility and the Facilities
+ * have only just been built.
  */
 class CreateDefaultFacilities
 {
@@ -43,15 +47,22 @@ class CreateDefaultFacilities
         private readonly FacilityDefenceService $defence,
         private readonly SeedProtectionCardHoldings $holdings,
         private readonly SeedTechnologies $technologies,
+        private readonly GrantStartingTechnologies $startingTechnologies,
     ) {}
 
     /**
-     * @return array{facilities: int, holdings: int, installed: int, skipped: bool}
+     * @return array{facilities: int, holdings: int, installed: int, technologies: int, skipped: bool}
      */
     public function handle(Game $game): array
     {
         if ($game->facilities()->exists()) {
-            return ['facilities' => 0, 'holdings' => 0, 'installed' => 0, 'skipped' => true];
+            return [
+                'facilities' => 0,
+                'holdings' => 0,
+                'installed' => 0,
+                'technologies' => 0,
+                'skipped' => true,
+            ];
         }
 
         return DB::transaction(function () use ($game): array {
@@ -73,10 +84,15 @@ class CreateDefaultFacilities
                 }
             }
 
+            // Last, because a starting technology has to be housed in a
+            // Facility and the Facilities have only just opened.
+            $technologies = $this->startingTechnologies->handle($game);
+
             return [
                 'facilities' => $facilities,
                 'holdings' => $holdings['holdings'],
                 'installed' => $installed,
+                'technologies' => $technologies['granted'],
                 'skipped' => false,
             ];
         });

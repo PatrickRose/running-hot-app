@@ -77,6 +77,9 @@ class TechnologyBlueprint
      *     code: string,
      *     name: string,
      *     tree: string,
+     *     split_group: string|null,
+     *     split_piece: int|null,
+     *     split_pieces: int|null,
      *     description: string|null,
      *     effect: string|null,
      *     cog_cost: int,
@@ -87,6 +90,8 @@ class TechnologyBlueprint
      *     requires_facility_type: string|null,
      *     copy_strength: int|null,
      *     destroy_strength: int|null,
+     *     deck_grant: array<string, mixed>|null,
+     *     starting: bool,
      * }>
      */
     public static function defaults(): array
@@ -300,6 +305,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR036',
@@ -309,6 +315,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR037',
@@ -318,6 +325,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR038',
@@ -327,6 +335,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Power facility. You may build a power canister for 5 credits',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RAR057',
@@ -412,6 +421,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR040',
@@ -421,6 +431,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR041',
@@ -430,6 +441,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR042',
@@ -439,6 +451,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Arms facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RDR058',
@@ -676,6 +689,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR044',
@@ -685,6 +699,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR045',
@@ -694,6 +709,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR046',
@@ -703,6 +719,7 @@ class TechnologyBlueprint
                 effect: 'For each research facility you have, gain 2 credits during team time',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RGR047',
@@ -978,18 +995,21 @@ class TechnologyBlueprint
                 name: 'Genetic Equity story',
                 tree: self::GORDON,
                 description: 'Rosales seems to be hiding something',
+                starting: true,
             ),
             self::technology(
                 code: 'RGR095',
                 name: 'Skarlo',
                 tree: self::GORDON,
                 description: 'A freelancer is looking for Skarlo',
+                starting: true,
             ),
             self::technology(
                 code: 'RGR096',
                 name: 'Slow roll',
                 tree: self::GORDON,
                 description: 'There’s rumours of a new virus being created',
+                starting: true,
             ),
             self::technology(
                 code: 'RMR002',
@@ -1106,6 +1126,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Factory facility. Unlock: Mini-factory facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR013',
@@ -1115,6 +1136,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Factory facility. Unlock: Mini-factory facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR014',
@@ -1124,6 +1146,7 @@ class TechnologyBlueprint
                 effect: 'Unlock: Factory facility. Unlock: Mini-factory facility',
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR015',
@@ -1135,6 +1158,7 @@ class TechnologyBlueprint
                 requiresFacility: FacilityTypeBlueprint::FACTORY,
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR016',
@@ -1146,6 +1170,7 @@ class TechnologyBlueprint
                 requiresFacility: FacilityTypeBlueprint::FACTORY,
                 copyStrength: 4,
                 destroyStrength: 4,
+                starting: true,
             ),
             self::technology(
                 code: 'RMR101',
@@ -1570,6 +1595,7 @@ class TechnologyBlueprint
                 tree: self::COMMON,
                 description: 'Spend 4 research credits in any suit to add a “No single” card to your '
                     .'research deck in that suit. You choose a value for the card between 3-5',
+                deckGrant: self::deckGrant([4], 3, 5, markings: [CardMarking::noSingle()]),
             ),
             self::technology(
                 code: 'RSR036',
@@ -1578,6 +1604,7 @@ class TechnologyBlueprint
                 description: 'If you have 3 research facilities, you may spend 8 research credits in '
                     .'any suit to add a “No single” card to your research deck in that suit. '
                     .'You choose a value for the card between 6-10',
+                deckGrant: self::deckGrant([8], 6, 10, markings: [CardMarking::noSingle()], requiresResearchFacilities: 3),
             ),
             self::technology(
                 code: 'RSR037',
@@ -1586,6 +1613,7 @@ class TechnologyBlueprint
                 description: 'If you have 5 research facilities, you may spend 6 research credits in '
                     .'any suit and 3 in another to add a card to your research deck in the '
                     .'first suit. You choose a value for the card between 3-5',
+                deckGrant: self::deckGrant([6, 3], 3, 5, requiresResearchFacilities: 5),
             ),
             self::technology(
                 code: 'RSR038',
@@ -1594,6 +1622,7 @@ class TechnologyBlueprint
                 description: 'If you have 6 research facilities, you may spend 10 research credits in '
                     .'any suit and 5 in another to add a card to your research deck in the '
                     .'first suit. You choose a value for the card between 6-10',
+                deckGrant: self::deckGrant([10, 5], 6, 10, requiresResearchFacilities: 6),
             ),
             self::technology(
                 code: 'RSR039',
@@ -1602,6 +1631,7 @@ class TechnologyBlueprint
                 description: 'If you have 8 research facilities, you may spend 5 research credits from '
                     .'each suit to add a wild card to your research deck. You choose a value '
                     .'for the card between 3-5',
+                deckGrant: self::deckGrant([5, 5, 5, 5], 3, 5, wild: true, requiresResearchFacilities: 8),
             ),
             self::technology(
                 code: 'RSR040',
@@ -1610,6 +1640,7 @@ class TechnologyBlueprint
                 description: 'If you have 9 research facilities, you may spend 7 research credits from '
                     .'each suit to add a wild card to your research deck. You choose a value '
                     .'for the card between 6-10',
+                deckGrant: self::deckGrant([7, 7, 7, 7], 6, 10, wild: true, requiresResearchFacilities: 9),
             ),
         ];
     }
@@ -1625,10 +1656,15 @@ class TechnologyBlueprint
      *
      * @param  array<string, int>  $cost
      * @param  array<int, string>  $prerequisites
+     * @param  array<string, mixed>|null  $deckGrant
+     * @param  bool  $starting  a technology the Corporation opens the game holding
      * @return array{
      *     code: string,
      *     name: string,
      *     tree: string,
+     *     split_group: string|null,
+     *     split_piece: int|null,
+     *     split_pieces: int|null,
      *     description: string|null,
      *     effect: string|null,
      *     cog_cost: int,
@@ -1639,6 +1675,8 @@ class TechnologyBlueprint
      *     requires_facility_type: string|null,
      *     copy_strength: int|null,
      *     destroy_strength: int|null,
+     *     deck_grant: array<string, mixed>|null,
+     *     starting: bool,
      * }
      */
     private static function technology(
@@ -1652,11 +1690,14 @@ class TechnologyBlueprint
         ?string $requiresFacility = null,
         ?int $copyStrength = null,
         ?int $destroyStrength = null,
+        ?array $deckGrant = null,
+        bool $starting = false,
     ): array {
         return [
             'code' => $code,
             'name' => $name,
             'tree' => $tree,
+            ...self::splitFrom($name),
             'description' => $description,
             'effect' => $effect,
             'cog_cost' => $cost['cog'] ?? 0,
@@ -1667,6 +1708,70 @@ class TechnologyBlueprint
             'requires_facility_type' => $requiresFacility,
             'copy_strength' => $copyStrength,
             'destroy_strength' => $destroyStrength,
+            'deck_grant' => $deckGrant,
+            'starting' => $starting,
+        ];
+    }
+
+    /**
+     * The split technology a card belongs to, read off its printed name
+     * (rulebook 3.2.7).
+     *
+     * "Power (Part 1/4)" is one card of the four that make up Power, and the
+     * card says so - so nothing here is invented. A name that does not end that
+     * way is a technology of one card, which is nearly all of them.
+     *
+     * @return array{split_group: string|null, split_piece: int|null, split_pieces: int|null}
+     */
+    public static function splitFrom(string $name): array
+    {
+        if (preg_match('/^(?<group>.+) \\(Part (?<piece>\\d+)\\/(?<pieces>\\d+)\\)$/', $name, $matches) !== 1) {
+            return ['split_group' => null, 'split_piece' => null, 'split_pieces' => null];
+        }
+
+        return [
+            'split_group' => $matches['group'],
+            'split_piece' => (int) $matches['piece'],
+            'split_pieces' => (int) $matches['pieces'],
+        ];
+    }
+
+    /**
+     * One deck customisation entry, as its own row on the tree prints it
+     * (rulebook 3.2.3).
+     *
+     * The amounts are Research Points the player assigns to suits of their
+     * choosing, all different - "6 research credits in any suit and 3 in
+     * another" is [6, 3], and "5 from each suit" is [5, 5, 5, 5]. The card that
+     * comes out takes the suit the first amount was paid in, which is what
+     * "in the first suit" means, unless it is wild and has none.
+     *
+     * @param  array<int, int>  $amounts
+     * @param  array<int, CardMarking>  $markings
+     * @return array{
+     *     amounts: array<int, int>,
+     *     value_min: int,
+     *     value_max: int,
+     *     wild: bool,
+     *     markings: array<int, array{marking: string, suit: string|null}>,
+     *     requires_research_facilities: int,
+     * }
+     */
+    private static function deckGrant(
+        array $amounts,
+        int $valueMin,
+        int $valueMax,
+        bool $wild = false,
+        array $markings = [],
+        int $requiresResearchFacilities = 0,
+    ): array {
+        return [
+            'amounts' => $amounts,
+            'value_min' => $valueMin,
+            'value_max' => $valueMax,
+            'wild' => $wild,
+            'markings' => CardMarking::listToArray($markings),
+            'requires_research_facilities' => $requiresResearchFacilities,
         ];
     }
 }

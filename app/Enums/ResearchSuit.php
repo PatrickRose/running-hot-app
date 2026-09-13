@@ -61,6 +61,31 @@ enum ResearchSuit: string
     }
 
     /**
+     * The column on a Corporation holding the points it has banked in this
+     * suit (rulebook 3.2.1).
+     */
+    public function pointsColumn(): string
+    {
+        return $this->value.'_points';
+    }
+
+    /**
+     * The tracker that moves this suit's points.
+     *
+     * Every Research Point that moves goes through it, so the ledger can say
+     * where a Corporation's eleven Cog came from three turns later.
+     */
+    public function tracker(): Tracker
+    {
+        return match ($this) {
+            self::Cog => Tracker::ResearchCog,
+            self::Brain => Tracker::ResearchBrain,
+            self::Leaf => Tracker::ResearchLeaf,
+            self::Maths => Tracker::ResearchMaths,
+        };
+    }
+
+    /**
      * @return array<int, self>
      */
     public static function all(): array

@@ -745,6 +745,32 @@ function FacilityPanel({
                 </div>
             </div>
 
+            {/* What is stored in here, above the stacks that defend it: a
+                Runner is coming for the technologies, so the Facility reads as
+                what it holds and then how it is protected. Secret from outside
+                the Corporation (3.4.2) and so never in the public list. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">
+                    Technologies {facility.technologies.length} of{' '}
+                    {facility.technology_capacity}
+                </span>
+                {facility.technologies.map((technology) => (
+                    <Badge
+                        key={technology.id}
+                        variant={technology.usable ? 'outline' : 'secondary'}
+                        title={`${technology.status_label} · ${technology.origin_label}${
+                            technology.usable ? '' : ' · does nothing yet'
+                        }`}
+                    >
+                        {technology.name}
+                        {!technology.usable && ' ·\u00a0inert'}
+                    </Badge>
+                ))}
+                {facility.technologies.length === 0 && (
+                    <span className="text-muted-foreground">— empty</span>
+                )}
+            </div>
+
             <div className="mt-3 grid gap-4 lg:grid-cols-2">
                 {facility.stacks.map((stack) => (
                     <StackPanel

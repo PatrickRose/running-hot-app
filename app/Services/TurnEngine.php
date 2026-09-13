@@ -15,6 +15,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Throwable;
 
 /**
  * Drives the 15/15/5 turn cycle (rulebook 2).
@@ -32,6 +33,7 @@ class TurnEngine
         private readonly FacilityDefenceService $facilityDefence,
         private readonly PublishFacilityList $facilityList,
         private readonly CouncilService $council,
+        private readonly ResearchTableService $researchTable,
     ) {}
 
     /**
@@ -74,8 +76,15 @@ class TurnEngine
 
             // Any security budget Security did not spend goes back to the
             // Corporation at the end of the Action phase (rulebook 3.3.5).
+            //
+            // And the research table shuts with it: "the phase end is called"
+            // is one of the two ways the research game ends (3.2.1), and the
+            // table is only ever open during the Action phase. Nothing else
+            // closed it, so a sitting stayed open through Team Time and the
+            // next Setup and went on accepting equations.
             if ($phase->type === PhaseType::Action) {
                 $this->facilityDefence->returnUnspentBudgets($phase->turn, $actor);
+                $this->closeResearchTable($phase->turn->game);
             }
 
             $next = $phase->type->next();
@@ -180,11 +189,38 @@ class TurnEngine
             ])->save();
         }
 
+        // The game ending ends the phase, so it ends the research game too -
+        // this is the one path to a completed phase that does not go through
+        // advance().
+        $this->closeResearchTable($game);
+
         $game->forceFill(['status' => GameStatus::Finished])->save();
 
         $this->announcer->gameFinished($game);
 
         return $game;
+    }
+
+    /**
+     * Shut the research table, if one is open.
+     *
+     * Deliberately not fail-soft, where opening one is. Dealing a sitting seeds
+     * decks, gathers every card, seats the Corporations and deals them a hand,
+     * and none of that may stop a phase from starting - closing one writes a
+     * single column, and swallowing a failure here would leave open exactly the
+     * table this exists to shut.
+     *
+     * Scoring is untouched by it. An equation is played in one phase and scored
+     * "while other players are taking their turns" (3.2.1), so a closed table
+     * still pays out: what closing stops is playing another one.
+     */
+    protected function closeResearchTable(Game $game): void
+    {
+        $session = $this->researchTable->currentSession($game);
+
+        if ($session !== null) {
+            $this->researchTable->closeSession($session);
+        }
     }
 
     protected function startPhase(Turn $turn, PhaseType $type, ?User $actor = null): Phase
@@ -216,6 +252,23 @@ class TurnEngine
             // five minutes later (rulebook 3.1.1). Opening the sitting here is
             // what anchors that second clock to the phase's own start.
             $this->council->openSession($turn, $now);
+        }
+
+        // "During the Action Phase, research players should make their way to
+        // the research table" (rulebook 3.2.1), so the cards are dealt as the
+        // phase opens rather than waiting on Research Control remembering to.
+        // Control re-deals, redraws the order and closes the table from its own
+        // panel; this only sets the table.
+        //
+        // Fail-soft, on the same terms as the announcements: a research game
+        // that could not be dealt is a sub-game Control deals by hand, and it
+        // must never be a phase that would not start.
+        if ($type === PhaseType::Action) {
+            try {
+                $this->researchTable->openSession($game, $turn);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
         }
 
         // Income and free Wound recovery land as Team Time opens, giving Control

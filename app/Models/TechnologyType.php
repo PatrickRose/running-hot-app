@@ -4,12 +4,14 @@ namespace App\Models;
 
 use App\Enums\ResearchSuit;
 use App\Support\CardImage;
+use App\Support\CardMarking;
 use App\Support\TechnologyBlueprint;
 use Database\Factories\TechnologyTypeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -29,6 +31,9 @@ use Illuminate\Support\Carbon;
  * @property int $game_id
  * @property string|null $code
  * @property string $name
+ * @property string|null $split_group
+ * @property int|null $split_piece
+ * @property int|null $split_pieces
  * @property string $tree
  * @property int|null $corporation_id
  * @property string|null $description
@@ -41,16 +46,19 @@ use Illuminate\Support\Carbon;
  * @property int|null $required_facility_type_id
  * @property int|null $copy_strength
  * @property int|null $destroy_strength
+ * @property bool $starting
+ * @property array<string, mixed>|null $deck_grant
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
 #[Fillable([
     'game_id', 'code', 'name', 'tree', 'corporation_id',
+    'split_group', 'split_piece', 'split_pieces',
     'description', 'effect',
     'cog_cost', 'brain_cost', 'leaf_cost', 'maths_cost',
     'prerequisites', 'required_facility_type_id',
-    'copy_strength', 'destroy_strength', 'notes',
+    'copy_strength', 'destroy_strength', 'deck_grant', 'starting', 'notes',
 ])]
 class TechnologyType extends Model
 {
@@ -64,6 +72,8 @@ class TechnologyType extends Model
     {
         return [
             'prerequisites' => 'array',
+            'deck_grant' => 'array',
+            'starting' => 'boolean',
         ];
     }
 
@@ -96,6 +106,16 @@ class TechnologyType extends Model
     public function requiredFacilityType(): BelongsTo
     {
         return $this->belongsTo(FacilityType::class, 'required_facility_type_id');
+    }
+
+    /**
+     * The cards of this technology a Corporation has (rulebook 3.2.2).
+     *
+     * @return HasMany<TechnologyHolding, $this>
+     */
+    public function holdings(): HasMany
+    {
+        return $this->hasMany(TechnologyHolding::class);
     }
 
     /**
@@ -136,6 +156,98 @@ class TechnologyType extends Model
     public function isFree(): bool
     {
         return array_sum($this->cost()) === 0;
+    }
+
+    /**
+     * Whether this technology is one card of several (rulebook 3.2.7).
+     *
+     * Read off the printed name - "Power (Part 1/4)" - at seed time, so a
+     * technology Control writes during play is split if they name it that way
+     * and single if they do not.
+     */
+    public function isSplit(): bool
+    {
+        return $this->split_group !== null;
+    }
+
+    /**
+     * Whether this sits on one Corporation's tree (rulebook 3.2.2).
+     *
+     * Its own, or the set common to all of them. An unattached technology is
+     * not common: a tree whose Corporation this game does not have keeps a null
+     * corporation_id (see App\Actions\SeedTechnologies), and reading that as
+     * common would put Augmented Nucleotech's whole tree in front of every
+     * Corporation in a game ANT is not playing in. Control reassigns such a
+     * tree by naming a Corporation on it.
+     */
+    public function isOnTreeFor(Corporation $corporation): bool
+    {
+        if ($this->game_id !== $corporation->game_id) {
+            return false;
+        }
+
+        return $this->corporation_id === $corporation->id
+            || ($this->corporation_id === null && $this->isCommon());
+    }
+
+    /**
+     * Whether a Corporation opens the game already holding this
+     * (rulebook 3.2.2).
+     *
+     * Read off its own column rather than off the price or the description:
+     * fourteen other technologies are free without being anybody's starting
+     * position, and three of the twenty that are carry a real description
+     * instead of the words "Starting tech".
+     */
+    public function isStarting(): bool
+    {
+        return $this->starting;
+    }
+
+    /**
+     * Whether researching this is deck customisation rather than a technology
+     * (rulebook 3.2.3).
+     */
+    public function isDeckCustomisation(): bool
+    {
+        return $this->deck_grant !== null;
+    }
+
+    /**
+     * What deck customisation this row grants and what it asks for, as its own
+     * card prints it (rulebook 3.2.3).
+     *
+     * The six "Research deck" rows on the common tree do not price like
+     * anything else on the tree - "spend 4 research credits in any suit", "6 in
+     * any suit and 3 in another" - so the amounts are a list the player assigns
+     * to suits of their choosing, and the card that comes out is described
+     * rather than fixed: a value the player picks inside a range, wild or not.
+     *
+     * @return array{
+     *     amounts: array<int, int>,
+     *     value_min: int,
+     *     value_max: int,
+     *     wild: bool,
+     *     markings: array<int, CardMarking>,
+     *     requires_research_facilities: int,
+     * }|null
+     */
+    public function deckGrant(): ?array
+    {
+        $grant = $this->deck_grant;
+
+        if ($grant === null) {
+            return null;
+        }
+
+        return [
+            'amounts' => array_values(array_map('intval', $grant['amounts'] ?? [])),
+            'value_min' => (int) ($grant['value_min'] ?? 1),
+            'value_max' => (int) ($grant['value_max'] ?? 1),
+            'wild' => (bool) ($grant['wild'] ?? false),
+            'markings' => CardMarking::listFrom($grant['markings'] ?? []),
+            'requires_research_facilities' => (int) ($grant['requires_research_facilities'] ?? 0),
+        ];
     }
 
     /**

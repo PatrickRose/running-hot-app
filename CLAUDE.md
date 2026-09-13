@@ -226,9 +226,11 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - Removing a Tag costs 3 Credits and is the player's choice, so upkeep never does it automatically.
 - A Facility build cost comes from its type's own price on the type sheet, and Control can name another — MCM's Construction Leader technology is a discount on exactly this. What is *not* derived is Income: more Corporate Facilities is a *reason* for Control to raise it, never a formula that raises it.
 
-**Never write a tracker directly.** All movement of Income, Political Will, Credits, Notoriety, Wounds, Tags, Stability and Civil Unrest goes through `TrackerService`, which writes a `tracker_adjustments` row recording before, after, delta, actor and reason. That ledger is how Control answers "why did that number change?" three turns later. `$model->update(['wounds' => ...])` bypasses it and is a bug.
+**Never write a tracker directly.** All movement of Income, Political Will, Credits, Research Points, Notoriety, Wounds, Tags, Stability and Civil Unrest goes through `TrackerService`, which writes a `tracker_adjustments` row recording before, after, delta, actor and reason. That ledger is how Control answers "why did that number change?" three turns later. `$model->update(['wounds' => ...])` bypasses it and is a bug.
 
 **The clock is server-authoritative.** A phase stores an absolute `ends_at` that extensions and pauses mutate directly; remaining time is always derived from it. The browser only counts down between polls and must never be able to make a phase run long.
+
+**And it is on every page.** The whole game runs to the phase clock, so a player needs it wherever they are rather than on the handful of pages that happened to ask for a game: `HandleInertiaRequests` shares the phase and `AppSidebarHeader` draws it in a sticky header. It is shared with `Inertia::always()` rather than as a plain shared prop, because an ordinary one is filtered straight out of a partial reload — the research page polls `only: ['research']`, and the clock would have frozen between full visits. An always prop ignores the filter, so every poll any page already makes re-anchors the clock for free, and the header's own `only: ['phase']` poll covers the pages that do not poll at all.
 
 ## Naming decisions
 
@@ -257,6 +259,13 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | What each person at the Council may see | `App\Support\CouncilPresenter` |
 | Who may chair, and who may vote | `App\Policies\CouncilSessionPolicy`, `App\Policies\AgendaCardPolicy` |
 | The Council Chamber players read | `App\Http\Controllers\CouncilController`, `resources/js/pages/council.tsx` |
+| The rules of an equation, and what one pays | `App\Support\Equation` |
+| The research card game: dealing, playing, scoring, the deck | `App\Services\ResearchTableService` |
+| A game's starting research decks | `config/running_hot.php`, `App\Actions\SeedResearchDecks` |
+| The technologies a Corporation opens holding | `App\Support\TechnologyBlueprint`, `App\Actions\GrantStartingTechnologies` |
+| Spending Research Points, and everything after | `App\Services\TechnologyService` |
+| Research payload shaping | `App\Support\ResearchPresenter` |
+| The research table on screen | `resources/js/components/research-table.tsx` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | Who Control is, per game | `App\Models\ControlMember`, `App\Actions\ClaimControlSeatsForUser` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -278,6 +287,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - **Wayfinder's generated modules are gitignored.** `resources/js/routes`, `resources/js/actions` and `resources/js/wayfinder` do not exist in a clean checkout, so `tsc` cannot resolve imports until `php artisan wayfinder:generate --with-form` (or `npm run build`) has run. Always pass `--with-form`: without it the `.form()` helpers vanish and starter-kit pages break.
 - **Feature tests need built frontend assets.** Rendering an Inertia page throws without a Vite manifest, so CI runs `composer setup` before the suite.
 - **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
+- **`->with('status', ...)` only arrives because `HandleInertiaRequests` shares it.** Ninety-odd controllers end a redirect that way and none of it reached the browser until it was: the message was written, flashed, and thrown away one redirect later, so an install, a reorder and a played equation all happened in silence. It is shared under `flash` rather than as a bare `status` because the auth pages take a `status` prop of their own and draw it in a panel, and `use-flash-toast` reads it off the *visit* rather than out of a render — two identical messages in a row are normal, and a toast keyed on a changed value would show the second one nothing. It has to be an `Inertia::always()` prop, and that is not tidiness: a partial reload does not carry an ordinary shared prop, so the client keeps the one it already had, and a listener firing on every successful visit then re-announced the same message on every five-second poll for as long as the page stayed open. Resolved on every response, it is null again the moment the flash has been read.
+- **A refusal has to be drawn somewhere.** A page posting with `router.post` gets no `errors` of its own the way an Inertia `<Form>` does, so it has to read them off `usePage()`. The research table is the one that had to learn this: `App\Support\Equation` reports every refusal against `equation`, nothing rendered that key, and an equation the rules would not take looked exactly like a dead button.
 
 ## Commands
 
@@ -486,6 +497,13 @@ then does the player submit it to the Chair — the rulebook has the player subm
 it once they and Control agree, so agreeing is the player's to do too. Any
 player may write one: 3.1.3 hands blank cards to players rather than to CEOs.
 
+**The Chamber polls, for the reason the research table does.** It is a room full
+of other people: the Chair puts a card up, somebody declares a vote secret, a
+ballot lands, the recess clock runs out — none of it anything the reader's
+browser did, and a CEO watching a stale page is a CEO who misses the vote.
+`usePoll(5000, { only: ['game', 'council'] })`, the same five seconds as
+everywhere else.
+
 **Not modelled:** what a resolution actually *does*. The Council decides things
 about Procatorion, and the consequences are Control's to apply with the tracker
 controls — an outcome is recorded as the resolution that carried, and nothing
@@ -529,6 +547,17 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 **Control publishes it; the application never creates it unprompted.** `PublishFacilityList::refresh()` keeps an existing list current as each Setup phase opens and does nothing at all until Control has published one, so provisioning a server can never surprise it with a post. Refresh is fail-soft for the same reason announcements are — a list a turn out of date must never stall the clock.
 
 **Players read the Facilities at `/facilities`, in two tiers, and the line between them is the point.** Everyone sees the same public list the embed carries — Corporation, Facility name, type, building. A player holding a Corporate seat additionally sees *their own* Corporation's stacks in full, because 3.4.2 makes a stack Secret from everyone else, not from the Corporation that installed it. So a Runner learns nothing there that reconnaissance would otherwise have to buy, and a Security player cannot read a rival's stack. `GamePresenter::facilityBoard()` decides which tier a viewer gets, from the Corporate characters they have claimed rather than from a column.
+
+**A Facility reads as what it holds and then how it is protected.** The
+technologies stored in one are on `/facilities` beside its stacks, on exactly
+the same tier line: 3.4.2 keeps a Facility's contents Secret from *outside* the
+Corporation, so that reconnaissance costs something — not from the people who
+put them there. So `GamePresenter::facility()` carries them and the public list
+in `facilityBoard()`, which is assembled separately, names none of it;
+`FacilityBoardTest` asserts that from both ends, as it already did for card
+titles. They were only ever on `/research` before, which is the wrong page for
+them: a Runner is coming for the technologies, and the person deciding what to
+defend is looking at the Facility board.
 
 **Security arranges their own stacks; everyone else reads.** That page used to be read-only, on the reasoning that Security hands Control a requisition slip at the table. It is not any more: a Security player drags cards between their hand and their own Corporation's Facilities at `/facilities`, and Control is left for the rulings only Control can make. `FacilityPolicy::defend` is the whole of the boundary — the Corporation's *Security* seat, in a running game, and nobody else. The CEO and the Research player still see those stacks (3.4.2 keeps them Secret from outside the Corporation, not from inside it) and still cannot move them, because a board three people can drag at once is a board nobody can trust. Control keeps every power it had, through `before()` and through its own routes, so a ruling mid-game never waits on the Security player being at their laptop.
 
@@ -590,6 +619,353 @@ Control sets any count outright via `ProtectionCardHoldingController`. The Corpo
 **Technology trees attach to Corporations late.** A game is created before its roster exists, so `SeedTechnologies` writes every technology unattached and fills in `corporation_id` on a second run, after `CreateDefaultRoster`. `CreateDefaultFacilities` makes that second call. Note the codes do not identify the tree reliably — Gordon and Genetic Equity both take a `G` — so the tree comes from the sheet's own column.
 
 **Not modelled, deliberately:** the Corporation shop, auctions, research grants, trading copies between Security players, and who owns which Equipment card. Each is a conversation with Control, who then sets the count.
+
+## The research game
+
+The Research players' sub-game, and the one place the application does something
+a table of cards cannot: it does the arithmetic, and it lets scoring happen off
+to one side while play carries on. Rulebook 3.2 — and read the **PDF** for it,
+because the four suits are icons that do not survive the text extraction.
+
+**Research Points are four Trackers on the Corporation.** Not one currency and
+not the Research player's: 3.2.5 trades them "between different Corporations",
+and a Corporation fielding two Research players still has one pile of tokens. As
+Trackers they sit on the Control panel beside Credits, every movement lands in
+`tracker_adjustments` with a reason, and Control overrides a score by moving the
+number — which is the whole of "Control can override any score".
+
+**An equation is two sets, and the arithmetic lives in one pure class.**
+`App\Support\Equation` takes the cards and answers whether they are an equation,
+what each side pays, and what the balanced bonus is. Nothing about players,
+turns, decks or the database. That is deliberate for the reason the Protection
+Card move cost is one method: the rules are subtle enough to drift if they are
+written twice, and `tests/Unit/EquationTest.php` holds them to the rulebook's own
+worked examples — including the scoring table on page 13, which is what proves
+scoring picks a *side* rather than a suit.
+
+**Scoring picks a side.** "You earn Research Points in one of the suits that you
+used ... equal to the sum of the card values of that set" reads as a free choice
+of suit until you check it against the book's four examples: 1+2 Maths against
+3+4 Leaf pays *either* 3 Maths *or* 7 Leaf, never 7 Maths. So the player chooses
+which set to be paid for, and the suit follows from it. The suit is asked for as
+well only because a set of nothing but wilds could be any of the four.
+
+**The balanced bonus is the triangular numbers.** 1, 3, 6, 10 for one to four
+cards a side, and the book then says "and so on" — so it is `n(n+1)/2` rather
+than a table that runs out, because deck customisation adds cards and nothing
+caps how wide an equation can get. It may be split across any suits the equation
+used, which is why it is allocated rather than paid in one.
+
+**Playing and scoring are two acts, and that is the rulebook's instruction.**
+"Scoring can and should be done while other players are taking their turns." So
+`play()` spends the cards, draws the hand and the pool back up and passes the
+turn on, and leaves the equation Pending; `score()` pays it whenever its player
+gets to it, possibly several turns later. Nothing at the table waits on somebody
+doing sums. Control's override is `unscore()`, which hands the points back and
+returns the equation to Pending so it can be scored again — both movements in the
+ledger, so the tokens on the table stay reconcilable.
+
+**A sitting is dealt as the Action phase opens and shut when it ends.** The
+rulebook has research players make their way to the table during the Action
+phase, and "the phase end is called" is one of the two ways the game ends
+(3.2.1) — so the table exists for exactly that phase and `TurnEngine` owns both
+ends of it. Nothing closed it at first, and a sitting then stayed open through
+Team Time and the next Setup, still taking equations. Control re-deals, redraws
+the order and closes the table from its own panel as well.
+
+**Opening is fail-soft; closing is not, and the asymmetry is the point.**
+Dealing seeds decks, gathers every card, seats the Corporations and deals them a
+hand — a lot to go wrong, and none of it may stop a phase from starting, so a
+throw is reported and the phase opens anyway with a sub-game Control deals by
+hand. Closing writes one column, and swallowing a failure there would leave open
+exactly the table the call exists to shut. `finish()` closes it too: ending the
+game is the one path to a completed phase that does not go through `advance()`.
+
+**Closing the table does not stop scoring, and must not.** An equation is played
+in one phase and scored "while other players are taking their turns", possibly
+several turns later — so `score()` asks only whether the equation is still
+Pending, and the pending list hangs off the Corporation rather than off the
+sitting. What closing stops is playing another one.
+
+**Dealing gathers every card back first, and that is a reading rather than a
+rule.** The rulebook has a deck that runs dry end that player's game, and says
+nothing about getting the cards back — which read literally would put a
+Corporation out for the rest of the evening rather than the rest of the phase. So
+each sitting begins by gathering and shuffling. It is the only way the game is
+playable more than once.
+
+**Both decks are real, and the rulebook describes neither.** "Each Corporation's
+research deck begins as a fairly basic deck" is the whole of what 3.2.3 says,
+and the public deck is never mentioned at all — so both lists are the designer's,
+they live in `config/running_hot.php`, and `SeedResearchDecks` writes them when
+the roster is created. `private_deck` is now only the fallback for a Corporation
+the config does not name.
+
+**The public deck is 138 cards and almost all of it is marked**, which is what
+makes it the *shared* deck: a card off the table usually says something about how
+the equation has to be built. Each of the four suits holds the same 32 — one of
+every value that cannot be played alone, one of every value demanding each of the
+four suits of the other side (its own included, which makes both sets the same
+suit), and only seven plain cards: three 1s, two 2s, two 3s. Then ten wilds, two
+of every value, every one of them No single.
+
+**A Corporation's deck is two major suits and two minor ones**, and the shape of
+each is the same for all five — so `research.suit_decks` holds both once and a
+Corporation names only which two it majors in. Thirty-six cards: fourteen in
+each major suit (3×1, 2×2, 2×3, 1×4, 1×5, and a No single at every value) and
+four in each minor (1 and 2, one plain and one No single each). The pairs come
+off the briefings and are what make the five research games different from one
+another: ANT Maths and Cog, DTC Maths and Brain, McCullough Cog and Leaf, Gordon
+Cog and Brain, Genetic Equity Brain and Leaf.
+
+Every suit a Corporation does not name is minor, which makes *two* majors the
+game's own shape rather than something enforced — a Corporation Control invents
+may major in one or in three and gets the deck that implies. One named nowhere
+gets `private_deck`, which is the fallback rather than anybody's real deck.
+
+**A test that pins a deck has to clear `research.corporations` as well.** The
+named entries win over `private_deck`, so a test setting a flat deck and not
+clearing them gets thirty-six cards full of No single instead — which fails
+nowhere near the setup that caused it, as several did the moment the real decks
+landed.
+
+**A deck is described three ways, and they add together.** The shape —
+`values`, `copies`, `wild` — is the run of numbers that makes up the bulk of one,
+because most of a deck is the same values four times over and writing that out
+would bury the parts that are not. `cards` is those parts, an entry at a time: a
+card printed with a marking, a wild worth something other than the rest of them,
+two 3s against one 5. An entry naming no suit means one in each of the four,
+which is what a value in the shape means as well; `wild => true` is the card of
+no suit, and `markings` is the list of what it is printed with. `major` is the
+third way, above, and the entries in `suit_decks` read exactly as a `cards` entry
+does except that they name no suit: the suit is the assignment, stamped on as
+they are read.
+
+An entry may also carry `values`, a list, which is the same entry said of several
+values at once. That is what the public deck needs and why it exists: five cards
+demanding Cog of the other side are one line rather than five, and the twenty
+restricted entries a suit holds read as four lines rather than twenty. Without `cards` a
+seeded deck could hold no marking at all, so the only "No single" card that could
+ever reach a game was one bought off the tech tree. A suit or a marking the
+application does not have stops the seed rather than being written as a null, and
+so does a Restricted naming no suit: a card that quietly lost half its marking
+would go on being played wrongly for the rest of the game, and nothing would say
+why.
+
+**A card is a row, not a type.** A research card is a suit and a value and
+nothing else, so there is no catalogue to point at — two 3-of-Leaf cards are two
+rows. That is what lets deck customisation add one and Control upgrade one
+without either touching its twin. A null suit is a wild card rather than a
+missing one, and it draws the icon font's `Y`, which was drawn for this and had
+nothing to show it until now.
+
+**A card carries two kinds of marking, and they are about opposite halves of the
+equation.** "No single" is about the set holding the card: it cannot be the only
+card there. "Restricted" is about the set facing it: the card names a suit and
+the other side has to be that suit, printed as "Other side must be Cog". The
+rulebook prints both and defines neither, so both are the designer's ruling
+rather than a reading — which is why they are written down here and in
+`App\Enums\ResearchCardMarking` rather than inferred from anything.
+
+**A card carries a *list* of them, because nothing stops it printing both.** So
+`research_cards.markings` is json rather than a column, and `App\Support\CardMarking`
+is the pair of a kind and — where the kind needs one — the suit it names. The
+enum on its own is not a whole marking: a Restricted with no suit is a rule that
+would silently check nothing, so the value object's constructor refuses one and
+so does the deck seeder. Where the *strictest* marking should win, it does:
+`EquationCard::minimumSetSize()` takes the maximum rather than the last one read.
+
+**Restricted narrows `suitsFor()` rather than only being checked in `validate()`.**
+That is what makes it come out right at scoring time as well: a set of nothing
+but wilds facing "Other side must be Cog" *is* Cog, so Cog is what it pays in and
+nothing else can be claimed for it. Validation still reports the failure
+separately, against the *printed* suits, so the message names the card that did
+the restricting instead of calling the far set mixed. Two cards demanding
+different suits of the same set each look satisfiable alone — an all-wild set
+could be either — so the clash is caught by the narrowed set coming out empty,
+which is a check of its own.
+
+**A marking is an enum, not the text it started as.** The equation rules act on
+it, and a rule keyed off a string somebody typed breaks on a capital letter. That
+also makes it a choice rather than a free-text box wherever Control sets one: a
+marking the rules could not enforce would be worse on a card than no marking. A
+third marking is a case, a `minimumSetSize()` or a `demandsOfTheOtherSide()`, and
+a line in `CardMarking`.
+
+**A blank slot on a form is not a half-written marking.** The marking form has a
+slot per kind and an untouched Restricted posts an empty suit, so
+`ShapesCardMarkings::filterBlankMarkings()` drops it at the HTTP edge — while
+`CardMarking` and the deck seeder still refuse one, because in a config file
+somebody wrote by hand a blank suit really is a mistake.
+
+**Deck customisation is priced on the tree, and prices unlike anything else on
+it.** "4 research credits in any suit", "6 in any suit and 3 in another", "5 from
+each suit" — the suits are the player's choice, which is the point of customising
+a deck, so it cannot go in the four cost columns. It goes in a `deck_grant` json
+column on `technology_types`: a list of amounts the player assigns to suits (all
+different), the value range, whether the card is wild, what it is printed with,
+and how many Research Facilities the row asks for. The card takes the suit of the
+first amount, which is those rows' own "in that suit" and "in the first suit".
+Control can write one of these rows during play like any other proposal (3.2.4);
+a blank set of amount boxes on that form is what says a proposal is an ordinary
+technology. Upgrading an existing card is the other half of 3.2.3 and the tree
+prices it nowhere, so it is a custom proposal too: Control names a price, takes
+the points with the tracker controls, and edits the card.
+
+**A technology has to be housed, and that is a bar on researching rather than a
+step afterwards.** Footnote 7 to 3.2.2: "If you do not have any Facilities that
+this technology can be placed in, you may not research them." Storage is 2 for
+every *Corporate* Facility the Corporation owns, so a Corporation with none can
+store nothing at all — which reads oddly until you notice it is exactly what "2
+multiplied by the number of Corporate Facilities you have" says.
+
+**A Corporation opens the game already holding technologies.** Twenty across the
+five, and they are the shape of each Corporation's position rather than a bonus:
+ANT's four pieces of Power, DTC's four of Arms, Genetic Equity's four of Miracle
+Genetics, McCullough's Factory and Construction Leader, and Gordon's three plot
+hooks. `App\Actions\GrantStartingTechnologies` runs from
+`CreateDefaultFacilities`, after the Facilities exist, because 3.2.2 houses every
+technology in a Facility and a starting card sitting nowhere would have the
+storage count wrong from the first turn. It writes a starting position rather
+than a change, exactly as the Facilities do: the cards are free, nothing goes
+through `TrackerService`, and no Research Points move because none were spent.
+Origin is **Researched**, which is what lets 3.2.7 give ANT a working Power on any
+single piece — a Corporation that stole one needs all four. Each card goes in the
+emptiest Facility that will take it, so four pieces of Power are not all in one
+building for one Run to take, and a card naming a Facility type goes in that type.
+
+**Which technologies those are is a column, because neither of the obvious
+markers works.** They cost nothing in every suit — but so do fourteen others, the
+six deck customisation rows among them. Seventeen of the twenty carry the words
+"Starting tech" in their description — but Gordon's three (`RGR094`–`RGR096`) carry
+real descriptions, and reading the marker off that column handed Gordon nothing.
+So `technology_types.starting` says it outright, seeded from
+`TechnologyBlueprint`, which also lets Control mark one on a Corporation they
+invented mid-game. A Corporation with nowhere to house one is *reported* by the
+action rather than thrown: a roster Control built with no Corporate Facility can
+store nothing at all, and that must not stop a game being created.
+
+**A copy is a discount, not a technology.** A card Research Control made for a
+partner (3.2.5) or a Run brought back (3.2.6) is a `technology_holdings` row with
+status Claimed: it sits in a Facility, it takes up storage — footnote 8 says so
+outright — and it does nothing until the Corporation pays. Paying flips that card
+rather than creating a second one. The discount rounds the *resulting cost* up,
+which 3.2.6 states in as many words: a 5 at 50% off is 3. The percentages
+(25% weak copy, 50% good copy or theft) are defaults on the origin rather than
+rules, because 3.2.6 leaves a copy's worth to Research Control's judgement of
+"the strength of the copy".
+
+**A split technology's owner is not its thief.** The Corporation that researched
+one works it holding any single piece; a Corporation that stole or copied it
+needs every piece before it works at all (3.2.7). That is the only place in the
+application where how something was come by matters more than what it is, and it
+is why `TechnologyOrigin` carries `needsEveryPiece()`. Which technologies are
+split is read off their printed names — "Power (Part 1/4)" — at seed time, so a
+technology Control writes during play is split if they name it that way.
+
+**Prerequisites are printed titles, and a split group counts as one.** A title is
+what a Research player shows Research Control (footnote 6), and Control may add a
+technology that others already name, so nothing is a foreign key. A Corporation
+holding "Power (Part 1/4)" satisfies a prerequisite of "Power", for the same
+reason 3.2.7 lets its owner work the technology on one piece.
+
+**Trading points asks nobody's permission.** 3.2.5 has players trading "however
+they wish ... by passing over the requisite tokens", so a transfer is one-way and
+one-sided: one pile goes down, the other goes up, and what came back — Credits, a
+favour, another suit — is settled at the table. Both movements are in the ledger
+with the other Corporation named, so a trade can be reconstructed from either end.
+
+**Affordability is checked against the database, not the model.** Every service
+here may be holding a Corporation loaded before the last tracker write, and
+`TrackerService` clamps Research Points at zero — so a stale check would not
+refuse an overspend, it would quietly take the pile down to nothing.
+`Corporation::researchPointsIn()` exists for exactly that, and is what every
+"can they pay?" goes through.
+
+**Two tiers on the page, and the line is the Facility board's.** The table is a
+table in a room: who is sitting at it, in what order, whose turn it is and the
+six public cards are everybody's. A hand, a deck, a pile of points and a tech
+tree go only to the Corporation they belong to, because 3.2.5 makes the size of
+that pile semi-secret and a hand everybody can read is not a card game. Inside a
+Corporation the Research seat plays and the CEO and Security read — a hand two
+people can play from is a hand neither can plan with, which is the same reasoning
+that gives the defence board to Security alone. `App\Policies\CorporationPolicy`
+is the whole of that boundary.
+
+**The equation builder takes clicks and drags, and needs both.** Clicking cycles
+a card — into the first set, into the second, then back out — which is one
+control for every answer. Dragging a card from the pool or your hand into either
+tray says the same thing by pointing at it, which is what people reach for when
+two sets of cards are laid out in front of them. Neither covers the other:
+clicking is the only path for a keyboard, and dragging is the only way to move a
+card straight from the first set to the second without cycling it past a state
+nobody wanted.
+
+**So the research table registers no `KeyboardSensor`, and that is deliberate.**
+The cards are buttons, and a keyboard drag would capture Enter and Space from
+them to offer a slower way of doing what the click already does. For the same
+reason only dnd-kit's `listeners` go on the wrapper and never its `attributes`:
+those announce a draggable that answers to the keyboard, and they would also
+take the button's own accessible name and `aria-pressed` off it.
+
+**Touch holds where the Facility board measures distance.** The defence board
+pins its hand and gives its cards `touch-action: none`, because both ends of
+every gesture are on screen at once. The research cards sit in a page that
+scrolls, so a `TouchSensor` with a 200ms delay is what lets a swipe starting on a
+card scroll the page instead of picking the card up. The mouse still activates on
+6px of travel, so a click on a card is still a click.
+
+**A drop that misses, misses.** `closestCenter` — dnd-kit's usual suggestion, and
+what the Facility board falls back to — always finds a nearest target however far
+away the pointer is, so a card let go over empty space would silently join a set.
+The table requires the pointer to actually be inside a tray, which is also why
+the pool and the hand are drop targets in their own right: dropping a card back
+among the others is how it leaves the equation.
+
+**The research page polls, because the table is a table other people sit at.**
+The turn passes to you when somebody else plays, the pool refills under you and
+the sitting shuts when the phase is called — none of it anything your browser
+did. `usePoll(5000, { only: ['game', 'research'] })`, the same five seconds the
+dashboard and the Control panels use. A half-built equation survives it: the
+trays are local state keyed by card id, so a card another player has since spent
+simply drops out of the tray it was in, which is what has happened to it.
+
+**Leaving the table is not the player's, and a dry deck is final.** The rulebook
+makes leaving a choice (3.2.1) and this application does not offer it: a seat is
+left by running your deck dry, and taken back by Control from its own panel.
+"You have no cards left in your deck when you try to draw up your hand limit"
+ends that player's game, so it ends it — there is no player-facing way back to
+the table, and the next sitting is what gathers the cards and deals again.
+Control can still seat somebody mid-sitting, because Control can always
+override; nobody else can.
+`ResearchTableService::leave()` and `rejoin()` are both still there and both
+still used — by the dry-deck path and by `Control\ResearchSessionController`
+— so what went is the player-facing routes, not the mechanism. The page still
+says *why* you are out; it just does not offer a way back in.
+
+**A refused score is shown on the form that was refused.** Several equations
+wait at once and they all report against the same three keys, so a page-level
+`errors` would put one form's refusal under every form on screen. Each
+`ScoreForm` therefore keeps its own, set from `router.post`'s `onError`. Same
+bug as the equation builder's dead Play button, one layer along.
+
+**What you have to spend is kept on screen while you read what things cost.**
+The tech tree is long and the four totals were at the top of the page, so buying
+meant scrolling up, remembering four numbers and scrolling back down — the strip
+is sticky inside the tree's own card instead. It sits at `top-16` to clear the
+app header, which is sticky itself and drawn above it, and spans the card's
+padding with a negative margin so the rows scroll behind an edge rather than
+past a floating box.
+
+**The research payload has a presenter of its own.** `App\Support\ResearchPresenter`
+rather than more of `GamePresenter`: a hand, a pool, a turn order, every equation
+waiting to be scored, a tech tree with each row's affordability worked out, the
+cards a Corporation has researched and the deck it plays from is about as much as
+the rest of the application sends put together.
+
+**Not modelled, deliberately:** what any technology's effect does. Effects are
+printed text for Control to read, exactly as a Facility type's are — the sub-games
+that would act on them are unbuilt.
 
 ## Logos
 
@@ -700,12 +1076,12 @@ The rulebook prints the four Research Point suits as icons and never names them 
 - **A screen reader left to itself says "E" where the page means Physical.** So the glyph is always `aria-hidden` with its name in an `sr-only` span beside it, and nothing renders a glyph directly: it goes through the `GameIcon` React component, which is what stops the pairing being forgotten at the next call site.
 - **A missing glyph fails quietly**, rendering a bare capital rather than nothing, which reads as a styling bug. `tests/Unit/IconFontTest.php` therefore parses the font's own `cmap` table and asserts every icon in use is really in the file. `N` is the one capital the font has no icon for, which makes it the canary that keeps that test from passing vacuously.
 
-**What each icon means is recorded in `App\Support\IconFont`, and nowhere else.** The glyph names inside the font are only the letters, so nothing in the file says what any of them is — working it out again means rendering the font and looking at it. The three enums that draw themselves (`ProtectionKind`, `EquipmentCategory`, `ResearchSuit`) take their glyphs from there. `G` (Boost) and `Y` (a research wildcard) are drawn and recorded but unused, because Runs and the research game are not built.
+**What each icon means is recorded in `App\Support\IconFont`, and nowhere else.** The glyph names inside the font are only the letters, so nothing in the file says what any of them is — working it out again means rendering the font and looking at it. The three enums that draw themselves (`ProtectionKind`, `EquipmentCategory`, `ResearchSuit`) take their glyphs from there, and a wild research card draws `Y`. `G` (Boost) is drawn and recorded but unused, because Runs are not built.
 
 **The font is loaded through Vite, not from `public/`.** `laravel-vite-plugin` sets Vite's `publicDir` to `false`, and in development the stylesheet is served from the Vite origin — so a root-relative `url('/fonts/…')` asks the dev server for a directory it does not serve, 404s, and the icons silently degrade to bare letters for everybody running `composer run dev` while working perfectly once built. Anything referenced from CSS has to live under `resources/` and be referenced relatively. Card artwork is the opposite case and belongs in `public/`.
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, and the Council: the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies.
 
-**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece, but they are blocked on Facilities and Protection Cards, which are the state a Run operates on. The Council and the Research game are independent of both and can be picked up in parallel. `#facility-list` now carries the Facility list once Control publishes it.
+**What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece and the last of the sub-games, and everything a Run operates on is now built: the Facilities, their Protection Card stacks, and the technologies stored in them. `#facility-list` now carries the Facility list once Control publishes it.

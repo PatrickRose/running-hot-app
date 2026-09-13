@@ -20,11 +20,13 @@ use App\Models\Game;
 use App\Models\Phase;
 use App\Models\ProtectionCardHolding;
 use App\Models\ProtectionCardType;
+use App\Models\TechnologyHolding;
 use App\Models\TechnologyType;
 use App\Models\Turn;
 use App\Models\User;
 use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
+use App\Services\TechnologyService;
 use App\Support\Discord\GuildBlueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -39,6 +41,17 @@ use Throwable;
  */
 class GamePresenter
 {
+    private ?TechnologyService $technologies = null;
+
+    /**
+     * Resolved once per presenter rather than once per Facility: isUsable()
+     * is asked about every holding in every Facility a Corporation owns.
+     */
+    private function technologies(): TechnologyService
+    {
+        return $this->technologies ??= app(TechnologyService::class);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -219,6 +232,14 @@ class GamePresenter
                     Tracker::Income->value => $corporation->income,
                     Tracker::PoliticalWill->value => $corporation->political_will,
                     Tracker::CorporationCredits->value => $corporation->credits,
+                    // The four Research Point suits sit here rather than on the
+                    // research panel, because they are Trackers like the rest:
+                    // Control moves them from the same dialog, and every change
+                    // lands in the same ledger (rulebook 3.2.1).
+                    Tracker::ResearchCog->value => $corporation->cog_points,
+                    Tracker::ResearchBrain->value => $corporation->brain_points,
+                    Tracker::ResearchLeaf->value => $corporation->leaf_points,
+                    Tracker::ResearchMaths->value => $corporation->maths_points,
                 ],
             ])->all(),
             'gangs' => $game->gangs()->orderBy('name')->get()->map(fn ($gang): array => [
@@ -447,7 +468,12 @@ class GamePresenter
         $totals = $defence->derivedTotals($corporation);
 
         $facilities = $corporation->facilities()
-            ->with(['facilityType', 'protectionCards.cardType', 'turnStates' => fn ($query) => $query->where('turn_id', $turn?->id)])
+            ->with([
+                'facilityType',
+                'protectionCards.cardType',
+                'technologyHoldings.technologyType',
+                'turnStates' => fn ($query) => $query->where('turn_id', $turn?->id),
+            ])
             ->orderBy('name')
             ->get();
 
@@ -746,6 +772,7 @@ class GamePresenter
                 'facilities' => fn ($query) => $query->orderBy('name'),
                 'facilities.facilityType',
                 'facilities.protectionCards.cardType',
+                'facilities.technologyHoldings.technologyType',
                 'facilities.turnStates' => fn ($query) => $query->where('turn_id', $turn?->id),
             ])
             ->orderBy('name')
@@ -793,6 +820,31 @@ class GamePresenter
             'available_from_turn' => $facility->available_from_turn,
             'available' => $facility->isAvailableOnTurn($turnNumber),
             'notes' => $facility->notes,
+            // What is stored in this Facility, for the Corporation that owns it
+            // and for Control.
+            //
+            // The same tier line the stacks are on: 3.4.2 keeps a Facility's
+            // contents Secret from *outside* the Corporation, so that
+            // reconnaissance costs something - not from the people who put them
+            // there. facility() is only ever built for the own tier and for
+            // Control; the public list in facilityBoard() is assembled
+            // separately and names none of this.
+            'technology_capacity' => $totals['technology_capacity'],
+            'technologies' => $facility->technologyHoldings
+                ->sortBy(fn (TechnologyHolding $holding): string => $holding->technologyType->name)
+                ->values()
+                ->map(fn (TechnologyHolding $holding): array => [
+                    'id' => $holding->id,
+                    'name' => $holding->technologyType->name,
+                    'code' => $holding->technologyType->code,
+                    'status' => $holding->status->value,
+                    'status_label' => $holding->status->label(),
+                    'origin_label' => $holding->origin->label(),
+                    // 3.2.7 in one boolean: a claimed copy is paper until it is
+                    // paid for, and a stolen piece of a split technology does
+                    // nothing until its thief holds every piece.
+                    'usable' => $this->technologies()->isUsable($holding),
+                ])->all(),
             'stacks' => array_map(
                 fn (ProtectionKind $kind): array => [
                     'kind' => $kind->value,

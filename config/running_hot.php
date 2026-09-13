@@ -306,6 +306,170 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | The research decks
+    |--------------------------------------------------------------------------
+    |
+    | What the research game of rulebook 3.2.1 is played out of: five cards in
+    | each Corporation's hand, six face up in the public pool, and the two decks
+    | those come from.
+    |
+    | The hand and pool sizes are the rulebook's. Everything else here is not:
+    | "Each Corporation's research deck begins as a fairly basic deck" is all
+    | 3.2.3 says about what is in one, and the rulebook never describes the
+    | public deck at all. So this is a starting position for Control to set
+    | rather than a rule being encoded.
+    |
+    | Two ways of saying what is in a deck, and they add together. The bulk of
+    | one is a shape: 'values' is one card of each value in every suit, 'copies'
+    | repeats that, and 'wild' adds that many cards of no suit. 'cards' is for
+    | everything the shape cannot say, written one entry at a time - a card
+    | printed with a marking, a wild worth something other than the rest of
+    | them, or two 3s against one 5. An entry is a value plus what makes it
+    | particular:
+    |
+    |     'cards' => [
+    |         // One 8 in each of the four suits, each marked "No single".
+    |         ['value' => 8, 'markings' => [['marking' => 'no_single']]],
+    |         // Two wild 3s.
+    |         ['value' => 3, 'wild' => true, 'copies' => 2],
+    |         // One 7 of Leaf, and nothing in the other suits.
+    |         ['value' => 7, 'suit' => 'leaf'],
+    |         // A card printed with both markings at once.
+    |         ['value' => 6, 'suit' => 'leaf', 'markings' => [
+    |             ['marking' => 'no_single'],
+    |             ['marking' => 'restricted', 'suit' => 'cog'],
+    |         ]],
+    |     ],
+    |
+    | A card carries a list of markings rather than one, because the two the
+    | game prints are about different halves of the equation: 'no_single' says
+    | the card cannot be alone in its own set, and 'restricted' names the suit
+    | the *other* side has to be - so it needs a 'suit' of its own and says
+    | nothing without one. Both are App\Enums\ResearchCardMarking values.
+    |
+    | A marking the rules do not have, or a 'restricted' naming no suit, stops
+    | the seed rather than being written as a null: a card that quietly lost its
+    | "No single" would go on being playable alone for the rest of the game.
+    |
+    | The defaults keep the private decks to low cards and no wilds, because
+    | that is what the tech tree implies a basic deck is - the six "Research
+    | deck" rows on the common tree sell 3-5s, then 6-10s, and only then wilds.
+    | A Corporation named under 'corporations' gets that deck instead of the
+    | default one, which is where a Corporation with a research focus of its own
+    | would be given it.
+    |
+    | Applied by App\Actions\SeedResearchDecks, which is a starting position
+    | and not a change: nothing goes through TrackerService, and re-running it
+    | leaves an existing deck alone rather than dealing a second one on top.
+    |
+    */
+
+    'research' => [
+
+        'hand_size' => 5,
+
+        'pool_size' => 6,
+
+        'private_deck' => [
+            'values' => [1, 2, 3, 4, 5],
+            'copies' => 1,
+            'wild' => 0,
+            'wild_value' => 3,
+            'cards' => [],
+        ],
+
+        /*
+        | The shared deck, and it is the same in every suit. Almost all of it is
+        | marked: five cards demanding each suit of the other side, five that
+        | cannot be played alone, and only seven plain cards a suit. The wilds
+        | are all No single.
+        |
+        | 138 cards - 32 in each of the four suits, and ten of no suit.
+        |
+        | Written entirely as `cards`, so the shape above it contributes
+        | nothing: every card here is marked or counted in a way the shape
+        | cannot say.
+        */
+        'public_deck' => [
+            'values' => [],
+            'copies' => 0,
+
+            'cards' => [
+                // One of each value in every suit, and it cannot be alone.
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'no_single']]],
+
+                // The same again for each suit the other side may be held to.
+                // A Leaf card demanding Leaf is a real card: it makes both sets
+                // the same suit.
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'leaf']]],
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'brain']]],
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'maths']]],
+                ['values' => [1, 2, 3, 4, 5], 'markings' => [['marking' => 'restricted', 'suit' => 'cog']]],
+
+                // The seven a suit holds with nothing printed on them.
+                ['value' => 1, 'copies' => 3],
+                ['value' => 2, 'copies' => 2],
+                ['value' => 3, 'copies' => 2],
+
+                // And the wilds: two of every value, all No single.
+                ['values' => [1, 2, 3, 4, 5], 'wild' => true, 'copies' => 2, 'markings' => [['marking' => 'no_single']]],
+            ],
+        ],
+
+        /*
+        | A Corporation's deck is two major suits and two minor ones, and the
+        | shape of each is the same for all five - so it is written once here
+        | and a Corporation says only which two it majors in. Thirty-six cards:
+        | fourteen in each major suit, four in each minor.
+        |
+        | Entries name no suit of their own, because the suit is the assignment.
+        | Otherwise they read exactly as a `cards` entry does, so a marking goes
+        | on one the same way it goes on any other card.
+        */
+        'suit_decks' => [
+
+            'major' => [
+                ['value' => 1, 'copies' => 3],
+                ['value' => 1, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 2, 'copies' => 2],
+                ['value' => 2, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 3, 'copies' => 2],
+                ['value' => 3, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 4],
+                ['value' => 4, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 5],
+                ['value' => 5, 'markings' => [['marking' => 'no_single']]],
+            ],
+
+            'minor' => [
+                ['value' => 1],
+                ['value' => 1, 'markings' => [['marking' => 'no_single']]],
+                ['value' => 2],
+                ['value' => 2, 'markings' => [['marking' => 'no_single']]],
+            ],
+
+        ],
+
+        /*
+        | Which two suits each Corporation majors in. Every suit it does not
+        | name is minor, so two majors is the game's own shape rather than
+        | something enforced - a Corporation Control invents may major in one or
+        | in three, and gets the deck that implies.
+        |
+        | A Corporation named nowhere here gets 'private_deck' above.
+        */
+        'corporations' => [
+            'Augmented Nucleotech' => ['major' => ['maths', 'cog']],
+            'Digital Tactical Control' => ['major' => ['maths', 'brain']],
+            'Genetic Equity' => ['major' => ['brain', 'leaf']],
+            'Gordon' => ['major' => ['cog', 'brain']],
+            'McCullough Calibrated Mechanical' => ['major' => ['cog', 'leaf']],
+        ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Starting credits
     |--------------------------------------------------------------------------
     |
