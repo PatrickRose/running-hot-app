@@ -754,8 +754,22 @@ export type AgendaCardView = {
 /** Political Will per resolution, keyed by resolution id. */
 export type BallotAllocations = Record<number, number>;
 
+/**
+ * A seat at the Council. A Corporation votes with its Political Will; a
+ * character Control has seated in their own right — HM Government — votes with
+ * its bloc. `votes` is whichever, because from the Chair's side of the table
+ * they weigh the same.
+ */
+export type CouncilVoter = Faction & {
+    /** Unique across both kinds of seat, unlike the bare row id. */
+    key: string;
+    id: number;
+    type: string;
+    votes: number;
+};
+
 export type CouncilVoteRecord = Faction & {
-    corporation_id: number;
+    voter_key: string;
     allocations: BallotAllocations;
 };
 
@@ -773,7 +787,7 @@ export type CouncilItem = {
     submitted: Array<
         Faction & {
             ballot_id: number;
-            corporation_id: number;
+            voter_key: string;
             submitted_at: string;
         }
     >;
@@ -821,7 +835,8 @@ export type CouncilViewer = {
     /** You hold a CEO seat, so there is a Corporation's vote for you to cast. */
     can_vote: boolean;
     can_submit_agenda: boolean;
-    corporation: (Faction & { id: number; political_will: number }) | null;
+    /** The seat you vote from, of either kind. Control holds none. */
+    voter: CouncilVoter | null;
     character_id: number | null;
 };
 
@@ -851,6 +866,16 @@ export type CouncilSeatView = Faction & {
     action_penalty_applied: boolean;
 };
 
+/** A character Control may seat at the Council, or has seated. */
+export type CouncilSeatCandidate = {
+    id: number;
+    name: string;
+    role_label: string;
+    team: string | null;
+    /** Null for somebody who holds no seat yet. */
+    votes: number | null;
+};
+
 export type CouncilControlBoard = {
     deck: AgendaCardView[];
     with_control: AgendaCardView[];
@@ -865,6 +890,9 @@ export type CouncilControlBoard = {
         Faction & { id: number; chair_order: number | null; is_chair: boolean }
     >;
     seats: CouncilSeatView[];
+    /** Seats that are not Corporations — HM Government's, and any Control adds. */
+    own_seats: CouncilSeatCandidate[];
+    seatable: CouncilSeatCandidate[];
     /** What Control's penalty field is pre-filled with, not a rule. */
     absence_penalty: number;
     recess_seconds: number;

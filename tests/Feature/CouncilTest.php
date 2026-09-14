@@ -114,7 +114,7 @@ class CouncilTest extends TestCase
 
         $ballot = $item->liveBallots()->sole();
 
-        $this->assertSame($this->gordon->id, $ballot->corporation_id);
+        $this->assertTrue($this->gordon->is($ballot->voter));
         $this->assertSame(7, $ballot->weight());
 
         // Weight, not price: the tracker has not moved.
@@ -215,7 +215,7 @@ class CouncilTest extends TestCase
         $this->assertFalse($asControl['is_chair']);
         $this->assertFalse($asControl['can_vote']);
         $this->assertTrue($asControl['can_chair']);
-        $this->assertNull($asControl['corporation']);
+        $this->assertNull($asControl['voter']);
 
         // Gordon has the Chair on turn 1, being first in the rotation.
         $this->assertTrue($asChair['is_chair']);
@@ -350,6 +350,249 @@ class CouncilTest extends TestCase
     }
 
     /**
+     * HM Government sits at the Council and votes with a bloc of five.
+     *
+     * Control's ruling rather than a rule from 3.1, which seats only the
+     * Corporations - so what is pinned here is that the seat behaves like a
+     * seat: it votes, it is capped, and it is not a Corporation.
+     */
+    public function test_the_government_votes_with_its_own_bloc(): void
+    {
+        $item = $this->tabledItem();
+
+        $government = $this->player(CharacterRole::Other, null, [
+            'name' => 'HM Government',
+            'council_votes' => 5,
+        ]);
+
+        $resolutions = $item->card->votableResolutions();
+
+        $this->actingAs($government)
+            ->post(route('council.ballots.store', ['item' => $item->id]), [
+                'allocations' => [
+                    $resolutions[0]->id => 3,
+                    $resolutions[1]->id => 2,
+                ],
+            ])
+            ->assertRedirect();
+
+        $ballot = $item->liveBallots()->sole();
+
+        // The character is the voter, not a Corporation standing in for one.
+        $this->assertSame('character', $ballot->voter_type);
+        $this->assertSame('HM Government', $ballot->voterName());
+        $this->assertSame(5, $ballot->weight());
+
+        // And it weighs against the Corporations in the same tally.
+        app(CouncilService::class)->castBallot($item->fresh(), $this->gordon, [$resolutions[1]->id => 4]);
+
+        $tally = app(CouncilService::class)->tally($item->fresh());
+
+        $this->assertSame(3, $tally['totals'][$resolutions[0]->id]);
+        $this->assertSame(6, $tally['totals'][$resolutions[1]->id]);
+    }
+
+    public function test_the_government_cannot_vote_with_more_than_its_bloc(): void
+    {
+        $item = $this->tabledItem();
+
+        $government = $this->player(CharacterRole::Other, null, [
+            'name' => 'HM Government',
+            'council_votes' => 5,
+        ]);
+
+        $this->actingAs($government)
+            ->post(route('council.ballots.store', ['item' => $item->id]), [
+                'allocations' => [$item->card->votableResolutions()[0]->id => 6],
+            ])
+            ->assertSessionHasErrors('allocations');
+
+        $this->assertSame(0, $item->liveBallots()->count());
+    }
+
+    /**
+     * A seat is what makes the difference, not the role: the press hold none,
+     * so the Council is closed to them exactly as it is to a Runner.
+     */
+    public function test_a_character_with_no_seat_cannot_vote(): void
+    {
+        $item = $this->tabledItem();
+
+        $press = $this->player(CharacterRole::Press, null, ['name' => 'Business Times']);
+
+        $this->actingAs($press)
+            ->post(route('council.ballots.store', ['item' => $item->id]), [
+                'allocations' => [$item->card->votableResolutions()[0]->id => 1],
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_the_government_seat_is_shown_as_its_own_voter(): void
+    {
+        $this->tabledItem();
+
+        $government = $this->player(CharacterRole::Other, null, [
+            'name' => 'HM Government',
+            'council_votes' => 5,
+        ]);
+
+        $viewer = app(CouncilPresenter::class)->forPlayer($this->game, $government)['viewer'];
+
+        $this->assertTrue($viewer['can_vote']);
+        $this->assertFalse($viewer['is_chair']);
+        $this->assertFalse($viewer['can_chair']);
+        $this->assertSame('HM Government', $viewer['voter']['name']);
+        $this->assertSame(5, $viewer['voter']['votes']);
+        $this->assertSame('character', $viewer['voter']['type']);
+    }
+
+    /**
+     * The Chair rotates between the Corporations (3.1.1), so a seat that is not
+     * a Corporation can never take it - no matter how many votes it carries.
+     */
+    public function test_the_government_never_chairs(): void
+    {
+        $session = $this->game->currentTurn()->councilSession()->first();
+
+        $government = $this->player(CharacterRole::Other, null, [
+            'name' => 'HM Government',
+            'council_votes' => 5,
+        ]);
+
+        $this->actingAs($government)
+            ->post(route('council.items.secret', ['item' => $this->tabledItem()->id]), ['secret' => true])
+            ->assertForbidden();
+
+        $this->actingAs($government)
+            ->post(route('council.hand.keep', ['session' => $session->id]), ['kept' => [1]])
+            ->assertForbidden();
+    }
+
+    /**
+     * Seating somebody is Control's, and the Control panel is where it happens
+     * now rather than a column somebody edits by hand.
+     */
+    public function test_control_seats_somebody_at_the_council(): void
+    {
+        $press = $this->player(CharacterRole::Press, null, ['name' => 'Business Times']);
+        $character = $this->game->characters()->where('user_id', $press->id)->sole();
+
+        $this->actingAs($this->control())
+            ->post(route('control.council.seats.store', ['game' => $this->game->id]), [
+                'character_id' => $character->id,
+                'votes' => 3,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(3, $character->fresh()->council_votes);
+
+        // And the seat votes, which is the whole point of having given it.
+        $item = $this->tabledItem();
+
+        $this->actingAs($press)
+            ->post(route('council.ballots.store', ['item' => $item->id]), [
+                'allocations' => [$item->card->votableResolutions()[0]->id => 3],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(3, $item->liveBallots()->sole()->weight());
+    }
+
+    public function test_control_takes_a_seat_away(): void
+    {
+        $government = $this->player(CharacterRole::Other, null, [
+            'name' => 'HM Government',
+            'council_votes' => 5,
+        ]);
+
+        $character = $this->game->characters()->where('user_id', $government->id)->sole();
+
+        $this->actingAs($this->control())
+            ->post(route('control.council.seats.store', ['game' => $this->game->id]), [
+                'character_id' => $character->id,
+                'votes' => null,
+            ])
+            ->assertRedirect();
+
+        $this->assertNull($character->fresh()->council_votes);
+        $this->assertFalse($character->fresh()->sitsOnCouncil());
+
+        // And having no seat, they are refused at the ballot like anybody else.
+        $item = $this->tabledItem();
+
+        $this->actingAs($government)
+            ->post(route('council.ballots.store', ['item' => $item->id]), [
+                'allocations' => [$item->card->votableResolutions()[0]->id => 1],
+            ])
+            ->assertForbidden();
+    }
+
+    /**
+     * A CEO votes as their Corporation already, and CouncilPresenter ignores a
+     * second seat rather than paying it — so storing one would be storing a
+     * number that quietly does nothing.
+     */
+    public function test_a_ceo_cannot_be_given_a_second_seat(): void
+    {
+        // The roster here is built per test, so the CEO seat has to exist
+        // before it can be offered a second one.
+        $user = $this->player(CharacterRole::Ceo, $this->gordon);
+        $ceo = $this->game->characters()->where('user_id', $user->id)->sole();
+
+        $this->actingAs($this->control())
+            ->post(route('control.council.seats.store', ['game' => $this->game->id]), [
+                'character_id' => $ceo->id,
+                'votes' => 5,
+            ])
+            ->assertSessionHasErrors('character_id');
+
+        $this->assertNull($ceo->fresh()->council_votes);
+    }
+
+    public function test_only_control_may_seat_somebody(): void
+    {
+        $chair = $this->player(CharacterRole::Ceo, $this->gordon);
+        $press = $this->player(CharacterRole::Press, null, ['name' => 'Business Times']);
+        $character = $this->game->characters()->where('user_id', $press->id)->sole();
+
+        $this->actingAs($chair)
+            ->post(route('control.council.seats.store', ['game' => $this->game->id]), [
+                'character_id' => $character->id,
+                'votes' => 3,
+            ])
+            ->assertForbidden();
+
+        $this->assertNull($character->fresh()->council_votes);
+    }
+
+    /**
+     * The panel offers everybody who could hold a seat and nobody who already
+     * votes, so a CEO is never in the list to be offered one.
+     */
+    public function test_the_panel_offers_the_characters_who_could_be_seated(): void
+    {
+        $this->player(CharacterRole::Ceo, $this->gordon);
+        $government = $this->player(CharacterRole::Other, null, [
+            'name' => 'HM Government',
+            'council_votes' => 5,
+        ]);
+        $this->player(CharacterRole::Runner, null, ['name' => 'Jack Scanton']);
+
+        $control = app(CouncilPresenter::class)->forControl($this->game);
+
+        $this->assertSame(['HM Government'], array_column($control['own_seats'], 'name'));
+
+        $seatable = array_column($control['seatable'], 'name');
+
+        $this->assertContains('Jack Scanton', $seatable);
+        $this->assertNotContains('HM Government', $seatable);
+
+        foreach ($this->game->characters()->where('role', CharacterRole::Ceo)->pluck('name') as $ceo) {
+            $this->assertNotContains($ceo, $seatable);
+        }
+    }
+
+    /**
      * The pile a card sits in between the player handing it over and Control
      * handing it back. Control's alone: the Chair has not been given it yet
      * and might never be, so seeing it would be being handed it early.
@@ -403,7 +646,10 @@ class CouncilTest extends TestCase
         return app(CouncilService::class)->tableCard($session, $card);
     }
 
-    private function player(CharacterRole $role, ?Corporation $corporation): User
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function player(CharacterRole $role, ?Corporation $corporation, array $attributes = []): User
     {
         $user = User::factory()->create();
 
@@ -411,6 +657,7 @@ class CouncilTest extends TestCase
             'user_id' => $user->id,
             'corporation_id' => $corporation?->id,
             'role' => $role,
+            ...$attributes,
         ]);
 
         return $user;

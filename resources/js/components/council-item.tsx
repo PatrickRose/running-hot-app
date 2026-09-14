@@ -99,7 +99,7 @@ export function CouncilItem({
                     </p>
                 )}
 
-                {item.can_vote && viewer.corporation && (
+                {item.can_vote && viewer.voter && (
                     <CouncilBallotForm item={item} viewer={viewer} />
                 )}
 
@@ -136,7 +136,7 @@ function Submitted({ item }: { item: CouncilItemView }) {
             <span className="text-muted-foreground">Votes in from</span>
             {item.submitted.map((corporation) => (
                 <span
-                    key={corporation.corporation_id}
+                    key={corporation.voter_key}
                     className="flex items-center gap-1.5"
                 >
                     <FactionBadge faction={corporation} size="small" />
@@ -182,7 +182,7 @@ function Totals({ item }: { item: CouncilItemView }) {
                 <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
                     {item.breakdown.map((record) => (
                         <li
-                            key={record.corporation_id}
+                            key={record.voter_key}
                             className="flex flex-wrap items-center gap-2"
                         >
                             <FactionBadge faction={record} size="small" />

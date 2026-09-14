@@ -7,6 +7,7 @@ use App\Enums\PhaseType;
 use App\Http\Controllers\Controller;
 use App\Models\AgendaCard;
 use App\Models\AgendaResolution;
+use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\CouncilSession;
 use App\Models\Game;
@@ -225,6 +226,38 @@ class CouncilController extends Controller
             abs((int) $validated['seconds']),
             $validated['seconds'] >= 0 ? 'longer' : 'less',
         ));
+    }
+
+    /**
+     * Seat somebody at the Council who is not a Corporation, or take the seat
+     * away again.
+     *
+     * Control's ruling rather than a rule - 3.1 seats only the CEOs - so this
+     * is Control's to set and there is nothing to derive. The refusals, a CEO
+     * and a seat worth nothing, are the service's.
+     */
+    public function seat(Game $game, Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'character_id' => [
+                'required', 'integer',
+                Rule::exists('characters', 'id')->where('game_id', $game->id),
+            ],
+            // Null takes the seat away, which is why this is nullable rather
+            // than bounded at zero: a seat worth no votes is not a seat.
+            'votes' => ['nullable', 'integer', 'min:1', 'max:999'],
+        ]);
+
+        /** @var Character $character */
+        $character = Character::query()->findOrFail($validated['character_id']);
+
+        $votes = $validated['votes'] ?? null;
+
+        $this->council->seat($character, $votes);
+
+        return back()->with('status', $votes === null
+            ? sprintf('%s no longer has a seat at the Council.', $character->name)
+            : sprintf('%s sits at the Council with %d vote(s).', $character->name, $votes));
     }
 
     /**

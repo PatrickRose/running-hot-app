@@ -148,4 +148,10 @@ class Corporation extends Model
     {
         return $this->morphMany(TrackerAdjustment::class, 'subject');
     }
+
+    /** @return MorphMany<CouncilBallot, $this> */
+    public function councilBallots(): MorphMany
+    {
+        return $this->morphMany(CouncilBallot::class, 'voter');
+    }
 }
