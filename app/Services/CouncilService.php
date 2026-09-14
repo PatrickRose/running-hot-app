@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AgendaCardStatus;
 use App\Enums\AgendaItemSource;
+use App\Enums\CharacterRole;
 use App\Enums\CouncilAttendance;
 use App\Enums\PhaseType;
 use App\Enums\ResolutionAmendment;
@@ -782,18 +783,37 @@ class CouncilService
     }
 
     /**
-     * Submit a Corporation's vote to the Chair.
+     * How many votes a seat carries.
      *
-     * The Political Will is split however the CEO likes across the resolutions
-     * on the card, and the total is capped by what the Corporation holds. It is
-     * not taken from them: the vote is weighted by Political Will, and nothing
-     * in 3.1 spends it.
+     * A Corporation votes with its Political Will, which is the weight of the
+     * vote and never its price (3.1.2). A character sitting in their own right
+     * votes with the bloc Control gave them - HM Government's five - which is
+     * not Political Will and is not a tracker: nothing in the game spends it.
+     */
+    public function votesFor(Corporation|Character $voter): int
+    {
+        return $voter instanceof Corporation
+            ? $voter->political_will
+            : (int) $voter->council_votes;
+    }
+
+    /**
+     * Submit a vote to the Chair.
      *
-     * @param  array<int, int>  $allocations  resolution id => Political Will
+     * The votes are split however the voter likes across the resolutions on the
+     * card, and the total is capped by what their seat carries. Nothing is
+     * taken from them either way: a Corporation's Political Will weights the
+     * vote rather than paying for it, and a bloc is a bloc.
+     *
+     * @param  Corporation|Character  $voter  whose vote this is
+     * @param  array<int, int>  $allocations  resolution id => votes
+     * @param  Character|null  $character  whose hand carried it, which is the
+     *                                     voter themselves when a character
+     *                                     votes in their own right
      */
     public function castBallot(
         CouncilAgendaItem $item,
-        Corporation $corporation,
+        Corporation|Character $voter,
         array $allocations,
         ?Character $character = null,
         ?User $user = null,
@@ -806,15 +826,26 @@ class CouncilService
 
         $card = $item->card;
 
-        if ($card->game_id !== $corporation->game_id) {
+        if ($card->game_id !== $voter->game_id) {
             throw ValidationException::withMessages([
-                'allocations' => 'That Corporation is playing a different game.',
+                'allocations' => sprintf('%s is playing a different game.', $voter->name),
             ]);
         }
 
-        // One live ballot per Corporation. Changing a vote means asking the
-        // Chair for the slip back, exactly as it would at the table.
-        if ($item->liveBallots()->where('corporation_id', $corporation->id)->exists()) {
+        if ($voter instanceof Character && ! $voter->sitsOnCouncil()) {
+            throw ValidationException::withMessages([
+                'allocations' => sprintf('%s has no seat at the Council.', $voter->name),
+            ]);
+        }
+
+        // One live ballot per voter. Changing a vote means asking the Chair for
+        // the slip back, exactly as it would at the table.
+        $alreadyVoted = $item->liveBallots()
+            ->where('voter_type', $voter->getMorphClass())
+            ->where('voter_id', $voter->getKey())
+            ->exists();
+
+        if ($alreadyVoted) {
             throw ValidationException::withMessages([
                 'allocations' => 'Your vote is already with the Chair. Ask for it back to change it.',
             ]);
@@ -823,12 +854,12 @@ class CouncilService
         $votable = $card->votableResolutions()->keyBy('id');
         $allocations = array_filter(
             array_map('intval', $allocations),
-            fn (int $will): bool => $will > 0,
+            fn (int $votes): bool => $votes > 0,
         );
 
         if ($allocations === []) {
             throw ValidationException::withMessages([
-                'allocations' => 'A vote has to put Political Will behind something.',
+                'allocations' => 'A vote has to put something behind something.',
             ]);
         }
 
@@ -841,31 +872,33 @@ class CouncilService
         }
 
         $total = array_sum($allocations);
+        $held = $this->votesFor($voter);
 
-        if ($total > $corporation->political_will) {
+        if ($total > $held) {
             throw ValidationException::withMessages([
                 'allocations' => sprintf(
-                    '%s holds %d Political Will and that vote spreads %d.',
-                    $corporation->name,
-                    $corporation->political_will,
+                    '%s votes with %d and that vote spreads %d.',
+                    $voter->name,
+                    $held,
                     $total,
                 ),
             ]);
         }
 
-        return DB::transaction(function () use ($item, $corporation, $allocations, $character, $user): CouncilBallot {
+        return DB::transaction(function () use ($item, $voter, $allocations, $character, $user): CouncilBallot {
             /** @var CouncilBallot $ballot */
             $ballot = $item->ballots()->create([
-                'corporation_id' => $corporation->id,
+                'voter_type' => $voter->getMorphClass(),
+                'voter_id' => $voter->getKey(),
                 'character_id' => $character?->id,
                 'user_id' => $user?->id,
                 'submitted_at' => Carbon::now(),
             ]);
 
-            foreach ($allocations as $resolutionId => $will) {
+            foreach ($allocations as $resolutionId => $votes) {
                 $ballot->allocations()->create([
                     'agenda_resolution_id' => $resolutionId,
-                    'political_will' => $will,
+                    'political_will' => $votes,
                 ]);
             }
 
@@ -874,7 +907,7 @@ class CouncilService
     }
 
     /**
-     * Hand a ballot back, so the Corporation may vote again.
+     * Hand a ballot back, so its voter may vote again.
      */
     public function returnBallot(CouncilBallot $ballot, string $reason): CouncilBallot
     {
@@ -994,6 +1027,78 @@ class CouncilService
 
             return $item;
         });
+    }
+
+    // -----------------------------------------------------------------
+    // Seats that are not Corporations
+    // -----------------------------------------------------------------
+
+    /**
+     * Give a character a seat at the Council in their own right, or take one
+     * away by passing null.
+     *
+     * Control's ruling rather than a rule: 3.1 seats only the Corporations, and
+     * HM Government's bloc of five is the reason this exists. It is not a
+     * tracker and deliberately does not go through TrackerService - nothing in
+     * the game spends a bloc, so there is no movement for a ledger to explain.
+     */
+    public function seat(Character $character, ?int $votes): Character
+    {
+        // A CEO already votes, with their Corporation's Political Will. A
+        // second seat would be a second vote, and CouncilPresenter ignores it
+        // rather than paying it - so refusing is the honest answer instead of
+        // storing a number that quietly does nothing.
+        if ($character->role === CharacterRole::Ceo && $character->corporation_id !== null) {
+            throw ValidationException::withMessages([
+                'character_id' => sprintf(
+                    '%s votes as their Corporation already. A second seat would be a second vote.',
+                    $character->name,
+                ),
+            ]);
+        }
+
+        if ($votes !== null && $votes < 1) {
+            throw ValidationException::withMessages([
+                'votes' => 'A seat carries at least one vote. Take the seat away instead.',
+            ]);
+        }
+
+        $character->forceFill(['council_votes' => $votes])->save();
+
+        return $character;
+    }
+
+    /**
+     * Everybody holding a seat of their own, which is nobody until Control
+     * seats somebody.
+     *
+     * @return Collection<int, Character>
+     */
+    public function seated(Game $game): Collection
+    {
+        return $game->characters()
+            ->whereNotNull('council_votes')
+            ->with('corporation', 'gang')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Everybody who could be given one: anybody in the game who is not already
+     * seated and is not a CEO, since a CEO votes as their Corporation.
+     *
+     * @return Collection<int, Character>
+     */
+    public function seatable(Game $game): Collection
+    {
+        return $game->characters()
+            ->whereNull('council_votes')
+            ->where(fn ($query) => $query
+                ->whereNot('role', CharacterRole::Ceo)
+                ->orWhereNull('corporation_id'))
+            ->with('corporation', 'gang')
+            ->orderBy('name')
+            ->get();
     }
 
     // -----------------------------------------------------------------

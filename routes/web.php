@@ -317,6 +317,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('council.amendments.update');
                 Route::post('games/{game}/council/attendance', [ControlCouncilController::class, 'attendance'])
                     ->name('council.attendance');
+                // Seating somebody who is not a Corporation, which is how HM
+                // Government comes to be at the Council at all.
+                Route::post('games/{game}/council/seats', [ControlCouncilController::class, 'seat'])
+                    ->name('council.seats.store');
                 Route::post('games/{game}/council/penalties', [ControlCouncilController::class, 'penalty'])
                     ->name('council.penalties.store');
 

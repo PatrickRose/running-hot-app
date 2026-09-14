@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property int $brawn
  * @property int $hack
  * @property int $charisma
+ * @property int|null $council_votes
  * @property int $body
  * @property int $credits
  * @property int $wounds
@@ -37,6 +38,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'game_id', 'user_id', 'discord_username', 'corporation_id', 'gang_id',
     'name', 'role', 'brawn', 'hack', 'charisma', 'body', 'credits', 'wounds', 'tags',
+    'council_votes',
 ])]
 class Character extends Model
 {
@@ -95,6 +97,19 @@ class Character extends Model
     public function isClaimed(): bool
     {
         return $this->user_id !== null;
+    }
+
+    /**
+     * Whether this character has a seat at the Council in their own right.
+     *
+     * A CEO does not: their vote is their Corporation's, weighted by its
+     * Political Will. This is for a seat that belongs to nobody's Corporation -
+     * HM Government's bloc of five, and anybody else Control seats. Control's
+     * ruling rather than a rule from 3.1, which seats only the CEOs.
+     */
+    public function sitsOnCouncil(): bool
+    {
+        return $this->council_votes !== null;
     }
 
     /**

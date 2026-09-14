@@ -113,8 +113,8 @@ export default function Council({ game, council }: Props) {
                                     {session.tabled_count} of{' '}
                                     {session.maximum_items} agenda items this
                                     turn.
-                                    {viewer.corporation &&
-                                        ` ${viewer.corporation.name} holds ${viewer.corporation.political_will} Political Will, which is the weight of its vote and is not spent on it.`}
+                                    {viewer.voter &&
+                                        ` ${viewer.voter.name} votes with ${viewer.voter.votes}, which weighs the vote and is not spent on it.`}
                                 </CardDescription>
                             </CardHeader>
                         </Card>
