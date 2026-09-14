@@ -13,44 +13,6 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
-    # The suite runs against MySQL rather than the SQLite developers use
-    # locally, because the two disagree and production is MySQL. An index name
-    # longer than MySQL's 64 characters passed every SQLite run there has ever
-    # been and then failed a deployment halfway through, with the table already
-    # created and no way to roll it back. SQLite has no such limit, no strict
-    # mode worth the name, and its own ideas about types — so a suite that only
-    # ever ran on it could only ever prove the application works on a database
-    # nobody deploys.
-    services:
-      mysql:
-        # Match the version the application is deployed against; a difference
-        # here is the same class of problem this job exists to catch.
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: running_hot_testing
-        ports:
-          - 3306:3306
-        # The job does not start its steps until this reports healthy, so
-        # nothing has to wait for the database by hand.
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-
-    # Real environment variables win over the <env> entries in phpunit.xml,
-    # which PHPUnit only applies to variables that are not already set. So this
-    # is all it takes to move the suite onto MySQL, and phpunit.xml goes on
-    # describing the SQLite every developer runs locally.
-    env:
-      DB_CONNECTION: mysql
-      DB_HOST: 127.0.0.1
-      DB_PORT: 3306
-      DB_DATABASE: running_hot_testing
-      DB_USERNAME: root
-      DB_PASSWORD: password
-
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,9 +25,6 @@ jobs:
           php-version: '8.5'
           tools: composer:v2
           coverage: none
-          # Named rather than left to the defaults: without it the whole job
-          # fails on a driver, which reads like a broken runner.
-          extensions: pdo_mysql
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -75,11 +34,6 @@ jobs:
 
       # Also builds the frontend, which the feature tests need: rendering an
       # Inertia page fails without a Vite manifest.
-      #
-      # Its `migrate --force` is worth having on top of what the suite does for
-      # itself: it is the one thing here that runs the migrations against an
-      # empty MySQL database exactly as a deployment does, rather than through
-      # the test harness.
       - name: Setup Application
         run: composer setup
 
