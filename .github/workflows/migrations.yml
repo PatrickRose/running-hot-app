@@ -1,0 +1,83 @@
+name: migrations
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mysql:
+    name: migrate (mysql)
+    runs-on: ubuntu-latest
+
+    # The suite runs on the SQLite developers use locally, and SQLite will
+    # accept a schema MySQL refuses: an identifier over 64 characters, an index
+    # dropped while a foreign key still needs it. Both of those reached a
+    # deployment, where they fail halfway through with tables already created
+    # and no way to roll back, because MySQL cannot roll back DDL.
+    #
+    # So the migrations alone are run against the database the application is
+    # actually deployed to. It is the cheap half of the problem - no frontend
+    # build, no test harness, about a minute - and it is the half that breaks a
+    # deployment rather than a test.
+    services:
+      mysql:
+        # Match the version Laravel Cloud runs; a difference here is the same
+        # class of problem this job exists to catch.
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: running_hot
+        ports:
+          - 3306:3306
+        # The job does not start its steps until this reports healthy, so
+        # nothing has to wait for the database by hand.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    # These win over the .env copied below, because Laravel's Dotenv does not
+    # overwrite a variable the environment already has.
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: running_hot
+      DB_USERNAME: root
+      DB_PASSWORD: password
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.5'
+          tools: composer:v2
+          coverage: none
+          # Named rather than left to the defaults: without it the whole job
+          # fails on a driver, which reads like a broken runner.
+          extensions: pdo_mysql
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      # Migrating boots the application, which wants a key. Nothing here renders
+      # a page, so the frontend is deliberately not built.
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # An empty database, exactly as a first deployment meets one.
+      - name: Migrate
+        run: php artisan migrate --force

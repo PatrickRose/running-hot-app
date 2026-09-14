@@ -35,10 +35,16 @@ return new class extends Migration
 
         Schema::table('council_ballots', function (Blueprint $table) {
             $table->dropForeign(['corporation_id']);
+
+            // The replacement index goes in before the old one comes out, not
+            // after. council_agenda_item_id carries a foreign key of its own and
+            // the composite index is what backs it, so MySQL refuses to drop it
+            // until another index leads with that column. SQLite has no such
+            // rule, which is why the order looked arbitrary.
+            $table->index(['council_agenda_item_id', 'voter_type', 'voter_id']);
+
             $table->dropIndex(['council_agenda_item_id', 'corporation_id']);
             $table->dropColumn('corporation_id');
-
-            $table->index(['council_agenda_item_id', 'voter_type', 'voter_id']);
         });
     }
 
@@ -57,10 +63,11 @@ return new class extends Migration
         DB::table('council_ballots')->whereNull('corporation_id')->delete();
 
         Schema::table('council_ballots', function (Blueprint $table) {
+            // Same ordering as up(), for the same reason.
+            $table->index(['council_agenda_item_id', 'corporation_id']);
+
             $table->dropIndex(['council_agenda_item_id', 'voter_type', 'voter_id']);
             $table->dropMorphs('voter');
-
-            $table->index(['council_agenda_item_id', 'corporation_id']);
         });
     }
 };
