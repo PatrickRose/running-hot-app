@@ -255,7 +255,7 @@ class RunEngineTest extends TestCase
 
         $this->expectException(ValidationException::class);
 
-        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
     }
 
     /**
@@ -314,9 +314,12 @@ class RunEngineTest extends TestCase
         $this->assertSame(3, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
 
         // Printed 2 plus two Boosts is 4 dice for Security.
-        $this->dice->willRoll(2, 1)->willRoll(4, 8);
+        $this->dice->willRoll(4, 8);
+        $this->engine()->defend($run->refresh(), 2);
 
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->willRoll(2, 1);
+
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame(4, $outcome->strength->total());
         $this->assertSame(2, $outcome->strength->fromBoosts);
@@ -345,9 +348,12 @@ class RunEngineTest extends TestCase
 
         // 5 from the Leader, 2 from the healthy 4, 2 from the Wounded 5. A
         // group of three opens on 2 Alerts, which is +1 on the printed 2.
-        $this->dice->willRoll(9, 1)->willRoll(3, 1);
+        $this->dice->willRoll(3, 1);
+        $this->engine()->defend($run->refresh(), 2);
 
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->willRoll(9, 1);
+
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame(9, $outcome->pool->total());
         $this->assertSame(5, $outcome->pool->fromLeader);
@@ -372,9 +378,12 @@ class RunEngineTest extends TestCase
 
         // 3 from the Leader and 4 from the mate's 8. A pair opens on 1 Alert,
         // which is +1 on the printed 2.
-        $this->dice->willRoll(7, 1)->willRoll(3, 1);
+        $this->dice->willRoll(3, 1);
+        $this->engine()->defend($run->refresh(), 2);
 
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->willRoll(7, 1);
+
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame(DicePool::WOUNDED_DIE, $outcome->pool->dieFaces);
         $this->assertSame(6, $outcome->runnersRoll->die_faces);
@@ -388,9 +397,12 @@ class RunEngineTest extends TestCase
         $this->engine()->activate($run);
 
         // Two successes each.
-        $this->dice->will([8, 8])->will([8, 8]);
+        $this->dice->will([8, 8]);
+        $this->engine()->defend($run->refresh(), 2);
 
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([8, 8]);
+
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame(2, $outcome->runnersRoll->successes);
         $this->assertSame(2, $outcome->securityRoll->successes);
@@ -403,9 +415,12 @@ class RunEngineTest extends TestCase
         $run = $this->started();
         $this->engine()->activate($run);
 
-        $this->dice->will([1, 2])->will([5, 6]);
+        $this->dice->will([5, 6]);
+        $this->engine()->defend($run->refresh(), 2);
 
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([1, 2]);
+
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame([1, 2], $outcome->runnersRoll->faces);
         $this->assertSame('2d8, 5+ — 1,2 (0 successes)', $outcome->runnersRoll->readout());
@@ -420,12 +435,15 @@ class RunEngineTest extends TestCase
         $run = $this->started();
         $this->engine()->activate($run);
 
-        $this->dice->will([8, 8])->will([1, 1]);
-        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([1, 1]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([8, 8]);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->expectException(ValidationException::class);
 
-        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
     }
 
     /**
@@ -449,9 +467,12 @@ class RunEngineTest extends TestCase
         $this->assertSame(0, $run->active_cards_passed);
 
         $this->engine()->activate($run, activating: true);
-        $this->dice->willRoll(2, 1)->willRoll(2, 8);
+        $this->dice->willRoll(2, 8);
+        $this->engine()->defend($run->refresh(), 2);
 
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->willRoll(2, 1);
+
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame(0, $outcome->strength->fromCardsPassed);
         $this->assertSame(2, $outcome->strength->total());
@@ -472,8 +493,11 @@ class RunEngineTest extends TestCase
         $run = $this->started(physical: 2);
         $this->engine()->activate($run);
 
-        $this->dice->will([1, 1])->will([8, 8]);
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([8, 8]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([1, 1]);
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
         $this->assertFalse($outcome->runnersWon);
 
         $this->engine()->applyConsequence($run->refresh(), RunConsequence::Wound, $run->leader);
@@ -514,10 +538,13 @@ class RunEngineTest extends TestCase
         $this->assertSame(3, $run->alertsAvailable());
 
         $this->engine()->activate($run);
-        $this->dice->willRoll(2, 1)->willRoll(4, 8);
+        $this->dice->willRoll(4, 8);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->willRoll(2, 1);
 
         // Printed 2, plus 2 for standing at three Alerts.
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $this->assertSame(2, $outcome->strength->fromAlerts);
         $this->assertSame(4, $outcome->strength->total());
@@ -545,8 +572,11 @@ class RunEngineTest extends TestCase
         $this->assertSame(2, $run->alertsAvailable());
         $this->assertTrue($this->engine()->cursor($run)->cardIsActive());
 
-        $this->dice->willRoll(2, 1)->willRoll(3, 8);
-        $outcome = $this->engine()->challenge($run, RunnerSkill::Hack, 2);
+        $this->dice->willRoll(3, 8);
+        $this->engine()->defend($run, 2);
+
+        $this->dice->willRoll(2, 1);
+        $outcome = $this->engine()->challenge($run, RunnerSkill::Hack);
 
         // Two Alerts standing is +1, where three would have been +2.
         $this->assertSame(1, $outcome->strength->fromAlerts);
@@ -589,8 +619,11 @@ class RunEngineTest extends TestCase
         $run = $this->started(physical: 2);
         $this->engine()->activate($run);
 
-        $this->dice->will([1, 1])->will([8, 8]);
-        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([8, 8]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([1, 1]);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
         $this->engine()->applyConsequence($run->refresh(), RunConsequence::Retry);
 
         $this->assertTrue($run->refresh()->retry_pending);
@@ -614,8 +647,11 @@ class RunEngineTest extends TestCase
         $run = $this->started(physical: 3);
         $this->engine()->activate($run);
 
-        $this->dice->will([1, 1])->will([8, 8]);
-        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([8, 8]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([1, 1]);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
         $this->engine()->applyConsequence($run->refresh(), RunConsequence::EndTheRun);
 
         $run = $run->refresh();
@@ -783,8 +819,11 @@ class RunEngineTest extends TestCase
         $run = $this->started(physical: 1);
         $this->engine()->activate($run);
 
-        $this->dice->will([8, 8])->will([1, 1]);
-        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([1, 1]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([8, 8]);
+        $outcome = $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
         $this->assertTrue($outcome->runnersWon);
 
         $run = $this->engine()->advance($run->refresh());
@@ -903,8 +942,11 @@ class RunEngineTest extends TestCase
         $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $this->engine()->activate($run);
-        $this->dice->will([1, 1])->will([8, 8]);
-        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn, 2);
+        $this->dice->will([8, 8]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([1, 1]);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
 
         $event = $this->engine()->charge($run->refresh());
 
@@ -1029,11 +1071,11 @@ class RunEngineTest extends TestCase
                 boosts: $cursor->activation?->boosts ?? 0,
             );
 
-            $this->dice
-                ->willRoll((int) $run->leader?->getAttribute($skill->column()), 8)
-                ->willRoll($strength->total(), 1);
+            $this->dice->willRoll($strength->total(), 1);
+            $this->engine()->defend($run, 0);
 
-            $this->engine()->challenge($run, $skill, 0);
+            $this->dice->willRoll((int) $run->leader?->getAttribute($skill->column()), 8);
+            $this->engine()->challenge($run->refresh(), $skill);
         }
 
         $this->engine()->advance($run->refresh());
