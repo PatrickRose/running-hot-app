@@ -75,25 +75,26 @@ class TurnEngine
 
             $this->announcer->phaseEnded($phase);
 
-            // Any security budget Security did not spend goes back to the
-            // Corporation at the end of the Action phase (rulebook 3.3.5).
-            //
-            // And the research table shuts with it: "the phase end is called"
-            // is one of the two ways the research game ends (3.2.1), and the
-            // table is only ever open during the Action phase. Nothing else
-            // closed it, so a sitting stayed open through Team Time and the
-            // next Setup and went on accepting equations.
+            // Three things end with the Action phase. They are independent of
+            // one another, so the order here is the order they happen in at the
+            // table rather than a dependency between them.
             if ($phase->type === PhaseType::Action) {
                 // A run that has not got through by the time the phase is
-                // called is unsuccessful (rulebook 3.4.5). Closed before the
-                // budgets go home, because failing a run can still pay a
-                // Runner out of 3.4.4 and the escrow has to settle after
-                // everything that might spend from it.
+                // called is unsuccessful (rulebook 3.4.5).
                 $this->runs->failUnfinishedRuns($phase->turn, $actor);
 
                 // Any security budget Security did not spend goes back to the
-                // Corporation at the end of the Action phase (rulebook 3.3.5).
+                // Corporation (rulebook 3.3.5). Nothing a failing run does can
+                // reach it: the consolation payment of 3.4.4 is Credits the
+                // game pays a Character, and the escrow is the Corporation's
+                // own Credits coming home, so the two never meet.
                 $this->facilityDefence->returnUnspentBudgets($phase->turn, $actor);
+
+                // "The phase end is called" is one of the two ways the research
+                // game ends (3.2.1), and the table is only ever open during the
+                // Action phase. Nothing else closed it, so a sitting stayed
+                // open through Team Time and the next Setup and went on
+                // accepting equations.
                 $this->closeResearchTable($phase->turn->game);
             }
 
