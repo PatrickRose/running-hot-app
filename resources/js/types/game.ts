@@ -897,3 +897,196 @@ export type CouncilControlBoard = {
     absence_penalty: number;
     recess_seconds: number;
 };
+
+/**
+ * A Protection Card as the Runners standing in front of it may see it
+ * (rulebook 3.4.2).
+ *
+ * The optional half is the point rather than an afterthought: a card is face
+ * down until it is Active, so a Runner gets the shell and nothing else. Once it
+ * is flipped they get all of it, because they have to read the challenge to
+ * roll against it. Security, reading their own stack, always gets the whole
+ * thing.
+ */
+export type RunCard = {
+    id: number;
+    kind: 'physical' | 'cyber';
+    kind_label: string;
+    position: number;
+    active: boolean;
+    /** Whether Security has had its go at this card yet, either way. */
+    settled: boolean;
+    boosts: number;
+    next_boost_cost: number;
+    activation_cost: number | null;
+
+    /**
+     * What the card gains before its printed strength is even named — quoted by
+     * the server so the sum shown while Security types the number is the same
+     * one that gets rolled.
+     */
+    strength_bonuses: {
+        cards_passed: number;
+        alerts: number;
+        boosts: number;
+    };
+    name?: string;
+    code?: string | null;
+    /** The sentence the card prints, e.g. `Brute (6)`. Never parsed. */
+    challenge?: string;
+    consequence?: string;
+    charge_cost?: number | null;
+    charge_consequence?: string | null;
+    image_path?: string | null;
+};
+
+export type RunDiceRollView = {
+    roller: 'runners' | 'security';
+    roller_label: string;
+    pool: number;
+    die_faces: number;
+    faces: number[];
+    successes: number;
+    /** `6d8, 5+ — 1,2,2,3,4,4 (0 successes)`. */
+    readout: string;
+    reason: string | null;
+};
+
+export type RunEventView = {
+    id: number;
+    pass: number;
+    step: RunStep;
+    type: string;
+    description: string;
+    character: string | null;
+    at: string | null;
+    rolls: RunDiceRollView[];
+};
+
+export type RunStep = 'activate' | 'challenge' | 'consequence' | 'breather';
+
+export type RunConsequenceEffect =
+    'alert' | 'tag' | 'wound' | 'retry' | 'end_the_run';
+
+export type RunParticipantView = {
+    id: number;
+    character_id: number;
+    name: string;
+    position: number;
+    is_leader: boolean;
+    is_yours: boolean;
+    gang: Faction | null;
+    brawn: number;
+    hack: number;
+    body: number;
+    wounds: number;
+    tags: number;
+    left: boolean;
+    left_reason: string | null;
+};
+
+export type RunBudget = {
+    directed: boolean;
+    placed: number;
+    spent: number;
+    left: number;
+};
+
+/**
+ * The dice the Runners have in hand for one skill (rulebook 3.4.2).
+ *
+ * The Leader rolls their full skill and everyone else adds to the same pool,
+ * so there is one die size and it comes from the Leader alone: d6s if they are
+ * Wounded, d8s otherwise.
+ */
+export type RunDicePool = {
+    /** The Leader's own dice: their full skill. */
+    leader: number;
+    /** What each other Runner adds, keyed by character id. */
+    others: Record<string, number>;
+    die_faces: number;
+    total: number;
+};
+
+export type RunView = {
+    id: number;
+    status: 'submitted' | 'running' | 'succeeded' | 'failed';
+    status_label: string;
+    facility: {
+        id: number;
+        name: string;
+        facility_type: string;
+        corporation: Faction;
+    };
+    order_index: number | null;
+    order_reason: string | null;
+    alerts: number;
+    alerts_spent: number;
+    alerts_available: number;
+    alert_strength_bonus: number;
+    next_alert_threshold: number;
+    cards_passed: number;
+    active_cards_passed: number;
+    ignored_end_the_run: number;
+    retry_pending: boolean;
+    pass: number;
+    step: RunStep;
+    step_label: string;
+    /**
+     * Null for the Runners. A Facility's stack depth is Secret (rulebook 3.4.1,
+     * footnote 11), so they find out by running out of cards.
+     */
+    cards_remaining: number | null;
+    card: RunCard | null;
+
+    /**
+     * What the Runners would throw, keyed by skill — quoted by the server so
+     * the half-rounded-down / quarter-rounded-up contribution rule of 3.4.2 is
+     * never written a second time here. Empty while there is no Run Leader on
+     * the run, which is not the same as a pool of no dice.
+     */
+    dice_pool: Record<string, RunDicePool | undefined>;
+    leader_character_id: number | null;
+    participants: RunParticipantView[];
+    /** Null for the Runners: how much defence is left is the Corporation's. */
+    budget: RunBudget | null;
+    can_lead: boolean;
+    can_act: boolean;
+    can_defend: boolean;
+    log: RunEventView[];
+};
+
+export type RunTarget = {
+    id: number;
+    name: string;
+    facility_type: string;
+    corporation: Faction;
+};
+
+export type RunPartyMember = {
+    id: number;
+    name: string;
+    is_yours: boolean;
+    gang: Faction | null;
+    brawn: number;
+    hack: number;
+    body: number;
+    wounds: number;
+    tags: number;
+    incapacitated: boolean;
+};
+
+export type RunBoard = {
+    turn: number | null;
+    is_action_phase: boolean;
+    is_control: boolean;
+    can_submit: boolean;
+    targets: RunTarget[];
+    party: RunPartyMember[];
+    /** Alerts raised on the way in, keyed by group size. Quoted by the server. */
+    group_alerts: Record<number, number | undefined>;
+    /** Runs this player is on, seen from inside the Facility. */
+    yours: RunView[];
+    /** Runs coming at this player's Facilities, seen from the Security desk. */
+    defending: RunView[];
+};

@@ -46,14 +46,12 @@ class RunArithmeticTest extends TestCase
     }
 
     /**
-     * Past six the rulebook says "see help sheet on the day", so this is the
-     * designer's ruling rather than a reading: n(n+1)/2 - 10, which meets the
-     * printed table at six Runners and carries on from there.
+     * The printed list, and then the triangular numbers: n(n+1)/2 - 10.
      *
-     * It deliberately disagrees with the table below six — five Runners by this
-     * formula would be 5, and the book prints 7 — so the table has to be
-     * consulted first and the formula must only ever answer past the end of it.
-     * That is the mistake this test exists to catch.
+     * It deliberately disagrees with the list below six — five Runners by the
+     * formula would be 5, and the list says 7 — so the list has to be consulted
+     * first and the formula must only ever answer past the end of it. That is
+     * the mistake this test exists to catch.
      */
     public function test_the_group_size_bonus_extends_past_the_printed_table(): void
     {
@@ -64,15 +62,11 @@ class RunArithmeticTest extends TestCase
         // The printed rows still come off the table, not the formula.
         $this->assertSame(7, AlertSchedule::forGroupSize(5));
         $this->assertSame(11, AlertSchedule::forGroupSize(6));
-
-        // And the interface can say which of those is a proposal.
-        $this->assertFalse(AlertSchedule::groupBonusIsExtrapolated(6));
-        $this->assertTrue(AlertSchedule::groupBonusIsExtrapolated(7));
     }
 
     /**
-     * Control's number always wins, because past six the book sends them to a
-     * help sheet this application has never seen.
+     * Control's number always wins, because Control can overrule any number in
+     * the game.
      */
     public function test_control_can_override_the_group_size_bonus(): void
     {

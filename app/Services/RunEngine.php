@@ -261,10 +261,8 @@ class RunEngine
      * Go in (rulebook 3.4.1).
      *
      * Generates the Alerts the run opens with, from the Tags the group is
-     * carrying right now plus a bonus for its size. Past six Runners the
-     * rulebook sends Control to a help sheet, so the group bonus takes an
-     * override and {@see AlertSchedule::groupBonusIsExtrapolated()} says when
-     * the number the application proposed is ours rather than the book's.
+     * carrying right now plus a bonus for its size. The group bonus takes an
+     * override, because Control can overrule any number in the game.
      */
     public function begin(Run $run, ?User $actor = null, ?int $groupAlertOverride = null): Run
     {
@@ -313,7 +311,6 @@ class RunEngine
                 payload: [
                     'alerts_from_tags' => $fromTags,
                     'alerts_from_group_size' => $fromSize,
-                    'group_bonus_extrapolated' => AlertSchedule::groupBonusIsExtrapolated($runners->count()),
                 ],
             );
 
@@ -576,26 +573,118 @@ class RunEngine
     }
 
     /**
-     * Throw the dice at the card (rulebook 3.4.2).
+     * Security names the card's strength and rolls its defence (rulebook 3.4.2).
+     *
+     * Its own act, before the Runners throw anything. Security is a player at
+     * the table holding the card, and the sentence on it is theirs to read:
+     * "Brute (6)", "Brute/Hack (2)", "Hack (4+N) - where N is the number of
+     * cards underneath this". There is no parsed strength column to read it
+     * off, so they name the printed number and this says what happens to it -
+     * +1 per 2 Active cards the Runners are past, the Alert curve, and whatever
+     * has been spent Boosting this card.
+     *
+     * The breakdown goes in the event and the roll keeps every face, so a
+     * Runner asking where "strength 6" came from gets printed 3, +1 for the
+     * four cards you are past, +1 at three Alerts, +1 Boost rather than a
+     * number to take on trust.
+     */
+    public function defend(
+        Run $run,
+        int $printedStrength,
+        ?User $actor = null,
+        ?int $alertStrengthOverride = null,
+    ): RunEvent {
+        $cursor = $this->requireCard($run);
+
+        if (! $cursor->cardIsActive()) {
+            throw ValidationException::withMessages([
+                'defend' => 'An Inactive card is walked straight past - there is nothing to defend.',
+            ]);
+        }
+
+        $events = $this->passEvents($run, $cursor->pass);
+
+        if ($events->contains('type', RunEvent::TYPE_DEFENDED)) {
+            throw ValidationException::withMessages([
+                'defend' => 'Security has already rolled for that card this pass.',
+            ]);
+        }
+
+        if ($events->contains('type', RunEvent::TYPE_CHALLENGE)) {
+            throw ValidationException::withMessages([
+                'defend' => 'That card has already been challenged this pass.',
+            ]);
+        }
+
+        /** @var FacilityCardActivation $activation */
+        $activation = $cursor->activation;
+        /** @var FacilityProtectionCard $card */
+        $card = $cursor->card;
+
+        $strength = ChallengeStrength::for(
+            printed: $printedStrength,
+            cardsPassed: $run->active_cards_passed,
+            alerts: $run->alertsAvailable(),
+            boosts: $activation->boosts,
+            alertOverride: $alertStrengthOverride,
+        );
+
+        return DB::transaction(function () use ($run, $cursor, $card, $strength, $actor): RunEvent {
+            $faces = $this->dice->roll($strength->total(), DicePool::HEALTHY_DIE);
+            $successes = DicePool::countSuccesses($faces);
+
+            $event = $this->record(
+                $run,
+                RunEvent::TYPE_DEFENDED,
+                sprintf(
+                    '%s defends at strength %s, and rolls %d success%s.',
+                    $card->cardType->name,
+                    $strength->explain(),
+                    $successes,
+                    $successes === 1 ? '' : 'es',
+                ),
+                actor: $actor,
+                card: $card,
+                pass: $cursor->pass,
+                step: RunStep::Challenge,
+                payload: [
+                    'strength' => $strength->toArray(),
+                    'security_successes' => $successes,
+                ],
+            );
+
+            $this->recordRoll(
+                $run,
+                $event,
+                DiceRoller::Security,
+                $strength->total(),
+                DicePool::HEALTHY_DIE,
+                $faces,
+                $successes,
+                sprintf('%s defending, strength %s', $card->cardType->name, $strength->explain()),
+            );
+
+            return $event;
+        });
+    }
+
+    /**
+     * The Runners throw their dice at the card (rulebook 3.4.2).
      *
      * The Run Leader rolls their full skill and everybody else adds half of
      * theirs, or a quarter if they are Wounded - and the die size comes from
      * the Leader alone, so a Wounded Leader handing over before a hard card is
-     * a real tactic. Security rolls d8s equal to the challenge strength. Both
-     * sides need 5 or better, and a tie goes to Security.
+     * a real tactic. Both sides need 5 or better, and a tie goes to Security.
      *
-     * The printed strength is a parameter because there is nothing to read it
-     * off: a challenge is the sentence the card prints - "Brute (6)",
-     * "Brute/Hack (2)", "Hack (4+N) - where N is the number of cards underneath
-     * this" - so whoever is running the card names the number and this says
-     * what happens to it.
+     * Security has already rolled by the time this is reachable, which is why
+     * no strength is named here: it was named by the people holding the card,
+     * and this compares against what they actually threw rather than rolling
+     * for them.
      */
     public function challenge(
         Run $run,
         RunnerSkill $skill,
-        int $printedStrength,
         ?User $actor = null,
-        ?int $alertStrengthOverride = null,
     ): ChallengeOutcome {
         $cursor = $this->requireCard($run);
 
@@ -605,9 +694,19 @@ class RunEngine
             ]);
         }
 
-        if ($this->passEvents($run, $cursor->pass)->contains('type', RunEvent::TYPE_CHALLENGE)) {
+        $events = $this->passEvents($run, $cursor->pass);
+
+        if ($events->contains('type', RunEvent::TYPE_CHALLENGE)) {
             throw ValidationException::withMessages([
                 'challenge' => 'That card has already been challenged this pass.',
+            ]);
+        }
+
+        $defence = $events->firstWhere('type', RunEvent::TYPE_DEFENDED);
+
+        if ($defence === null) {
+            throw ValidationException::withMessages([
+                'challenge' => 'Security has not rolled for that card yet.',
             ]);
         }
 
@@ -634,26 +733,32 @@ class RunEngine
             others: $others,
         );
 
-        /** @var FacilityCardActivation $activation */
-        $activation = $cursor->activation;
-
-        $strength = ChallengeStrength::for(
-            printed: $printedStrength,
-            cardsPassed: $run->active_cards_passed,
-            alerts: $run->alertsAvailable(),
-            boosts: $activation->boosts,
-            alertOverride: $alertStrengthOverride,
+        // Both come off the roll Security already made. Re-deriving the
+        // strength here would be a second implementation of the same sum, and
+        // it would give a different answer the moment an Alert moved between
+        // the two rolls - which is exactly what Security spending one does.
+        $strength = new ChallengeStrength(
+            printed: max(0, (int) ($defence->payload['strength']['printed'] ?? 0)),
+            fromCardsPassed: max(0, (int) ($defence->payload['strength']['cards_passed'] ?? 0)),
+            fromAlerts: max(0, (int) ($defence->payload['strength']['alerts'] ?? 0)),
+            fromBoosts: max(0, (int) ($defence->payload['strength']['boosts'] ?? 0)),
         );
+
+        $securitySuccesses = max(0, (int) ($defence->payload['security_successes'] ?? 0));
+
+        /** @var RunDiceRoll $securityRoll */
+        $securityRoll = $run->diceRolls()
+            ->where('run_event_id', $defence->id)
+            ->where('roller', DiceRoller::Security)
+            ->firstOrFail();
 
         /** @var FacilityProtectionCard $card */
         $card = $cursor->card;
 
-        return DB::transaction(function () use ($run, $cursor, $card, $skill, $pool, $strength, $actor): ChallengeOutcome {
+        return DB::transaction(function () use ($run, $cursor, $card, $skill, $pool, $strength, $securitySuccesses, $securityRoll, $actor): ChallengeOutcome {
             $runnerFaces = $this->dice->roll($pool->total(), $pool->dieFaces);
-            $securityFaces = $this->dice->roll($strength->total(), DicePool::HEALTHY_DIE);
 
             $runnerSuccesses = DicePool::countSuccesses($runnerFaces);
-            $securitySuccesses = DicePool::countSuccesses($securityFaces);
             $won = DicePool::runnersWin($runnerSuccesses, $securitySuccesses);
 
             $event = $this->record(
@@ -691,17 +796,6 @@ class RunEngine
                 $runnerFaces,
                 $runnerSuccesses,
                 sprintf('%s against %s', $skill->label(), $card->cardType->name),
-            );
-
-            $securityRoll = $this->recordRoll(
-                $run,
-                $event,
-                DiceRoller::Security,
-                $strength->total(),
-                DicePool::HEALTHY_DIE,
-                $securityFaces,
-                $securitySuccesses,
-                sprintf('%s defending, strength %s', $card->cardType->name, $strength->explain()),
             );
 
             return new ChallengeOutcome(
@@ -1339,6 +1433,14 @@ class RunEngine
             return ($challenge->payload['runners_won'] ?? false) === true
                 ? RunStep::Breather
                 : RunStep::Consequence;
+        }
+
+        // Security has named the strength and thrown its dice, so what is left
+        // of the Challenge step is the Runners throwing theirs. This is the one
+        // place RunStep::Challenge is reached: before the two rolls were split
+        // the whole step happened in a single act and the step never showed.
+        if ($events->contains('type', RunEvent::TYPE_DEFENDED)) {
+            return RunStep::Challenge;
         }
 
         if ($activation !== null && ! $activation->isActive()) {
