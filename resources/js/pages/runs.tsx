@@ -73,6 +73,7 @@ export default function Runs({ game, board }: Props) {
                     <RunSubmitForm
                         targets={board.targets}
                         party={board.party}
+                        isControl={board.is_control}
                     />
                 )}
 

@@ -39,17 +39,33 @@ const GROUP_ALERTS = [0, 0, 1, 2, 4, 7, 11];
 export function RunSubmitForm({
     targets,
     party,
+    isControl,
 }: {
     targets: RunTarget[];
     party: RunPartyMember[];
+    isControl: boolean;
 }) {
     const yours = party.filter((runner) => runner.is_yours);
+
+    // Control holds no characters of its own, so `yours` is empty for Control
+    // and leading from it would offer an empty select - which read as "every
+    // Runner you hold is already out" and left Control unable to put a group
+    // in at all. Control may lead with anybody, which is the same override
+    // RunPolicy::before() gives it over every other act of a run.
+    const leaders = isControl ? party : yours;
+
     const [facility, setFacility] = useState('');
-    const [leader, setLeader] = useState(String(yours[0]?.id ?? ''));
+    const [leader, setLeader] = useState(String(leaders[0]?.id ?? ''));
     const [members, setMembers] = useState<number[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
-    const leaderId = Number(leader);
+    // A poll can take the chosen Leader off the list - they have just gone in
+    // with somebody else's group - so fall back rather than posting an id the
+    // server is about to refuse.
+    const chosen = leaders.some((runner) => String(runner.id) === leader)
+        ? leader
+        : String(leaders[0]?.id ?? '');
+    const leaderId = Number(chosen);
     const group = [leaderId, ...members].filter(
         (id) => Number.isFinite(id) && id > 0,
     );
@@ -72,15 +88,15 @@ export function RunSubmitForm({
     // Everyone already out on a run this turn is left off the list entirely, so
     // a player whose only Runner is in a Facility has nobody to lead a second
     // group — which is a sentence rather than an empty select.
-    if (yours.length === 0) {
+    if (leaders.length === 0) {
         return (
             <Card>
                 <CardHeader>
                     <CardTitle>Put in for a run</CardTitle>
                     <CardDescription>
-                        Every Runner you hold is already out on a run this turn.
-                        One run each — a Runner in two groups would be in two
-                        dice pools at once.
+                        {isControl
+                            ? 'Every Runner and Freelancer in the game is already out on a run this turn.'
+                            : 'Every Runner you hold is already out on a run this turn. One run each — a Runner in two groups would be in two dice pools at once.'}
                     </CardDescription>
                 </CardHeader>
             </Card>
@@ -153,14 +169,17 @@ export function RunSubmitForm({
                                 id="run-leader"
                                 required
                                 className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                                value={leader}
+                                value={chosen}
                                 onChange={(event) =>
                                     setLeader(event.target.value)
                                 }
                             >
-                                {yours.map((runner) => (
+                                {leaders.map((runner) => (
                                     <option key={runner.id} value={runner.id}>
                                         {runner.name}
+                                        {isControl && runner.gang !== null
+                                            ? ` — ${runner.gang.name}`
+                                            : ''}
                                     </option>
                                 ))}
                             </select>
@@ -241,7 +260,7 @@ export function RunSubmitForm({
                         <Button
                             type="submit"
                             disabled={
-                                submitting || facility === '' || leader === ''
+                                submitting || facility === '' || chosen === ''
                             }
                         >
                             Submit the run
