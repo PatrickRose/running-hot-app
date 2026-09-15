@@ -982,6 +982,19 @@ export type RunBudget = {
 };
 
 /**
+ * What a group of a given size raises on the way in, just for being that size
+ * (rulebook 3.4.1).
+ *
+ * `extrapolated` marks the sizes past where the rulebook stops printing
+ * numbers: the application carries the curve on, and that is Control's to
+ * overrule, so the screen says which it is looking at.
+ */
+export type RunGroupAlerts = {
+    alerts: number;
+    extrapolated: boolean;
+};
+
+/**
  * The dice the Runners have in hand for one skill (rulebook 3.4.2).
  *
  * The Leader rolls their full skill and everyone else adds to the same pool,
@@ -1072,6 +1085,8 @@ export type RunBoard = {
     can_submit: boolean;
     targets: RunTarget[];
     party: RunPartyMember[];
+    /** Keyed by group size. Quoted by the server, never tabulated here. */
+    group_alerts: Record<number, RunGroupAlerts | undefined>;
     /** Runs this player is on, seen from inside the Facility. */
     yours: RunView[];
     /** Runs coming at this player's Facilities, seen from the Security desk. */

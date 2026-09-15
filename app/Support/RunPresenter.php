@@ -51,6 +51,38 @@ class RunPresenter
     public function __construct(private readonly RunEngine $engine) {}
 
     /**
+     * The Alerts a group raises on the way in, by size (rulebook 3.4.1).
+     *
+     * Every size a group could actually be in this game, so the form can say
+     * the number for whatever is ticked rather than keeping a table of its own.
+     * Each entry says whether it is the rulebook's own figure or the
+     * application carrying the curve on past where the book stops, because the
+     * second is Control's to overrule and the form should say so.
+     *
+     * @return array<int, array{alerts: int, extrapolated: bool}>
+     */
+    private function groupAlerts(Game $game): array
+    {
+        $most = max(
+            AlertSchedule::PRINTED_UP_TO,
+            $game->characters()
+                ->whereIn('role', [CharacterRole::Runner, CharacterRole::Freelancer])
+                ->count(),
+        );
+
+        $alerts = [];
+
+        for ($size = 1; $size <= $most; $size++) {
+            $alerts[$size] = [
+                'alerts' => AlertSchedule::forGroupSize($size),
+                'extrapolated' => AlertSchedule::groupBonusIsExtrapolated($size),
+            ];
+        }
+
+        return $alerts;
+    }
+
+    /**
      * The pool the Runners have in hand, for each skill a card might ask for.
      *
      * Both skills rather than the one the card names, because plenty of cards
@@ -116,6 +148,13 @@ class RunPresenter
             'can_submit' => $user !== null && Gate::forUser($user)->allows('submit', [Run::class, $game]),
             'targets' => $this->targets($game, $turn),
             'party' => $user === null ? [] : $this->party($game, $user),
+            // What a group of each size raises just for being that size,
+            // quoted rather than tabulated in the browser: the rulebook prints
+            // the run to six and the application carries it on from there, and
+            // a copy of that in TypeScript is a rule written twice. It read
+            // "Control decides" for any group of seven or more, which stopped
+            // being true the moment the curve was extended.
+            'group_alerts' => $this->groupAlerts($game),
             // The runs this player is on, seen from inside the Facility.
             'yours' => $this->runsFor($game, $turn, $user, defending: false),
             // The runs coming at this player's own Facilities, seen from the
