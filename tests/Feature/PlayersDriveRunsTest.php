@@ -360,6 +360,35 @@ class PlayersDriveRunsTest extends TestCase
     // ------------------------------------------------------------------
 
     /**
+     * The Alerts a group raises for its size are quoted by the server, for the
+     * reason the dice pool is: the browser kept a copy of the printed table and
+     * said "Control decides" for anything past it, which stopped being true the
+     * moment the curve was carried on past six.
+     */
+    public function test_the_group_size_alert_curve_is_quoted_by_the_server(): void
+    {
+        [$user] = $this->runner();
+
+        // Only sizes a group could actually be are quoted, so the roster has
+        // to be big enough for seven before seven is one of them.
+        for ($i = 0; $i < 6; $i++) {
+            $this->runner();
+        }
+
+        $alerts = app(RunPresenter::class)->forPlayer($this->game->refresh(), $user)['group_alerts'];
+
+        // The rulebook's own rows, marked as its own.
+        $this->assertSame(0, $alerts[1]['alerts']);
+        $this->assertSame(11, $alerts[6]['alerts']);
+        $this->assertFalse($alerts[6]['extrapolated']);
+
+        // And the curve carried on past where it stops printing, marked as
+        // ours so the form can say Control may overrule it.
+        $this->assertSame(18, $alerts[7]['alerts']);
+        $this->assertTrue($alerts[7]['extrapolated']);
+    }
+
+    /**
      * 3.4.5 asks players to work their contribution out in advance, because the
      * Action phase is fifteen minutes long. The server does it instead, and it
      * does it for both skills: plenty of cards offer the choice, and the card's

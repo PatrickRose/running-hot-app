@@ -12,21 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { store } from '@/routes/runs';
-import type { RunPartyMember, RunTarget } from '@/types/game';
-
-/**
- * The Alerts a group of this size raises just for being that size
- * (rulebook 3.4.1).
- *
- * Shown while the group is being assembled because it is the whole trade: more
- * Runners break the defences more easily, and every one past the first makes
- * the Facility harder before you have set foot in it. The server generates the
- * real number; this is here so the decision is made with its eyes open.
- *
- * Past six the rulebook stops printing numbers, so past six this says so
- * instead of guessing on screen.
- */
-const GROUP_ALERTS = [0, 0, 1, 2, 4, 7, 11];
+import type { RunGroupAlerts, RunPartyMember, RunTarget } from '@/types/game';
 
 /**
  * Putting in for a run (rulebook 3.4.1).
@@ -39,10 +25,12 @@ const GROUP_ALERTS = [0, 0, 1, 2, 4, 7, 11];
 export function RunSubmitForm({
     targets,
     party,
+    groupAlerts,
     isControl,
 }: {
     targets: RunTarget[];
     party: RunPartyMember[];
+    groupAlerts: Record<number, RunGroupAlerts | undefined>;
     isControl: boolean;
 }) {
     const yours = party.filter((runner) => runner.is_yours);
@@ -104,7 +92,16 @@ export function RunSubmitForm({
     const tags = party
         .filter((runner) => group.includes(runner.id))
         .reduce((sum, runner) => sum + runner.tags, 0);
-    const sizeAlerts = GROUP_ALERTS[group.length] ?? null;
+
+    // The Alerts this group raises just for being this size (rulebook 3.4.1),
+    // quoted by the server. Shown while the group is assembled because it is
+    // the whole trade: more Runners break the defences more easily, and every
+    // one past the first makes the Facility harder before you have set foot in
+    // it. Past six the rulebook stops printing numbers and the application
+    // carries the curve on, which is Control's to overrule - so the number is
+    // still given and it is marked as a proposal rather than withheld.
+    const sizeAlerts = groupAlerts[group.length]?.alerts ?? null;
+    const extrapolated = groupAlerts[group.length]?.extrapolated ?? false;
 
     if (targets.length === 0) {
         return (
@@ -330,6 +327,14 @@ export function RunSubmitForm({
                                     {' '}
                                     ({tags} of them for Tags you are already
                                     carrying)
+                                </>
+                            )}
+                            {extrapolated && (
+                                <>
+                                    {' '}
+                                    — past six the rulebook stops printing
+                                    numbers, so {sizeAlerts} for the group is
+                                    ours and Control may say otherwise.
                                 </>
                             )}
                         </p>
