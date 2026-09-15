@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\ProtectionKind;
+use App\Enums\RunConsequence;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Models\Character;
@@ -16,6 +17,7 @@ use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\ProtectionCardType;
 use App\Models\Run;
+use App\Models\RunEvent;
 use App\Models\Turn;
 use App\Models\User;
 use App\Services\Dice;
@@ -173,6 +175,64 @@ class PlayersDriveRunsTest extends TestCase
     }
 
     /**
+     * A card prints "1 alert, 1 wound" and that is one consequence with two
+     * parts, not two consequences. It has to be possible to take both.
+     *
+     * The bug this pins: the cursor is derived from the log, and the *first*
+     * consequence event moves the run to the Breather - so applying the parts
+     * one request at a time offered the Leader exactly one of them and the rest
+     * of the card's sentence went unpaid. They go in together.
+     */
+    public function test_a_card_printing_several_consequences_applies_all_of_them(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $run = $this->begun($leader);
+        $this->activate($run);
+
+        $alertsBefore = $run->refresh()->alerts;
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+                'effects' => [
+                    ['effect' => RunConsequence::Alert->value, 'times' => 2],
+                    ['effect' => RunConsequence::Wound->value, 'times' => 1],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame($alertsBefore + 2, $run->refresh()->alerts);
+        $this->assertSame(1, $leader->refresh()->wounds);
+
+        // One line each in the log, so the record reads like the card.
+        $this->assertSame(2, $run->events()->where('type', RunEvent::TYPE_CONSEQUENCE)->count());
+    }
+
+    /**
+     * A part that ends the run stops the rest of the sentence: there is nobody
+     * left to take the Wound, and the engine would refuse it anyway.
+     */
+    public function test_a_consequence_that_ends_the_run_stops_the_ones_after_it(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $run = $this->begun($leader);
+        $this->activate($run);
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+                'effects' => [
+                    ['effect' => RunConsequence::EndTheRun->value],
+                    ['effect' => RunConsequence::Wound->value, 'times' => 3],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(RunStatus::Failed, $run->refresh()->status);
+        $this->assertSame(0, $leader->refresh()->wounds);
+    }
+
+    /**
      * "Each Runner, starting with the Run Leader, may take this opportunity to
      * leave" - each Runner's own decision, so a Runner who is not the Leader
      * may still walk away.
@@ -298,6 +358,65 @@ class PlayersDriveRunsTest extends TestCase
     // ------------------------------------------------------------------
     // Secrecy (3.4.1)
     // ------------------------------------------------------------------
+
+    /**
+     * 3.4.5 asks players to work their contribution out in advance, because the
+     * Action phase is fifteen minutes long. The server does it instead, and it
+     * does it for both skills: plenty of cards offer the choice, and the card's
+     * own sentence is never parsed into a column.
+     *
+     * Quoted rather than computed in the browser for the reason a reorder cost
+     * is: half rounded down while healthy and a quarter rounded *up* while
+     * Wounded is one rule, and two implementations of it would disagree about a
+     * die sooner or later.
+     */
+    public function test_the_pool_the_runners_would_throw_is_quoted_by_the_server(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $leader->forceFill(['brawn' => 5, 'hack' => 3])->save();
+
+        [, $mate] = $this->runner();
+        $mate->forceFill(['brawn' => 5, 'hack' => 1])->save();
+
+        [, $hurt] = $this->runner();
+        $hurt->forceFill(['brawn' => 5, 'hack' => 1, 'wounds' => 1])->save();
+
+        $this->begun($leader, [$mate->id, $hurt->id]);
+
+        $pool = $this->boardFor($leaderUser)['yours'][0]['dice_pool'];
+
+        // Brawn: the Leader's full 5, half of the healthy mate's 5 rounded down
+        // (2), and a quarter of the Wounded one's 5 rounded up (2).
+        $this->assertSame(5, $pool['brawn']['leader']);
+        $this->assertSame(2, $pool['brawn']['others'][$mate->id]);
+        $this->assertSame(2, $pool['brawn']['others'][$hurt->id]);
+        $this->assertSame(9, $pool['brawn']['total']);
+
+        // Hack: a healthy 1 brings nothing, a Wounded 1 still brings a die.
+        // The rounding goes opposite ways on purpose.
+        $this->assertSame(0, $pool['hack']['others'][$mate->id]);
+        $this->assertSame(1, $pool['hack']['others'][$hurt->id]);
+        $this->assertSame(4, $pool['hack']['total']);
+
+        // The die size is the Leader's alone: they are unwounded, so d8s, even
+        // though somebody else on the run is hurt.
+        $this->assertSame(8, $pool['brawn']['die_faces']);
+        $this->assertSame(8, $pool['hack']['die_faces']);
+    }
+
+    /**
+     * A pool of no dice and no pool at all are different answers, and the
+     * second is what a run with no Leader standing has.
+     */
+    public function test_a_run_with_no_leader_left_quotes_no_pool(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $run = $this->begun($leader);
+
+        app(RunEngine::class)->leave($run, $leader);
+
+        $this->assertSame([], $this->boardFor($leaderUser)['yours'][0]['dice_pool']);
+    }
 
     /**
      * Footnote 11: "The number of Protection Cards that a Facility contains is
