@@ -259,6 +259,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Who may do what on a run | `App\Policies\RunPolicy` |
 | The run screen players work from | `App\Http\Controllers\RunController`, `resources/js/pages/runs.tsx` |
 | Run arithmetic: ordering, alerts, strength, dice | `App\Support\Runs\*` |
+| What a successful run takes out of a Facility | `App\Enums\RunAccessKind`, `TechnologyAccessAction`, `App\Support\Runs\AccessCheck` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | The Council's agenda, voting and attendance | `App\Services\CouncilService` |
 | A Council seat that is not a Corporation | `characters.council_votes`, `App\Models\Character::sitsOnCouncil()` |
@@ -736,14 +737,70 @@ underneath this` is not knowable from a column. The sentence is shown beside the
 form and the table converts it, which is what it does with the card in hand
 anyway.
 
-**Not modelled:** §3.4.3, the accesses a successful run buys. It has no
-substrate — which technologies a Facility is storing is not modelled,
-technologies carry copy and destroy strengths but no Steal score, and the
-per-Facility Credits card does not exist — so a successful run records that it
-succeeded and the accesses are Control's to hand out. Building that substrate as
-a side effect of building the loop would decide how technology storage works for
-the wrong reasons. The Runners *are* let into their target Facility's
-Discord channels for the length of the run, which is the Discord half above.
+### Getting inside (3.4.3)
+
+**Every Runner who walked in gets one access, and spends their own.** The
+rulebook has the Run Leader choosing the cards; this application gives the
+choice to each Runner, which is what makes a group of four worth more than a
+group of one. `RunPolicy::act` is the boundary and the controller adds the
+second half of it: `act` only asks whether you are on the run, and every Runner
+on it passes that, so without a check against the character named a Runner could
+spend a gangmate's access out from under them. Control spends anybody's, through
+`before()` — Control is not in the way of an access, only available for the one
+that needs them.
+
+**Spending is the whole of what you get.** A failed copy or a steal that missed
+still costs the access: 3.4.3 puts the card back on the list and says "you may
+attempt to access it again", which only means anything if the first attempt was
+spent. Equipment may buy a Runner more accesses (footnote 13) and nobody's
+Equipment is modelled, so that arrives with the Equipment holdings.
+
+**The Credits card is read off the building, not set anywhere.** Two printed
+sums added together: the Protection Cards *installed* in the Facility — not
+activated, because a card Security could not afford to switch on is still a card
+in the building — and the technologies stored there, counted "including the
+Credits card". The first is a printed list with steps of 1, 2, 2, 3, 3 and then
++3 a card past ten, so it is written out; the second is the triangular numbers.
+`App\Support\Runs\RunRewards` holds both. There is one Credits card and one
+Facility effect in a building, so the second Runner to reach for either finds it
+gone — `RunAccessKind::onlyOncePerRun()` is where that lives.
+
+**The card is drawn, not chosen.** At the table that step is a person holding
+cards face down and fanning them out, so a draw is the same thing without
+somebody to hold them — and a card another Runner has already been at this run
+is out of it. `RunPresenter` therefore sends a *count* of what is left rather
+than a list: naming them would hand back the choice the draw takes away, and
+would tell the Runners what the Facility holds without their having spent
+anything on finding out. A Facility down to its last card hands it over rather
+than rolling a one-sided die.
+
+**The three things you can do to a card share a shape and nothing else.** All
+roll the group's *combined* Brawn and Hack — both, added, which is the whole
+difference from a Protection Card — and all read their successes off a printed
+band with no opposing roll and no consequence for failing.
+`App\Support\Runs\AccessCheck` owns the bands. A copy leaves the card where it
+is and produces a discount for whoever buys the copy, so nothing is written on
+the holding: what the Runner carries out becomes somebody's
+`technology_holdings` row when they sell it, which is the same conversation
+3.2.5 already has. A theft takes the card at 8 successes — flat for every
+technology, because the card sheet has copy and destroy strengths and no Steal
+column at all. A destroy only removes the technology at the last of its four
+bands; everything below leaves traces the Corporation can research again at a
+discount the rulebook never prints, so the band is recorded and the percentage
+is Control's.
+
+**Destroyed and Stolen are different losses and are kept apart.** A destroyed
+technology leaves traces; a stolen one is intact in somebody else's hands.
+Neither row is deleted, and neither occupies the Facility's storage any more.
+
+**What a Facility's own effect *does* is still words.** Spying on a rival's
+stack, a blackmail file, a stock certificate: all conversations, so taking the
+effect records that it was taken and the conversation happens. That and a plot
+access are the two places Control is still wanted, and only to hand over what
+the Runner has already won.
+
+The Runners are also let into their target Facility's Discord channels for the
+length of the run, which is the Discord half above.
 
 ## The card lists
 
@@ -1241,6 +1298,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the screen players work it from, and the Runners being let into the Facility's own Discord channels for the length of it.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the accesses a successful one buys, the screen players work it from, and the Runners being let into the Facility's own Discord channels for the length of it.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece and the last of the sub-games, and everything a Run operates on is now built: the Facilities, their Protection Card stacks, and the technologies stored in them. `#facility-list` now carries the Facility list once Control publishes it.

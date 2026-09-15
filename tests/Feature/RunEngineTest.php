@@ -8,6 +8,8 @@ use App\Enums\RunDeparture;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Enums\RunStep;
+use App\Enums\TechnologyAccessAction;
+use App\Enums\TechnologyHoldingStatus;
 use App\Enums\Tracker;
 use App\Models\Character;
 use App\Models\Facility;
@@ -16,6 +18,7 @@ use App\Models\Game;
 use App\Models\ProtectionCardType;
 use App\Models\Run;
 use App\Models\RunEvent;
+use App\Models\TechnologyHolding;
 use App\Models\TrackerAdjustment;
 use App\Models\Turn;
 use App\Services\Dice;
@@ -974,6 +977,333 @@ class RunEngineTest extends TestCase
      *
      * @return array{0: Turn, 1: Facility}
      */
+    // ------------------------------------------------------------------
+    // Accesses (3.4.3)
+    // ------------------------------------------------------------------
+
+    /**
+     * "For each Runner in the group, they receive one access." One each, and
+     * spending it is the whole of what they get.
+     */
+    public function test_each_runner_inside_gets_one_access(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+
+        $this->assertNotNull($leader);
+        $this->assertSame(0, $this->engine()->accessesLeft($run, $leader));
+
+        $run = $this->broke($run);
+
+        $this->assertSame(1, $this->engine()->accessesLeft($run, $leader));
+
+        $this->engine()->takePlotAccess($run, $leader);
+
+        $this->assertSame(0, $this->engine()->accessesLeft($run->refresh(), $leader));
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->takePlotAccess($run->refresh(), $leader);
+    }
+
+    /**
+     * The Credits card is read off what the Facility is holding: the
+     * Protection Cards installed in it, and the technologies stored there.
+     */
+    public function test_the_credits_card_pays_what_the_facility_is_worth(): void
+    {
+        $run = $this->started(physical: 3);
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        TechnologyHolding::factory()->count(2)->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        $access = $this->engine()->takeCredits($run, $leader);
+
+        // Three cards installed pays 3, and two technologies stored is three
+        // counted including the Credits card, which pays 3.
+        $this->assertSame(6, $access->credits);
+        $this->assertSame(6, $leader->refresh()->credits);
+
+        // And it is in the ledger like every other Credit in the game.
+        $this->assertDatabaseHas('tracker_adjustments', [
+            'tracker' => Tracker::CharacterCredits->value,
+            'delta' => 6,
+        ]);
+    }
+
+    /**
+     * There is one Credits card in a Facility, so the second Runner to reach
+     * for it finds it gone. Same for the Facility's own effect.
+     */
+    public function test_the_credits_card_and_the_facility_effect_go_once_each(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+        $run = $this->broke($run->refresh());
+
+        $this->engine()->takeCredits($run, $leader);
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->takeCredits($run->refresh(), $mate);
+    }
+
+    /**
+     * "If you roll four successes, you create a good copy that gives a 50%
+     * discount." The card itself never moves for a copy.
+     */
+    public function test_copying_a_technology_leaves_it_where_it_is(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        // A solo Runner with Brawn 2 and Hack 2 rolls their combined 4.
+        $this->dice->will([8, 8, 8, 8]);
+
+        $access = $this->engine()->accessTechnology(
+            $run,
+            $leader,
+            TechnologyAccessAction::Copy,
+        );
+
+        $this->assertSame('good_copy', $access->outcome);
+        $this->assertSame(50, $access->discount_percent);
+        $this->assertSame($holding->id, $access->technology_holding_id);
+
+        // Still in the building, and still the Corporation's.
+        $holding->refresh();
+        $this->assertSame(TechnologyHoldingStatus::Claimed, $holding->status);
+        $this->assertSame($run->facility_id, $holding->facility_id);
+    }
+
+    /**
+     * A copy that rolls nothing fails, and the card is untouched - but the
+     * access is still spent.
+     */
+    public function test_a_failed_copy_still_costs_the_access(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        $this->dice->will([1, 1, 1, 1]);
+
+        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Copy);
+
+        $this->assertSame('failed', $access->outcome);
+        $this->assertNull($access->discount_percent);
+        $this->assertSame(0, $this->engine()->accessesLeft($run->refresh(), $leader));
+    }
+
+    /**
+     * Stealing needs 8 successes, and the card leaves the building. It is not
+     * destroyed: it is intact in somebody else's hands, which is why it stops
+     * taking up the Facility's storage without being written off.
+     */
+    public function test_stealing_takes_the_card_out_of_the_facility(): void
+    {
+        $run = $this->started(['brawn' => 6, 'hack' => 6]);
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        // Twelve dice, eight of them successes.
+        $this->dice->will([8, 8, 8, 8, 8, 8, 8, 8, 1, 1, 1, 1]);
+
+        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Steal);
+
+        $this->assertSame('stolen', $access->outcome);
+
+        $holding->refresh();
+        $this->assertSame(TechnologyHoldingStatus::Stolen, $holding->status);
+        $this->assertNull($holding->facility_id);
+        $this->assertFalse($holding->status->occupiesStorage());
+    }
+
+    /**
+     * A steal short of 8 misses and the card stays exactly where it was.
+     */
+    public function test_a_steal_that_misses_leaves_the_card_alone(): void
+    {
+        $run = $this->started(['brawn' => 6, 'hack' => 6]);
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        $this->dice->will([8, 8, 8, 8, 8, 8, 8, 1, 1, 1, 1, 1]);
+
+        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Steal);
+
+        $this->assertSame('failed', $access->outcome);
+        $this->assertSame(TechnologyHoldingStatus::Claimed, $holding->refresh()->status);
+        $this->assertSame($run->facility_id, $holding->facility_id);
+    }
+
+    /**
+     * "If you have destroy equipment/skills and you roll 12 successes you
+     * overly succeed and destroy the technology and all useful traces."
+     *
+     * Every band short of that leaves it standing, because what they leave is
+     * traces the Corporation can research again at a discount.
+     */
+    public function test_only_a_total_destroy_takes_the_technology_away(): void
+    {
+        $run = $this->started(['brawn' => 4, 'hack' => 4]);
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        // Four successes out of eight dice: the moderate band, traces left.
+        $this->dice->will([8, 8, 8, 8, 1, 1, 1, 1]);
+
+        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Destroy);
+
+        $this->assertSame('damaged_4', $access->outcome);
+        $this->assertSame(TechnologyHoldingStatus::Claimed, $holding->refresh()->status);
+        $this->assertNull($holding->destroyed_at);
+    }
+
+    public function test_twelve_successes_destroys_a_technology_outright(): void
+    {
+        $run = $this->started(['brawn' => 6, 'hack' => 6]);
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        $this->dice->will(array_fill(0, 12, 8));
+
+        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Destroy);
+
+        $this->assertSame('destroyed', $access->outcome);
+
+        $holding->refresh();
+        $this->assertSame(TechnologyHoldingStatus::Destroyed, $holding->status);
+        $this->assertNotNull($holding->destroyed_at);
+        $this->assertFalse($holding->status->occupiesStorage());
+    }
+
+    /**
+     * A card another Runner has already been at this run is out of the draw, so
+     * a Facility holding one technology has nothing left for the second Runner.
+     */
+    public function test_a_card_already_accessed_is_out_of_the_draw(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id, ['brawn' => 2, 'hack' => 2]);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+
+        TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run->refresh());
+
+        $this->dice->will([1, 1, 1, 1, 1, 1]);
+        $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Copy);
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->accessTechnology($run->refresh(), $mate, TechnologyAccessAction::Copy);
+    }
+
+    /**
+     * Nothing is taken out of a Facility the Runners did not get into.
+     */
+    public function test_a_run_that_did_not_succeed_takes_nothing(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->takeCredits($run, $leader);
+    }
+
+    /**
+     * Break the Facility's only card and get inside.
+     *
+     * The accesses of 3.4.3 all want a run that has actually succeeded, and
+     * getting there is four calls of setup that say nothing about what is being
+     * tested.
+     */
+    private function broke(Run $run): Run
+    {
+        // Bounded rather than a bare while, because a loop that never ends in
+        // a test looks like a hung suite rather than a bug in the engine.
+        for ($card = 0; $card < 20 && ! $run->refresh()->status->isFinished(); $card++) {
+            $run = $run->refresh();
+            $cursor = $this->engine()->cursor($run);
+
+            if ($cursor->hasCard() && ! $cursor->activationSettled()) {
+                $this->engine()->activate($run);
+            }
+
+            $this->walkPast($run->refresh());
+        }
+
+        $this->assertSame(RunStatus::Succeeded, $run->refresh()->status);
+
+        return $run->refresh();
+    }
+
     private function facility(int $physical = 1, int $cyber = 0, ?int $chargeCost = null): array
     {
         $game = Game::factory()->create();
@@ -1074,7 +1404,23 @@ class RunEngineTest extends TestCase
             $this->dice->willRoll($strength->total(), 1);
             $this->engine()->defend($run, 0);
 
-            $this->dice->willRoll((int) $run->leader?->getAttribute($skill->column()), 8);
+            // The Runners' pool is asked for rather than written out, for the
+            // reason the strength above is: a group of two rolls the Leader's
+            // skill plus a share of everybody else's, and a test that assumed
+            // the Leader was alone would run the dice dry somewhere else.
+            $pool = DicePool::for(
+                leaderSkill: (int) $run->leader?->getAttribute($skill->column()),
+                leaderWounded: ($run->leader?->wounds ?? 0) > 0,
+                others: $run->activeParticipants()
+                    ->reject(fn ($p): bool => $p->character_id === $run->run_leader_character_id)
+                    ->mapWithKeys(fn ($p): array => [$p->character_id => [
+                        'skill' => (int) $p->character->getAttribute($skill->column()),
+                        'wounded' => $p->character->wounds > 0,
+                    ]])
+                    ->all(),
+            );
+
+            $this->dice->willRoll($pool->total(), 8);
             $this->engine()->challenge($run->refresh(), $skill);
         }
 

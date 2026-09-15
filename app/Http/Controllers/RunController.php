@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RunAccessKind;
 use App\Enums\RunConsequence;
 use App\Enums\RunnerSkill;
+use App\Enums\TechnologyAccessAction;
 use App\Http\Requests\SubmitRunRequest;
 use App\Models\Character;
 use App\Models\Facility;
 use App\Models\Game;
 use App\Models\Run;
+use App\Models\RunEvent;
 use App\Services\RunEngine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -342,6 +345,87 @@ class RunController extends Controller
         $event = $this->runs->ignoreEndTheRun($run, $taker, $request->user());
 
         return back()->with('status', $event->description);
+    }
+
+    /**
+     * Spend an access inside a Facility the Runners broke into (3.4.3).
+     *
+     * One route for all four kinds, because they are one act with one choice -
+     * the Runner picks what to spend their access on, and every one of them
+     * costs the same single access. Authorised as `act` and checked against the
+     * character named: a Runner spends their own, not their Leader's, and not
+     * for somebody who has wandered off.
+     *
+     * Control reaches it through the policy's before(), which is what "Control
+     * shouldn't need to be involved" leaves room for: they are not in the way,
+     * and they can still act for a player who is not at their laptop.
+     */
+    public function access(Run $run, Request $request): RedirectResponse
+    {
+        Gate::authorize('act', $run);
+
+        $validated = $request->validate([
+            'character_id' => ['required', 'integer'],
+            'kind' => ['required', Rule::enum(RunAccessKind::class)],
+            // Only a technology access has anything to choose after the kind,
+            // and it must choose: copy, steal and destroy are different acts
+            // with different dice, not a default with variations.
+            'action' => [
+                'nullable',
+                'required_if:kind,'.RunAccessKind::Technology->value,
+                Rule::enum(TechnologyAccessAction::class),
+            ],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        /** @var Character $runner */
+        $runner = Character::query()->findOrFail($validated['character_id']);
+
+        $this->authoriseAccessFor($request, $run, $runner);
+
+        $access = match (RunAccessKind::from($validated['kind'])) {
+            RunAccessKind::Credits => $this->runs->takeCredits($run, $runner, $request->user()),
+            RunAccessKind::FacilityEffect => $this->runs->takeFacilityEffect($run, $runner, $request->user()),
+            RunAccessKind::Plot => $this->runs->takePlotAccess(
+                $run,
+                $runner,
+                $validated['notes'] ?? null,
+                $request->user(),
+            ),
+            RunAccessKind::Technology => $this->runs->accessTechnology(
+                $run,
+                $runner,
+                TechnologyAccessAction::from((string) $validated['action']),
+                $request->user(),
+            ),
+        };
+
+        return back()->with(
+            'status',
+            $run->refresh()->events()->where('type', RunEvent::TYPE_ACCESS)->latest('id')->value('description')
+                ?? sprintf('%s spent an access.', $runner->name),
+        );
+    }
+
+    /**
+     * A player spends their own access; Control spends anybody's.
+     *
+     * `act` already asks whether the caller is on the run, but every Runner on
+     * a run passes that - so without this a Runner could spend a gangmate's
+     * access out from under them, which is the one thing per-Runner accesses
+     * are for.
+     */
+    private function authoriseAccessFor(Request $request, Run $run, Character $runner): void
+    {
+        $user = $request->user();
+
+        if ($user !== null && $user->isControlFor($run->game)) {
+            return;
+        }
+
+        if ($runner->user_id !== $user?->id) {
+            abort(403, 'That is somebody else\'s access to spend.');
+        }
     }
 
     /**

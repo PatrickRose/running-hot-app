@@ -105,6 +105,9 @@ class RunEvent extends Model
     /** A Retry consumed at the Breather, sending the Runners at the same card again. */
     public const TYPE_RETRIED = 'retried';
 
+    /** A Runner spent one of their accesses inside the Facility (3.4.3). */
+    public const TYPE_ACCESS = 'access';
+
     public const TYPE_SUCCEEDED = 'succeeded';
 
     public const TYPE_FAILED = 'failed';

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\ProtectionKind;
+use App\Enums\RunAccessKind;
 use App\Enums\RunConsequence;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
@@ -174,6 +175,77 @@ class PlayersDriveRunsTest extends TestCase
             ->assertRedirect();
 
         $this->assertSame(1, $run->refresh()->diceRolls->where('roller', 'runners')->count());
+    }
+
+    /**
+     * Each Runner spends their own access, and nobody else's (3.4.3).
+     *
+     * `act` asks whether the caller is on the run, which every Runner on it
+     * passes - so without a second check a Runner could spend a gangmate's
+     * access out from under them, which is the one thing per-Runner accesses
+     * exist to prevent.
+     */
+    public function test_a_runner_spends_their_own_access_and_control_spends_anybodys(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        [$mateUser, $mate] = $this->runner();
+
+        $run = $this->begun($leader, [$mate->id]);
+        $this->succeed($run);
+
+        // The Leader cannot spend the mate's access.
+        $this->actingAs($leaderUser)
+            ->post(route('runs.accesses.store', $run), [
+                'character_id' => $mate->id,
+                'kind' => RunAccessKind::Credits->value,
+            ])
+            ->assertForbidden();
+
+        // Their own, they may.
+        $this->actingAs($leaderUser)
+            ->post(route('runs.accesses.store', $run), [
+                'character_id' => $leader->id,
+                'kind' => RunAccessKind::Credits->value,
+            ])
+            ->assertRedirect();
+
+        // And the Credits card is gone, so the mate is refused it.
+        $this->actingAs($mateUser)
+            ->post(route('runs.accesses.store', $run), [
+                'character_id' => $mate->id,
+                'kind' => RunAccessKind::Credits->value,
+            ])
+            ->assertSessionHasErrors('access');
+
+        // Control acts for anybody, because a run must not stall on a player
+        // being away from their laptop.
+        $this->actingAs($this->control())
+            ->post(route('runs.accesses.store', $run), [
+                'character_id' => $mate->id,
+                'kind' => RunAccessKind::Plot->value,
+                'notes' => 'Chasing the Gordon plot hook.',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(2, $run->refresh()->accesses()->count());
+    }
+
+    /**
+     * A Corporate player is not on the run and takes nothing out of it.
+     */
+    public function test_security_cannot_spend_an_access_on_their_own_facility(): void
+    {
+        [, $leader] = $this->runner();
+
+        $run = $this->begun($leader);
+        $this->succeed($run);
+
+        $this->actingAs($this->seat(CharacterRole::Security))
+            ->post(route('runs.accesses.store', $run), [
+                'character_id' => $leader->id,
+                'kind' => RunAccessKind::Credits->value,
+            ])
+            ->assertForbidden();
     }
 
     /**
@@ -728,6 +800,21 @@ class PlayersDriveRunsTest extends TestCase
     /**
      * @return array{0: User, 1: Character}
      */
+    /**
+     * Get the group inside, so there is something to access.
+     *
+     * Control's routes rather than the engine, because that is the shortest
+     * honest way to a successful run: the point of these tests is what happens
+     * once the Runners are in.
+     */
+    private function succeed(Run $run): void
+    {
+        $run->forceFill([
+            'status' => RunStatus::Succeeded,
+            'ended_at' => now(),
+        ])->save();
+    }
+
     private function runner(CharacterRole $role = CharacterRole::Runner): array
     {
         $user = User::factory()->create();

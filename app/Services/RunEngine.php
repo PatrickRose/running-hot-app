@@ -4,11 +4,15 @@ namespace App\Services;
 
 use App\Enums\DiceRoller;
 use App\Enums\ProtectionKind;
+use App\Enums\RunAccessKind;
 use App\Enums\RunConsequence;
 use App\Enums\RunDeparture;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Enums\RunStep;
+use App\Enums\TechnologyAccessAction;
+use App\Enums\TechnologyHoldingStatus;
+use App\Enums\TechnologyOrigin;
 use App\Enums\Tracker;
 use App\Jobs\SyncRunChannelAccess;
 use App\Models\Character;
@@ -17,11 +21,14 @@ use App\Models\FacilityCardActivation;
 use App\Models\FacilityProtectionCard;
 use App\Models\Gang;
 use App\Models\Run;
+use App\Models\RunAccess;
 use App\Models\RunDiceRoll;
 use App\Models\RunEvent;
 use App\Models\RunParticipant;
+use App\Models\TechnologyHolding;
 use App\Models\Turn;
 use App\Models\User;
+use App\Support\Runs\AccessCheck;
 use App\Support\Runs\ActivationCost;
 use App\Support\Runs\AlertSchedule;
 use App\Support\Runs\ChallengeOutcome;
@@ -1154,6 +1161,496 @@ class RunEngine
      * are Control's to hand out. The run records that it succeeded, and the
      * event says so.
      */
+    // ------------------------------------------------------------------
+    // Accesses (3.4.3)
+    // ------------------------------------------------------------------
+
+    /**
+     * How many accesses a Runner has left inside a Facility they broke into.
+     *
+     * "For each Runner in the group, they receive one access." One each, and
+     * spending it is the whole of what they get - a failed copy or a steal that
+     * missed still costs the access, because 3.4.3 says the card goes back on
+     * the list and "you may attempt to access it again", which only means
+     * anything if the first attempt was spent.
+     *
+     * Equipment may give a Runner more (footnote 13) and nobody's Equipment is
+     * modelled, so that arrives with the Equipment holdings rather than here.
+     */
+    public function accessesLeft(Run $run, Character $runner): int
+    {
+        if ($run->status !== RunStatus::Succeeded) {
+            return 0;
+        }
+
+        $onTheRun = $run->participants()
+            ->where('character_id', $runner->id)
+            ->exists();
+
+        if (! $onTheRun) {
+            return 0;
+        }
+
+        $spent = $run->accesses()->where('character_id', $runner->id)->count();
+
+        return max(0, 1 - $spent);
+    }
+
+    /**
+     * The Facility's Credits card (rulebook 3.4.3).
+     *
+     * One card in the building, so the first Runner to reach for it takes it
+     * and the rest find it gone. The amount is read off what the Facility is
+     * actually holding rather than set anywhere: the Protection Cards installed
+     * in it - installed, not activated, because a card Security could not
+     * afford to switch on is still a card in the building - and the
+     * technologies stored there.
+     */
+    public function takeCredits(Run $run, Character $runner, ?User $actor = null): RunAccess
+    {
+        $this->requireAccess($run, $runner, RunAccessKind::Credits);
+
+        $credits = RunRewards::forCreditsCard(
+            protectionCards: $run->facility->protectionCards()->count(),
+            technologies: $this->storedTechnologies($run)->count(),
+        );
+
+        return DB::transaction(function () use ($run, $runner, $credits, $actor): RunAccess {
+            $this->trackers->adjust(
+                $runner,
+                Tracker::CharacterCredits,
+                $credits,
+                sprintf('Credits card from %s', $run->facility->name),
+                $actor,
+            );
+
+            return $this->recordAccess(
+                $run,
+                $runner,
+                RunAccessKind::Credits,
+                sprintf(
+                    '%s took the Credits card from %s: %d Credit%s.',
+                    $runner->name,
+                    $run->facility->name,
+                    $credits,
+                    $credits === 1 ? '' : 's',
+                ),
+                ['credits' => $credits],
+                $actor,
+            );
+        });
+    }
+
+    /**
+     * The Facility type's own effect (rulebook 3.4.3).
+     *
+     * What it does is stored as words on the type and not read by anything:
+     * spying on a rival's stack, a blackmail file, a stock certificate. Those
+     * are conversations, so this records that the effect was taken and leaves
+     * the conversation to happen - which is the one place Control is still
+     * wanted, and only to hand over what the Runner has already won.
+     */
+    public function takeFacilityEffect(Run $run, Character $runner, ?User $actor = null): RunAccess
+    {
+        $this->requireAccess($run, $runner, RunAccessKind::FacilityEffect);
+
+        $effect = $run->facility->facilityType->access_effect;
+
+        if (blank($effect)) {
+            throw ValidationException::withMessages([
+                'access' => sprintf(
+                    'A %s Facility has no access effect to take.',
+                    $run->facility->facilityType->name,
+                ),
+            ]);
+        }
+
+        return $this->recordAccess(
+            $run,
+            $runner,
+            RunAccessKind::FacilityEffect,
+            sprintf(
+                '%s used the %s Facility\'s own effect: %s',
+                $runner->name,
+                $run->facility->facilityType->name,
+                $effect,
+            ),
+            [],
+            $actor,
+        );
+    }
+
+    /**
+     * An access spent on something only Control can answer (3.4.3, 3.4.4).
+     *
+     * A Technology Location card, a plot thread, anything the Runner came in
+     * for that the application does not model. It takes the access and says so
+     * on the run, so the Runner has a record of having spent it and Control has
+     * a queue to work through.
+     */
+    public function takePlotAccess(
+        Run $run,
+        Character $runner,
+        ?string $note = null,
+        ?User $actor = null,
+    ): RunAccess {
+        $this->requireAccess($run, $runner, RunAccessKind::Plot);
+
+        return $this->recordAccess(
+            $run,
+            $runner,
+            RunAccessKind::Plot,
+            sprintf(
+                '%s spent an access on a plot lead at %s. Control\'s to answer.',
+                $runner->name,
+                $run->facility->name,
+            ),
+            ['notes' => $note],
+            $actor,
+        );
+    }
+
+    /**
+     * Copy, steal or destroy a technology stored in the Facility (3.4.3).
+     *
+     * **The card is drawn rather than chosen.** The rulebook has the Run Leader
+     * pick from the list and the Security player reveal it; at the table that
+     * is a person holding cards face down and fanning them out, so the drawn
+     * card is the same thing without somebody to hold them. A card another
+     * Runner has already been at this run is out of the draw.
+     *
+     * The dice are the group's: "the combination of your Brawn and Hack" in
+     * full for whoever is spending the access, and the usual half or quarter
+     * from everybody else. Unlike a Protection Card there is no opposing roll
+     * and no consequence for failing - what the successes buy is read off a
+     * printed band, and a card that survives the attempt is simply still there.
+     */
+    public function accessTechnology(
+        Run $run,
+        Character $runner,
+        TechnologyAccessAction $action,
+        ?User $actor = null,
+    ): RunAccess {
+        $this->requireAccess($run, $runner, RunAccessKind::Technology);
+
+        $available = $this->storedTechnologies($run)
+            ->reject(fn (TechnologyHolding $holding): bool => in_array(
+                $holding->id,
+                $run->accesses()->whereNotNull('technology_holding_id')->pluck('technology_holding_id')->all(),
+                true,
+            ));
+
+        if ($available->isEmpty()) {
+            throw ValidationException::withMessages([
+                'access' => 'There is nothing left in this Facility to access.',
+            ]);
+        }
+
+        // A one-sided die is not a die, so a Facility down to its last card
+        // simply hands it over rather than being rolled for - the same rule the
+        // Run Leader handover follows.
+        $choices = $available->count();
+        $index = 0;
+
+        if ($choices > 1) {
+            $index = $this->dice->roll(1, $choices)[0] - 1;
+        }
+
+        /** @var TechnologyHolding $holding */
+        $holding = $available->values()->get($index);
+
+        $pool = $this->accessPool($run, $runner);
+
+        return DB::transaction(function () use ($run, $runner, $action, $holding, $pool, $actor): RunAccess {
+            $faces = $this->dice->roll($pool->total(), $pool->dieFaces);
+            $successes = DicePool::countSuccesses($faces);
+
+            [$outcome, $description, $discount] = $this->resolveTechnologyAccess(
+                $run,
+                $runner,
+                $action,
+                $holding,
+                $successes,
+            );
+
+            $access = $this->recordAccess(
+                $run,
+                $runner,
+                RunAccessKind::Technology,
+                $description,
+                [
+                    'technology_holding_id' => $holding->id,
+                    'action' => $action,
+                    'successes' => $successes,
+                    'outcome' => $outcome,
+                    'discount_percent' => $discount,
+                ],
+                $actor,
+                $event,
+            );
+
+            $this->recordRoll(
+                $run,
+                $event,
+                DiceRoller::Runners,
+                $pool->total(),
+                $pool->dieFaces,
+                $faces,
+                $successes,
+                sprintf('%s on %s', $action->label(), $holding->technologyType->name),
+            );
+
+            return $access;
+        });
+    }
+
+    /**
+     * What one access did to one technology, and what to say about it.
+     *
+     * The three actions share a shape and nothing else: a copy leaves the card
+     * where it is and produces a discount for whoever buys the copy off the
+     * Runner, a theft takes the card, and a destroy only removes it on the last
+     * band. Everything short of that leaves traces, which is a discount for the
+     * Corporation to research it again - Control's to apply, because the
+     * rulebook prints no percentages for it.
+     *
+     * @return array{0: string, 1: string, 2: int|null}
+     */
+    protected function resolveTechnologyAccess(
+        Run $run,
+        Character $runner,
+        TechnologyAccessAction $action,
+        TechnologyHolding $holding,
+        int $successes,
+    ): array {
+        $name = $holding->technologyType->name;
+
+        return match ($action) {
+            TechnologyAccessAction::Copy => $this->resolveCopy($runner, $name, $successes),
+            TechnologyAccessAction::Steal => $this->resolveSteal($runner, $holding, $name, $successes),
+            TechnologyAccessAction::Destroy => $this->resolveDestroy($runner, $holding, $name, $successes),
+        };
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: int|null}
+     */
+    protected function resolveCopy(Character $runner, string $name, int $successes): array
+    {
+        $discount = AccessCheck::copyDiscount($successes);
+
+        if ($discount === null) {
+            return ['failed', sprintf(
+                '%s failed to copy %s. The card is untouched.',
+                $runner->name,
+                $name,
+            ), null];
+        }
+
+        // The card itself never moves for a copy, so there is nothing to write
+        // on the holding: what the Runner is carrying out is a copy to sell,
+        // and it becomes somebody's technology_holdings row when they sell it.
+        return [
+            $discount === 50 ? 'good_copy' : 'weak_copy',
+            sprintf(
+                '%s made a %s copy of %s on %d success%s: %d%% off for whoever buys it.',
+                $runner->name,
+                $discount === 50 ? 'good' : 'weak',
+                $name,
+                $successes,
+                $successes === 1 ? '' : 'es',
+                $discount,
+            ),
+            $discount,
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: int|null}
+     */
+    protected function resolveSteal(
+        Character $runner,
+        TechnologyHolding $holding,
+        string $name,
+        int $successes,
+    ): array {
+        if (! AccessCheck::stealSucceeds($successes)) {
+            return ['failed', sprintf(
+                '%s tried to steal %s and missed: %d success%s against %d.',
+                $runner->name,
+                $name,
+                $successes,
+                $successes === 1 ? '' : 'es',
+                AccessCheck::STEAL_STRENGTH,
+            ), null];
+        }
+
+        $holding->forceFill([
+            'status' => TechnologyHoldingStatus::Stolen,
+            'facility_id' => null,
+        ])->save();
+
+        return ['stolen', sprintf(
+            '%s stole %s on %d successes. The card is out of the building.',
+            $runner->name,
+            $name,
+            $successes,
+        ), TechnologyOrigin::Stolen->defaultDiscountPercent()];
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: int|null}
+     */
+    protected function resolveDestroy(
+        Character $runner,
+        TechnologyHolding $holding,
+        string $name,
+        int $successes,
+    ): array {
+        $band = AccessCheck::destroyBand($successes);
+
+        if ($band === null) {
+            return ['failed', sprintf(
+                '%s failed to destroy %s. The card is untouched.',
+                $runner->name,
+                $name,
+            ), null];
+        }
+
+        if (AccessCheck::destroyIsTotal($band)) {
+            $holding->forceFill([
+                'status' => TechnologyHoldingStatus::Destroyed,
+                'facility_id' => null,
+                'destroyed_at' => now(),
+            ])->save();
+
+            return ['destroyed', sprintf(
+                '%s destroyed %s outright on %d successes: no useful traces left.',
+                $runner->name,
+                $name,
+                $successes,
+            ), null];
+        }
+
+        // Every band short of the last leaves the card standing and leaves the
+        // Corporation able to research it again at a discount. The rulebook
+        // prints no percentage for that, so nothing is written on the holding
+        // and the band is what Control reads.
+        return ['damaged_'.$band, sprintf(
+            '%s damaged %s on %d successes, reaching the %d-success band. It can be researched again at a discount Control names.',
+            $runner->name,
+            $name,
+            $successes,
+            $band,
+        ), null];
+    }
+
+    /**
+     * Whether this Runner may spend an access, and whether the kind is left.
+     */
+    protected function requireAccess(Run $run, Character $runner, RunAccessKind $kind): void
+    {
+        if ($run->status !== RunStatus::Succeeded) {
+            throw ValidationException::withMessages([
+                'access' => 'Only a successful run gets inside to take anything.',
+            ]);
+        }
+
+        if ($this->accessesLeft($run, $runner) < 1) {
+            throw ValidationException::withMessages([
+                'access' => sprintf('%s has no access left on this run.', $runner->name),
+            ]);
+        }
+
+        if ($kind->onlyOncePerRun() && $run->accesses()->where('kind', $kind)->exists()) {
+            throw ValidationException::withMessages([
+                'access' => sprintf(
+                    'The %s has already been taken out of this Facility.',
+                    strtolower($kind->label()),
+                ),
+            ]);
+        }
+    }
+
+    /**
+     * The technologies actually sitting in the Facility.
+     *
+     * Only the ones that occupy storage, which is what keeps a card an earlier
+     * run destroyed or stole out of both the Credits sum and the draw.
+     *
+     * @return Collection<int, TechnologyHolding>
+     */
+    protected function storedTechnologies(Run $run): Collection
+    {
+        return $run->facility->technologyHoldings()
+            ->with('technologyType')
+            ->get()
+            ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage())
+            ->values();
+    }
+
+    /**
+     * The dice a group throws at a technology (rulebook 3.4.3).
+     *
+     * "The dice pool is equal to your full skill level (the combination of your
+     * Brawn and Hack)" - both, added, rather than one of them, which is the
+     * whole difference from a Protection Card. Everybody else adds their share
+     * of the same combined score, and the die size comes from the Runner
+     * spending the access rather than from the Run Leader: they are the one
+     * with their hands on the card.
+     */
+    protected function accessPool(Run $run, Character $runner): DicePool
+    {
+        $others = $run->activeParticipants()
+            ->reject(fn (RunParticipant $p): bool => $p->character_id === $runner->id)
+            ->mapWithKeys(fn (RunParticipant $p): array => [$p->character_id => [
+                'skill' => $p->character->brawn + $p->character->hack,
+                'wounded' => $p->character->wounds > 0,
+            ]])
+            ->all();
+
+        return DicePool::for(
+            leaderSkill: $runner->brawn + $runner->hack,
+            leaderWounded: $runner->wounds > 0,
+            others: $others,
+        );
+    }
+
+    /**
+     * Write the access down, on the run and in the log.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    protected function recordAccess(
+        Run $run,
+        Character $runner,
+        RunAccessKind $kind,
+        string $description,
+        array $attributes = [],
+        ?User $actor = null,
+        ?RunEvent &$event = null,
+    ): RunAccess {
+        $event = $this->record(
+            $run,
+            RunEvent::TYPE_ACCESS,
+            $description,
+            actor: $actor,
+            character: $runner,
+            step: RunStep::Breather,
+            payload: ['kind' => $kind->value] + array_map(
+                fn (mixed $value): mixed => $value instanceof TechnologyAccessAction ? $value->value : $value,
+                $attributes,
+            ),
+        );
+
+        return RunAccess::create([
+            'run_id' => $run->id,
+            'character_id' => $runner->id,
+            'kind' => $kind,
+            ...$attributes,
+        ]);
+    }
+
     protected function succeed(Run $run, ?User $actor = null): Run
     {
         $run->forceFill([
@@ -1165,10 +1662,12 @@ class RunEngine
             $run,
             RunEvent::TYPE_SUCCEEDED,
             sprintf(
-                'The run on %s succeeded: %d Protection Card%s broken. The accesses are Control\'s to hand out (3.4.3).',
+                'The run on %s succeeded: %d Protection Card%s broken. %d Runner%s inside, one access each (3.4.3).',
                 $run->facility->name,
                 $run->cards_passed,
                 $run->cards_passed === 1 ? '' : 's',
+                $run->activeParticipants()->count(),
+                $run->activeParticipants()->count() === 1 ? '' : 's',
             ),
             actor: $actor,
             step: RunStep::Breather,

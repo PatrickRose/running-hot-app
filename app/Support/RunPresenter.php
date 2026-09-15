@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
+use App\Enums\RunAccessKind;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Models\Character;
@@ -13,9 +14,11 @@ use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\Game;
 use App\Models\Run;
+use App\Models\RunAccess;
 use App\Models\RunDiceRoll;
 use App\Models\RunEvent;
 use App\Models\RunParticipant;
+use App\Models\TechnologyHolding;
 use App\Models\Turn;
 use App\Models\User;
 use App\Services\RunEngine;
@@ -75,6 +78,72 @@ class RunPresenter
         }
 
         return $alerts;
+    }
+
+    /**
+     * Every access spent on this run, and who has one left.
+     *
+     * @return array<string, mixed>
+     */
+    private function accesses(Run $run): array
+    {
+        $spent = $run->accesses()->with('character', 'technologyHolding.technologyType')->get();
+
+        return [
+            'taken' => $spent
+                ->map(fn (RunAccess $access): array => [
+                    'id' => $access->id,
+                    'character_id' => $access->character_id,
+                    'character' => $access->character->name,
+                    'kind' => $access->kind->value,
+                    'kind_label' => $access->kind->label(),
+                    'action' => $access->action?->value,
+                    'action_label' => $access->action?->label(),
+                    'technology' => $access->technologyHolding?->technologyType->name,
+                    'successes' => $access->successes,
+                    'outcome' => $access->outcome,
+                    'discount_percent' => $access->discount_percent,
+                    'credits' => $access->credits,
+                ])
+                ->all(),
+
+            // Who still has one, so the page can offer it to them rather than
+            // offering it to everybody and refusing most of them.
+            'left' => $run->activeParticipants()
+                ->mapWithKeys(fn (RunParticipant $participant): array => [
+                    $participant->character_id => $this->engine->accessesLeft(
+                        $run,
+                        $participant->character,
+                    ),
+                ])
+                ->all(),
+
+            // The two a Facility only has one of.
+            'credits_taken' => $spent->contains('kind', RunAccessKind::Credits),
+            'facility_effect_taken' => $spent->contains('kind', RunAccessKind::FacilityEffect),
+        ];
+    }
+
+    /**
+     * How many technologies are still there to be drawn from.
+     *
+     * A count and not a list, because the card a Runner gets is drawn rather
+     * than chosen - naming them would be handing over the choice the draw is
+     * there to take away, and it would tell the Runners what the Facility is
+     * holding without their having spent anything on finding out.
+     */
+    private function accessibleTechnologies(Run $run): int
+    {
+        $accessed = $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->pluck('technology_holding_id')
+            ->all();
+
+        return $run->facility->technologyHoldings()
+            ->get()
+            ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage()
+                && ! in_array($holding->id, $accessed, true))
+            ->count();
     }
 
     /**
@@ -371,6 +440,15 @@ class RunPresenter
             'can_lead' => $gate->allows('lead', $run),
             'can_act' => $gate->allows('act', $run),
             'can_defend' => $gate->allows('defend', $run),
+
+            // What the Runners took, and what each of them has left to spend.
+            // Both sides see it: 3.4.3 keeps the *choices* Secret from Security
+            // "unless they are Directing Security from this Facility", and by
+            // the time an access has happened it is a thing that was done to
+            // the Corporation rather than a plan.
+            'accesses' => $this->accesses($run),
+            'access_effect' => $run->facility->facilityType->access_effect,
+            'technologies_left' => $this->accessibleTechnologies($run),
 
             'log' => $this->log($run, $privileged),
         ];

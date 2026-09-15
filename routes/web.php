@@ -116,6 +116,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
     Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 
+    // What the Runners take out of a Facility they got into (3.4.3). One route
+    // for all four kinds of access, because it is one act with one choice.
+    Route::post('runs/{run}/accesses', [RunController::class, 'access'])->name('runs.accesses.store');
+
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,
     // and who may chair, is the CouncilSessionPolicy's answer rather than a
