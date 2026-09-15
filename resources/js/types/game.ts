@@ -993,6 +993,35 @@ export type RunBudget = {
 };
 
 /**
+ * One access a Runner spent inside a Facility they broke into (rulebook 3.4.3).
+ */
+export type RunAccessTaken = {
+    id: number;
+    character_id: number;
+    character: string;
+    kind: string;
+    kind_label: string;
+    action: string | null;
+    action_label: string | null;
+    technology: string | null;
+    successes: number | null;
+    outcome: string | null;
+    discount_percent: number | null;
+    credits: number | null;
+};
+
+/**
+ * What has been taken out of the Facility, and who still has an access left.
+ */
+export type RunAccesses = {
+    taken: RunAccessTaken[];
+    /** Accesses remaining, keyed by character id. */
+    left: Record<string, number | undefined>;
+    credits_taken: boolean;
+    facility_effect_taken: boolean;
+};
+
+/**
  * The dice the Runners have in hand for one skill (rulebook 3.4.2).
  *
  * The Leader rolls their full skill and everyone else adds to the same pool,
@@ -1046,6 +1075,15 @@ export type RunView = {
      * the run, which is not the same as a pool of no dice.
      */
     dice_pool: Record<string, RunDicePool | undefined>;
+
+    accesses: RunAccesses;
+    /** The Facility type's own effect, as printed. Null where it has none. */
+    access_effect: string | null;
+    /**
+     * How many technologies are still there to be drawn from — a count and not
+     * a list, because the card is drawn rather than chosen.
+     */
+    technologies_left: number;
     leader_character_id: number | null;
     participants: RunParticipantView[];
     /** Null for the Runners: how much defence is left is the Corporation's. */

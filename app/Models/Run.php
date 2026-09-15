@@ -123,6 +123,16 @@ class Run extends Model
     }
 
     /**
+     * What the Runners took out of the Facility (rulebook 3.4.3).
+     *
+     * @return HasMany<RunAccess, $this>
+     */
+    public function accesses(): HasMany
+    {
+        return $this->hasMany(RunAccess::class)->orderBy('id');
+    }
+
+    /**
      * The Runners still in, in Breather order.
      *
      * The group shrinks as people walk away or are incapacitated, and almost

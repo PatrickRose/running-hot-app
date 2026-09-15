@@ -24,6 +24,7 @@ import {
     ignoreEnd,
     leave,
 } from '@/routes/runs';
+import { store as storeAccess } from '@/routes/runs/accesses';
 import { trigger as triggerAlerts } from '@/routes/runs/alerts';
 import { store as storeConsequence } from '@/routes/runs/consequences';
 import type {
@@ -182,10 +183,206 @@ export function RunPanel({ run }: { run: RunView }) {
                     </>
                 )}
 
+                {run.status === 'succeeded' && <AccessDesk run={run} />}
+
                 <Party run={run} active={active} />
                 <RunLog run={run} />
             </CardContent>
         </Card>
+    );
+}
+
+/**
+ * What the Runners take out of a Facility they got into (rulebook 3.4.3).
+ *
+ * One access each, and each Runner spends their own — so this draws a row per
+ * Runner still standing rather than handing the lot to the Run Leader. The
+ * rulebook has the Leader choosing the cards; at this table every Runner who
+ * walked in gets to decide what their own access was for, which is the whole
+ * reason a group of four is worth more than a group of one.
+ *
+ * Both sides read it. 3.4.3 keeps the *choices* Secret from Security "unless
+ * they are Directing Security from this Facility", but by the time an access
+ * has happened it is a thing that was done to the Corporation rather than a
+ * plan — and the Corporation is entitled to know what left the building.
+ */
+function AccessDesk({ run }: { run: RunView }) {
+    const [busy, setBusy] = useState(false);
+    const [note, setNote] = useState('');
+    const holders = run.participants.filter(
+        (runner) => (run.accesses.left[String(runner.character_id)] ?? 0) > 0,
+    );
+
+    const spend = (characterId: number, payload: RunPayload) => {
+        setBusy(true);
+        router.post(
+            storeAccess(run.id),
+            { character_id: characterId, ...payload },
+            { onFinish: () => setBusy(false), preserveScroll: true },
+        );
+    };
+
+    return (
+        <section className="flex flex-col gap-3 rounded-md border p-3">
+            <header className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="font-medium">Inside</h3>
+                <p className="text-sm text-muted-foreground">
+                    {run.technologies_left === 0
+                        ? 'Nothing left in the racks.'
+                        : `${run.technologies_left} technolog${run.technologies_left === 1 ? 'y' : 'ies'} still in the racks`}
+                </p>
+            </header>
+
+            {run.accesses.taken.length > 0 && (
+                <ul className="flex flex-col gap-1 text-sm">
+                    {run.accesses.taken.map((taken) => (
+                        <li key={taken.id} className="flex flex-wrap gap-x-2">
+                            <span className="font-medium">
+                                {taken.character}
+                            </span>
+                            <span className="text-muted-foreground">
+                                {taken.kind_label}
+                                {taken.action_label !== null
+                                    ? ` · ${taken.action_label}`
+                                    : ''}
+                                {taken.technology !== null
+                                    ? ` · ${taken.technology}`
+                                    : ''}
+                                {taken.credits !== null
+                                    ? ` · ${taken.credits} Credits`
+                                    : ''}
+                                {taken.outcome !== null
+                                    ? ` · ${taken.outcome.replace(/_/g, ' ')}`
+                                    : ''}
+                                {taken.discount_percent !== null
+                                    ? ` (${taken.discount_percent}% off)`
+                                    : ''}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            {holders.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                    Every access has been spent.
+                </p>
+            ) : (
+                holders.map((runner) => (
+                    <div
+                        key={runner.character_id}
+                        className="flex flex-col gap-2 rounded-md bg-muted/40 p-2"
+                    >
+                        <p className="text-sm font-medium">
+                            {runner.name}
+                            <span className="font-normal text-muted-foreground">
+                                {' '}
+                                — one access
+                            </span>
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy || run.accesses.credits_taken}
+                                onClick={() =>
+                                    spend(runner.character_id, {
+                                        kind: 'credits',
+                                    })
+                                }
+                            >
+                                {run.accesses.credits_taken
+                                    ? 'Credits card gone'
+                                    : 'Take the Credits card'}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                    busy ||
+                                    run.accesses.facility_effect_taken ||
+                                    run.access_effect === null
+                                }
+                                onClick={() =>
+                                    spend(runner.character_id, {
+                                        kind: 'facility_effect',
+                                    })
+                                }
+                                title={run.access_effect ?? undefined}
+                            >
+                                {run.accesses.facility_effect_taken
+                                    ? 'Facility effect gone'
+                                    : 'Use the Facility effect'}
+                            </Button>
+                            {(['copy', 'steal', 'destroy'] as const).map(
+                                (action) => (
+                                    <Button
+                                        key={action}
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={
+                                            busy || run.technologies_left === 0
+                                        }
+                                        onClick={() =>
+                                            spend(runner.character_id, {
+                                                kind: 'technology',
+                                                action,
+                                            })
+                                        }
+                                    >
+                                        {action === 'copy'
+                                            ? 'Copy a card'
+                                            : action === 'steal'
+                                              ? 'Steal a card (8+)'
+                                              : 'Destroy a card'}
+                                    </Button>
+                                ),
+                            )}
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() =>
+                                    spend(runner.character_id, {
+                                        kind: 'plot',
+                                        notes: note === '' ? null : note,
+                                    })
+                                }
+                            >
+                                Plot access
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            The card you get is drawn, not chosen — one nobody
+                            has been at yet. Copy leaves it where it is, Steal
+                            takes it, Destroy only removes it outright at twelve
+                            successes.
+                            {run.access_effect !== null && (
+                                <>
+                                    {' '}
+                                    This Facility&rsquo;s effect:{' '}
+                                    {run.access_effect}
+                                </>
+                            )}
+                        </p>
+                    </div>
+                ))
+            )}
+
+            {holders.length > 0 && (
+                <div className="flex flex-col gap-1">
+                    <Label htmlFor={`plot-${run.id}`}>
+                        What you are chasing (for a plot access)
+                    </Label>
+                    <Input
+                        id={`plot-${run.id}`}
+                        value={note}
+                        onChange={(event) => setNote(event.target.value)}
+                        placeholder="Control will read this"
+                    />
+                </div>
+            )}
+        </section>
     );
 }
 
