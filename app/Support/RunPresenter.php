@@ -20,6 +20,7 @@ use App\Models\Turn;
 use App\Models\User;
 use App\Services\RunEngine;
 use App\Support\Runs\AlertSchedule;
+use App\Support\Runs\ChallengeStrength;
 use App\Support\Runs\DicePool;
 use App\Support\Runs\RunCursor;
 use Illuminate\Support\Facades\Gate;
@@ -55,11 +56,8 @@ class RunPresenter
      *
      * Every size a group could actually be in this game, so the form can say
      * the number for whatever is ticked rather than keeping a table of its own.
-     * Each entry says whether it is the rulebook's own figure or the
-     * application carrying the curve on past where the book stops, because the
-     * second is Control's to overrule and the form should say so.
      *
-     * @return array<int, array{alerts: int, extrapolated: bool}>
+     * @return array<int, int>
      */
     private function groupAlerts(Game $game): array
     {
@@ -73,10 +71,7 @@ class RunPresenter
         $alerts = [];
 
         for ($size = 1; $size <= $most; $size++) {
-            $alerts[$size] = [
-                'alerts' => AlertSchedule::forGroupSize($size),
-                'extrapolated' => AlertSchedule::groupBonusIsExtrapolated($size),
-            ];
+            $alerts[$size] = AlertSchedule::forGroupSize($size);
         }
 
         return $alerts;
@@ -149,11 +144,9 @@ class RunPresenter
             'targets' => $this->targets($game, $turn),
             'party' => $user === null ? [] : $this->party($game, $user),
             // What a group of each size raises just for being that size,
-            // quoted rather than tabulated in the browser: the rulebook prints
-            // the run to six and the application carries it on from there, and
-            // a copy of that in TypeScript is a rule written twice. It read
-            // "Control decides" for any group of seven or more, which stopped
-            // being true the moment the curve was extended.
+            // quoted rather than tabulated in the browser: the printed list and
+            // then the triangular numbers, and a copy of that in TypeScript is
+            // a rule written twice.
             'group_alerts' => $this->groupAlerts($game),
             // The runs this player is on, seen from inside the Facility.
             'yours' => $this->runsFor($game, $turn, $user, defending: false),
@@ -332,7 +325,7 @@ class RunPresenter
             // shown in less detail.
             'cards_remaining' => $privileged ? $cursor->cardsRemaining : null,
 
-            'card' => $this->card($cursor, $privileged),
+            'card' => $this->card($run, $cursor, $privileged),
 
             // What the Runners would throw at this card, both ways round.
             // Quoted by the server for the reason a reorder cost is: the
@@ -395,7 +388,7 @@ class RunPresenter
      *
      * @return array<string, mixed>|null
      */
-    private function card(RunCursor $cursor, bool $privileged): ?array
+    private function card(Run $run, RunCursor $cursor, bool $privileged): ?array
     {
         if (! $cursor->hasCard()) {
             return null;
@@ -416,6 +409,17 @@ class RunPresenter
             'boosts' => $activation === null ? 0 : $activation->boosts,
             'next_boost_cost' => $activation === null ? 1 : $activation->nextBoostCost(),
             'activation_cost' => $activation?->activation_cost,
+
+            // What the card gains before its printed strength is even named,
+            // so Security can see the bonuses while typing the number off the
+            // card rather than after rolling. Quoted by the server: this is the
+            // same sum ChallengeStrength does at the roll, and a second copy of
+            // it in the browser would disagree the moment an Alert moved.
+            'strength_bonuses' => [
+                'cards_passed' => ChallengeStrength::fromCardsPassed($run->active_cards_passed),
+                'alerts' => AlertSchedule::strengthBonus($run->alertsAvailable()),
+                'boosts' => $activation === null ? 0 : $activation->boosts,
+            ],
         ];
 
         if (! $active && ! $privileged) {
@@ -598,7 +602,7 @@ class RunPresenter
             'step_label' => $cursor->step->label(),
             'retry_pending' => $run->retry_pending,
             'ignored_end_the_run' => $run->ignored_end_the_run,
-            'card' => $this->card($cursor, privileged: true),
+            'card' => $this->card($run, $cursor, privileged: true),
             'leader' => $run->leader?->name,
             'leader_character_id' => $run->run_leader_character_id,
             'participants' => $run->participants

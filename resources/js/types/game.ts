@@ -919,6 +919,17 @@ export type RunCard = {
     boosts: number;
     next_boost_cost: number;
     activation_cost: number | null;
+
+    /**
+     * What the card gains before its printed strength is even named — quoted by
+     * the server so the sum shown while Security types the number is the same
+     * one that gets rolled.
+     */
+    strength_bonuses: {
+        cards_passed: number;
+        alerts: number;
+        boosts: number;
+    };
     name?: string;
     code?: string | null;
     /** The sentence the card prints, e.g. `Brute (6)`. Never parsed. */
@@ -979,19 +990,6 @@ export type RunBudget = {
     placed: number;
     spent: number;
     left: number;
-};
-
-/**
- * What a group of a given size raises on the way in, just for being that size
- * (rulebook 3.4.1).
- *
- * `extrapolated` marks the sizes past where the rulebook stops printing
- * numbers: the application carries the curve on, and that is Control's to
- * overrule, so the screen says which it is looking at.
- */
-export type RunGroupAlerts = {
-    alerts: number;
-    extrapolated: boolean;
 };
 
 /**
@@ -1085,8 +1083,8 @@ export type RunBoard = {
     can_submit: boolean;
     targets: RunTarget[];
     party: RunPartyMember[];
-    /** Keyed by group size. Quoted by the server, never tabulated here. */
-    group_alerts: Record<number, RunGroupAlerts | undefined>;
+    /** Alerts raised on the way in, keyed by group size. Quoted by the server. */
+    group_alerts: Record<number, number | undefined>;
     /** Runs this player is on, seen from inside the Facility. */
     yours: RunView[];
     /** Runs coming at this player's Facilities, seen from the Security desk. */

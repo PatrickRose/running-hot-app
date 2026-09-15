@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { store } from '@/routes/runs';
-import type { RunGroupAlerts, RunPartyMember, RunTarget } from '@/types/game';
+import type { RunPartyMember, RunTarget } from '@/types/game';
 
 /**
  * Putting in for a run (rulebook 3.4.1).
@@ -30,7 +30,7 @@ export function RunSubmitForm({
 }: {
     targets: RunTarget[];
     party: RunPartyMember[];
-    groupAlerts: Record<number, RunGroupAlerts | undefined>;
+    groupAlerts: Record<number, number | undefined>;
     isControl: boolean;
 }) {
     const yours = party.filter((runner) => runner.is_yours);
@@ -97,11 +97,8 @@ export function RunSubmitForm({
     // quoted by the server. Shown while the group is assembled because it is
     // the whole trade: more Runners break the defences more easily, and every
     // one past the first makes the Facility harder before you have set foot in
-    // it. Past six the rulebook stops printing numbers and the application
-    // carries the curve on, which is Control's to overrule - so the number is
-    // still given and it is marked as a proposal rather than withheld.
-    const sizeAlerts = groupAlerts[group.length]?.alerts ?? null;
-    const extrapolated = groupAlerts[group.length]?.extrapolated ?? false;
+    // it.
+    const sizeAlerts = groupAlerts[group.length] ?? null;
 
     if (targets.length === 0) {
         return (
@@ -327,14 +324,6 @@ export function RunSubmitForm({
                                     {' '}
                                     ({tags} of them for Tags you are already
                                     carrying)
-                                </>
-                            )}
-                            {extrapolated && (
-                                <>
-                                    {' '}
-                                    — past six the rulebook stops printing
-                                    numbers, so {sizeAlerts} for the group is
-                                    ours and Control may say otherwise.
                                 </>
                             )}
                         </p>

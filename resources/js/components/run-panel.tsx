@@ -20,6 +20,7 @@ import {
     boost,
     challenge,
     charge,
+    defend,
     ignoreEnd,
     leave,
 } from '@/routes/runs';
@@ -466,6 +467,7 @@ function SecurityDesk({ run }: { run: RunView }) {
     const budget = run.budget;
     const [alerts, setAlerts] = useState('');
     const [boosts, setBoosts] = useState('1');
+    const [printed, setPrinted] = useState('');
     const [busy, setBusy] = useState(false);
 
     if (card === null) {
@@ -539,6 +541,14 @@ function SecurityDesk({ run }: { run: RunView }) {
                 </div>
             )}
 
+            {card.active && !budget?.directed && (
+                <p className="text-xs text-muted-foreground">
+                    Boosting and paying a Charge both need a Security player
+                    Directing Security from this Facility. Control marks that on
+                    the Facility board.
+                </p>
+            )}
+
             {card.active && budget?.directed && (
                 <div className="flex flex-wrap items-end gap-2">
                     <div className="flex flex-col gap-1">
@@ -580,6 +590,44 @@ function SecurityDesk({ run }: { run: RunView }) {
                 </div>
             )}
 
+            {run.step === 'activate' && card.active && (
+                <form
+                    className="flex flex-wrap items-end gap-2 border-t pt-3"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        post(defend(run.id), {
+                            printed_strength: Number(printed) || 0,
+                        });
+                        setPrinted('');
+                    }}
+                >
+                    <div className="flex flex-col gap-1">
+                        <Label htmlFor={`printed-${run.id}`}>
+                            Printed strength
+                        </Label>
+                        <Input
+                            id={`printed-${run.id}`}
+                            type="number"
+                            min={0}
+                            required
+                            className="w-24"
+                            value={printed}
+                            onChange={(event) => setPrinted(event.target.value)}
+                        />
+                    </div>
+                    <Button type="submit" size="sm" disabled={busy}>
+                        Roll the defence
+                    </Button>
+                    <StrengthReadout run={run} printed={printed} />
+                </form>
+            )}
+
+            {run.step === 'challenge' && (
+                <p className="border-t pt-3 text-sm text-muted-foreground">
+                    Rolled. Waiting on the Runners to throw theirs.
+                </p>
+            )}
+
             <div className="flex flex-col gap-2 border-t pt-3">
                 <div className="flex flex-col gap-1">
                     <Label htmlFor={`alerts-${run.id}`}>
@@ -602,9 +650,16 @@ function SecurityDesk({ run }: { run: RunView }) {
                     </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                    {(['tag', 'wound', 'retry', 'end_the_run'] as const).map(
-                        (effect) => (
+                {run.step !== 'consequence' ? (
+                    <p className="text-xs text-muted-foreground">
+                        A consequence bought with Alerts is added to the one the
+                        card prints, so it waits for the Consequence step.
+                    </p>
+                ) : (
+                    <div className="flex flex-wrap gap-2">
+                        {(
+                            ['tag', 'wound', 'retry', 'end_the_run'] as const
+                        ).map((effect) => (
                             <Button
                                 key={effect}
                                 size="sm"
@@ -621,11 +676,55 @@ function SecurityDesk({ run }: { run: RunView }) {
                                 {EFFECT_LABELS[effect]} · {ALERT_PRICES[effect]}{' '}
                                 Alerts
                             </Button>
-                        ),
-                    )}
-                </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </section>
+    );
+}
+
+/**
+ * What the card is actually worth, as Security types the number off it.
+ *
+ * Rulebook 3.4.2 escalates a card from three directions at once and they stack:
+ * how far in the Runners have got, how many Alerts are standing, and whatever
+ * has been spent Boosting this one. The printed strength is only the floor, and
+ * the point of showing the sum before the roll is that a Runner asking where
+ * "strength 6" came from gets an answer rather than a number.
+ *
+ * Every bonus here is the server's own, so what is shown and what is rolled
+ * cannot drift; only the printed number is the browser's, and that is because
+ * it is still being typed.
+ */
+function StrengthReadout({ run, printed }: { run: RunView; printed: string }) {
+    const bonuses = run.card?.strength_bonuses;
+
+    if (bonuses === undefined) {
+        return null;
+    }
+
+    const base = Number(printed) || 0;
+    const total = base + bonuses.cards_passed + bonuses.alerts + bonuses.boosts;
+    const parts = [
+        `${base} printed`,
+        ...(bonuses.cards_passed > 0
+            ? [`+${bonuses.cards_passed} for cards passed`]
+            : []),
+        ...(bonuses.alerts > 0 ? [`+${bonuses.alerts} from Alerts`] : []),
+        ...(bonuses.boosts > 0 ? [`+${bonuses.boosts} Boosted`] : []),
+    ];
+
+    return (
+        <div className="w-full rounded-md bg-muted/50 px-3 py-2 text-sm">
+            <p>
+                <span className="font-medium tabular-nums">{total}d8</span>{' '}
+                <span className="text-muted-foreground">
+                    against the Runners, 5+ to succeed. A tie goes to you.
+                </span>
+            </p>
+            <p className="text-xs text-muted-foreground">{parts.join(', ')}</p>
+        </div>
     );
 }
 
@@ -701,7 +800,6 @@ function DicePoolReadout({
  */
 function LeaderDesk({ run }: { run: RunView }) {
     const [skill, setSkill] = useState<'brawn' | 'hack'>('brawn');
-    const [strength, setStrength] = useState('');
     const [taker, setTaker] = useState('');
     const [counts, setCounts] = useState(NO_CONSEQUENCES);
     const [retrying, setRetrying] = useState(false);
@@ -744,14 +842,18 @@ function LeaderDesk({ run }: { run: RunView }) {
             )}
 
             {run.step === 'activate' && run.card?.active && (
+                <p className="text-sm text-muted-foreground">
+                    The card is on. Waiting on Security to read its strength off
+                    it and roll — you throw yours against what they got.
+                </p>
+            )}
+
+            {run.step === 'challenge' && (
                 <form
                     className="flex flex-wrap items-end gap-2"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        post(challenge(run.id), {
-                            skill,
-                            printed_strength: Number(strength) || 0,
-                        });
+                        post(challenge(run.id), { skill });
                     }}
                 >
                     <div className="flex flex-col gap-1">
@@ -768,29 +870,13 @@ function LeaderDesk({ run }: { run: RunView }) {
                             <option value="hack">Hack</option>
                         </select>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <Label htmlFor={`strength-${run.id}`}>
-                            Printed strength
-                        </Label>
-                        <Input
-                            id={`strength-${run.id}`}
-                            type="number"
-                            min={0}
-                            required
-                            className="w-24"
-                            value={strength}
-                            onChange={(event) =>
-                                setStrength(event.target.value)
-                            }
-                        />
-                    </div>
                     <Button type="submit" size="sm" disabled={busy}>
                         Roll
                     </Button>
                     <DicePoolReadout run={run} skill={skill} />
                     <p className="w-full text-xs text-muted-foreground">
-                        Read the number off the card. The dice are thrown on the
-                        server and every face is kept.
+                        Security has already thrown theirs. The dice are rolled
+                        on the server and every face is kept.
                     </p>
                 </form>
             )}

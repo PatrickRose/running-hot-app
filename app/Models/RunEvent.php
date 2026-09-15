@@ -79,6 +79,15 @@ class RunEvent extends Model
 
     public const TYPE_CHARGED = 'charged';
 
+    /**
+     * Security named the card's printed strength and rolled its defence.
+     *
+     * Its own act rather than half of the challenge, because Security is a
+     * player at the table reading a card and throwing dice - and because the
+     * printed strength is theirs to name: they are the ones holding the card.
+     */
+    public const TYPE_DEFENDED = 'defended';
+
     public const TYPE_CHALLENGE = 'challenge';
 
     public const TYPE_CONSEQUENCE = 'consequence';

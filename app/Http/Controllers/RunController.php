@@ -192,14 +192,40 @@ class RunController extends Controller
     }
 
     /**
-     * Throw the dice (rulebook 3.4.2).
+     * Security names the strength and rolls the card's defence (rulebook 3.4.2).
      *
-     * The skill and the printed strength both come from whoever is running the
-     * card, because a challenge is the sentence the card prints rather than a
-     * parsed skill and number - "Brute/Hack (2)" lets the Runners choose, and
-     * "Hack (4+N) - where N is the number of cards underneath this" is not
-     * known until the card is met. The sentence is on screen; the table
-     * converts it.
+     * The printed strength comes from Security because Security is holding the
+     * card: a challenge is the sentence it prints rather than a parsed skill
+     * and number, and "Hack (4+N) - where N is the number of cards underneath
+     * this" is not known until the card is met. The sentence is on screen
+     * beside the box; the table converts it.
+     */
+    public function defend(Run $run, Request $request): RedirectResponse
+    {
+        Gate::authorize('defend', $run);
+
+        $validated = $request->validate([
+            'printed_strength' => ['required', 'integer', 'min:0', 'max:99'],
+            // Control's override on the Alert curve.
+            'alert_strength_override' => ['nullable', 'integer', 'min:0', 'max:99'],
+        ]);
+
+        $event = $this->runs->defend(
+            $run,
+            (int) $validated['printed_strength'],
+            $request->user(),
+            $validated['alert_strength_override'] ?? null,
+        );
+
+        return back()->with('status', $event->description);
+    }
+
+    /**
+     * The Runners throw their dice (rulebook 3.4.2).
+     *
+     * Only the skill, because Security has already named the strength and
+     * rolled against it. "Brute/Hack (2)" is the one thing here that is the
+     * Runners' choice, which is why it is the one thing they are asked for.
      */
     public function challenge(Run $run, Request $request): RedirectResponse
     {
@@ -207,18 +233,12 @@ class RunController extends Controller
 
         $validated = $request->validate([
             'skill' => ['required', Rule::enum(RunnerSkill::class)],
-            'printed_strength' => ['required', 'integer', 'min:0', 'max:99'],
-            // Control's override on the Alert curve, which runs past where the
-            // rulebook prints numbers.
-            'alert_strength_override' => ['nullable', 'integer', 'min:0', 'max:99'],
         ]);
 
         $outcome = $this->runs->challenge(
             $run,
             RunnerSkill::from($validated['skill']),
-            (int) $validated['printed_strength'],
             $request->user(),
-            $validated['alert_strength_override'] ?? null,
         );
 
         return back()->with('status', $outcome->explain());

@@ -8,6 +8,7 @@ use App\Enums\ProtectionKind;
 use App\Enums\RunConsequence;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
+use App\Enums\RunStep;
 use App\Models\Character;
 use App\Models\ControlMember;
 use App\Models\Corporation;
@@ -153,25 +154,114 @@ class PlayersDriveRunsTest extends TestCase
         $run = $this->begun($leader, [$mate->id]);
         $this->activate($run);
 
+        // The card's printed 2 plus the 1 Alert a pair raises going in.
+        $this->dice->will([1, 1, 1]);
+        app(RunEngine::class)->defend($run->refresh(), 2);
+
         $this->actingAs($mateUser)
             ->post(route('runs.challenge', $run), [
                 'skill' => RunnerSkill::Brawn->value,
-                'printed_strength' => 2,
             ])
             ->assertForbidden();
 
-        // Three dice each: the Leader's Brawn of 2 plus half the mate's 2, and
-        // the card's printed 2 plus the 1 Alert a pair raises going in.
-        $this->dice->will([8, 8, 8])->will([1, 1, 1]);
+        // The Leader's Brawn of 2 plus half the mate's 2.
+        $this->dice->will([8, 8, 8]);
 
         $this->actingAs($leaderUser)
             ->post(route('runs.challenge', $run), [
                 'skill' => RunnerSkill::Brawn->value,
-                'printed_strength' => 2,
             ])
             ->assertRedirect();
 
         $this->assertSame(1, $run->refresh()->diceRolls->where('roller', 'runners')->count());
+    }
+
+    /**
+     * Security rolls the card's defence, and the Runners cannot do it for them.
+     *
+     * Two acts rather than one, because they are two people throwing dice:
+     * Security is holding the card and names the strength printed on it, and
+     * the Runners then throw theirs against what Security actually got.
+     */
+    public function test_security_rolls_the_defence_and_the_runners_roll_after_it(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $security = $this->seat(CharacterRole::Security);
+
+        $run = $this->begun($leader);
+        $this->activate($run);
+
+        // The Runners cannot roll until Security has.
+        $this->actingAs($leaderUser)
+            ->post(route('runs.challenge', $run), ['skill' => RunnerSkill::Brawn->value])
+            ->assertSessionHasErrors('challenge');
+
+        // Nor can they roll the defence themselves.
+        $this->actingAs($leaderUser)
+            ->post(route('runs.defend', $run), ['printed_strength' => 2])
+            ->assertForbidden();
+
+        $this->dice->will([8, 8]);
+        $this->actingAs($security)
+            ->post(route('runs.defend', $run), ['printed_strength' => 2])
+            ->assertRedirect();
+
+        // Security's two successes are on record before the Runners throw, and
+        // the run is waiting at the Challenge step for them.
+        $defence = $run->events()->where('type', RunEvent::TYPE_DEFENDED)->sole();
+        $this->assertSame(2, $defence->payload['security_successes']);
+        $this->assertSame(
+            RunStep::Challenge,
+            app(RunEngine::class)->cursor($run->refresh())->step,
+        );
+
+        // And Security cannot roll a second time for the same card.
+        $this->actingAs($security)
+            ->post(route('runs.defend', $run), ['printed_strength' => 2])
+            ->assertSessionHasErrors('defend');
+
+        $this->dice->will([8, 8]);
+        $this->actingAs($leaderUser)
+            ->post(route('runs.challenge', $run), ['skill' => RunnerSkill::Brawn->value])
+            ->assertRedirect();
+
+        // A tie goes to Security, and exactly one roll is kept for each side.
+        $this->assertSame(1, $run->refresh()->diceRolls->where('roller', 'security')->count());
+        $this->assertSame(1, $run->refresh()->diceRolls->where('roller', 'runners')->count());
+        $this->assertSame(
+            RunStep::Consequence,
+            app(RunEngine::class)->cursor($run->refresh())->step,
+        );
+    }
+
+    /**
+     * The challenge compares against the dice Security actually threw, not a
+     * strength worked out again afterwards.
+     *
+     * Which matters because the strength moves: Security spending Alerts
+     * between the two rolls lowers the Alert bonus, and re-deriving it at the
+     * Runners' roll would quietly change the number the defence was rolled on.
+     */
+    public function test_the_challenge_is_judged_on_the_roll_security_actually_made(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+
+        $run = $this->begun($leader);
+        $this->activate($run);
+
+        $this->dice->will([8, 8, 8]);
+        app(RunEngine::class)->defend($run->refresh(), 3);
+
+        // Two successes for the Runners against Security's three.
+        $this->dice->will([8, 8, 1]);
+        $this->actingAs($leaderUser)
+            ->post(route('runs.challenge', $run), ['skill' => RunnerSkill::Brawn->value])
+            ->assertRedirect();
+
+        $challenge = $run->events()->where('type', RunEvent::TYPE_CHALLENGE)->sole();
+        $this->assertSame(3, $challenge->payload['security_successes']);
+        $this->assertFalse($challenge->payload['runners_won']);
+        $this->assertSame(3, $challenge->payload['strength']['printed']);
     }
 
     /**
@@ -342,11 +432,17 @@ class PlayersDriveRunsTest extends TestCase
 
         $this->actingAs($control)->post(route('runs.activate', $run))->assertRedirect();
 
-        $this->dice->will([8, 8])->will([1, 1]);
+        // Control rolls both sides, because a run must not stall on either of
+        // them being away: Security's defence first, then the Runners'.
+        $this->dice->will([1, 1]);
+        $this->actingAs($control)
+            ->post(route('runs.defend', $run), ['printed_strength' => 2])
+            ->assertRedirect();
+
+        $this->dice->will([8, 8]);
         $this->actingAs($control)
             ->post(route('runs.challenge', $run), [
                 'skill' => RunnerSkill::Brawn->value,
-                'printed_strength' => 2,
             ])
             ->assertRedirect();
 
@@ -361,9 +457,8 @@ class PlayersDriveRunsTest extends TestCase
 
     /**
      * The Alerts a group raises for its size are quoted by the server, for the
-     * reason the dice pool is: the browser kept a copy of the printed table and
-     * said "Control decides" for anything past it, which stopped being true the
-     * moment the curve was carried on past six.
+     * reason the dice pool is: the browser kept a copy of the printed list and
+     * said nobody knew for anything past it.
      */
     public function test_the_group_size_alert_curve_is_quoted_by_the_server(): void
     {
@@ -377,15 +472,12 @@ class PlayersDriveRunsTest extends TestCase
 
         $alerts = app(RunPresenter::class)->forPlayer($this->game->refresh(), $user)['group_alerts'];
 
-        // The rulebook's own rows, marked as its own.
-        $this->assertSame(0, $alerts[1]['alerts']);
-        $this->assertSame(11, $alerts[6]['alerts']);
-        $this->assertFalse($alerts[6]['extrapolated']);
+        // The printed list...
+        $this->assertSame(0, $alerts[1]);
+        $this->assertSame(11, $alerts[6]);
 
-        // And the curve carried on past where it stops printing, marked as
-        // ours so the form can say Control may overrule it.
-        $this->assertSame(18, $alerts[7]['alerts']);
-        $this->assertTrue($alerts[7]['extrapolated']);
+        // ...and the triangular numbers after it.
+        $this->assertSame(18, $alerts[7]);
     }
 
     /**

@@ -106,6 +106,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('runs/{run}/activate', [RunController::class, 'activate'])->name('runs.activate');
     Route::post('runs/{run}/boost', [RunController::class, 'boost'])->name('runs.boost');
     Route::post('runs/{run}/charge', [RunController::class, 'charge'])->name('runs.charge');
+    Route::post('runs/{run}/defend', [RunController::class, 'defend'])->name('runs.defend');
     Route::post('runs/{run}/challenge', [RunController::class, 'challenge'])->name('runs.challenge');
     Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
         ->name('runs.consequences.store');
