@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePoll } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { RunPanel } from '@/components/run-panel';
 import { RunSubmitForm } from '@/components/run-submit-form';
@@ -26,6 +26,18 @@ type Props = {
  * those places.
  */
 export default function Runs({ game, board }: Props) {
+    // A run is the most alive page in the game: the two sides act in turn, so
+    // almost everything on screen is something the *other* side just did.
+    // Security switching a card on, the dice that came back, an Alert spent, a
+    // Runner walking away - a player who had to reload to see any of it would
+    // be reloading constantly for the whole fifteen minutes.
+    //
+    // Five seconds, which is what the dashboard, the Council and the research
+    // table poll at. Half-filled controls survive it: the panels are keyed by
+    // run id and every input is local state, so a partial reload re-renders
+    // around a strength that has been typed and not yet rolled.
+    usePoll(5000, { only: ['game', 'board'] });
+
     if (game === null || board === null) {
         return (
             <>
