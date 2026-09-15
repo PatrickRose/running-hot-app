@@ -54,7 +54,39 @@ export function RunSubmitForm({
     // RunPolicy::before() gives it over every other act of a run.
     const leaders = isControl ? party : yours;
 
+    // Two dozen Facilities in one flat list is a wall of names, and the thing
+    // the Runners actually decide first is which Corporation they are hitting.
+    // An optgroup per Corporation says that without costing a second control:
+    // the server already orders targets by Corporation and then by name, so
+    // walking the list in order is all the grouping it takes.
+    const byCorporation = targets.reduce<
+        { corporation: string; facilities: RunTarget[] }[]
+    >((groups, target) => {
+        const last = groups[groups.length - 1];
+
+        if (
+            last !== undefined &&
+            last.corporation === target.corporation.name
+        ) {
+            last.facilities.push(target);
+        } else {
+            groups.push({
+                corporation: target.corporation.name,
+                facilities: [target],
+            });
+        }
+
+        return groups;
+    }, []);
+
     const [facility, setFacility] = useState('');
+
+    // A closed select shows the option's own text and not its group's label, so
+    // the Corporation would vanish the moment one was picked. Naming it under
+    // the select says it once, with the badge the rest of the application uses.
+    const chosenTarget = targets.find(
+        (target) => String(target.id) === facility,
+    );
     const [leader, setLeader] = useState(String(leaders[0]?.id ?? ''));
     const [members, setMembers] = useState<number[]>([]);
     const [submitting, setSubmitting] = useState(false);
@@ -149,14 +181,34 @@ export function RunSubmitForm({
                                 }
                             >
                                 <option value="">Choose one</option>
-                                {targets.map((target) => (
-                                    <option key={target.id} value={target.id}>
-                                        {target.name} —{' '}
-                                        {target.corporation.name} (
-                                        {target.facility_type})
-                                    </option>
+                                {byCorporation.map((group) => (
+                                    <optgroup
+                                        key={group.corporation}
+                                        label={group.corporation}
+                                    >
+                                        {group.facilities.map((target) => (
+                                            <option
+                                                key={target.id}
+                                                value={target.id}
+                                            >
+                                                {target.name} —{' '}
+                                                {target.facility_type}
+                                            </option>
+                                        ))}
+                                    </optgroup>
                                 ))}
                             </select>
+                            {chosenTarget !== undefined && (
+                                <p className="flex items-center gap-1.5 text-xs">
+                                    <FactionBadge
+                                        faction={chosenTarget.corporation}
+                                        size="small"
+                                    />
+                                    <span className="text-muted-foreground">
+                                        {chosenTarget.corporation.name}
+                                    </span>
+                                </p>
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 How deep the stack is, and what is in it, is
                                 Secret. That is what a run is for.
