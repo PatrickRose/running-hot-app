@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
+use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Models\Character;
 use App\Models\Corporation;
@@ -19,6 +20,7 @@ use App\Models\Turn;
 use App\Models\User;
 use App\Services\RunEngine;
 use App\Support\Runs\AlertSchedule;
+use App\Support\Runs\DicePool;
 use App\Support\Runs\RunCursor;
 use Illuminate\Support\Facades\Gate;
 
@@ -47,6 +49,54 @@ use Illuminate\Support\Facades\Gate;
 class RunPresenter
 {
     public function __construct(private readonly RunEngine $engine) {}
+
+    /**
+     * The pool the Runners have in hand, for each skill a card might ask for.
+     *
+     * Both skills rather than the one the card names, because plenty of cards
+     * offer the choice ("Brute/Hack (2)") and the Leader is picking between
+     * them - and because the card's own sentence is not parsed into a column,
+     * so the application does not know which one will be asked for until the
+     * Leader says.
+     *
+     * Empty when there is no Leader on the run: there is nothing to roll and
+     * handing back a pool of zero would read as a group with no dice rather
+     * than a group with no Leader.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function dicePool(Run $run): array
+    {
+        $runners = $run->activeParticipants();
+        $leader = $run->leader;
+
+        if ($leader === null || ! $runners->contains('character_id', $leader->id)) {
+            return [];
+        }
+
+        $others = $runners->reject(
+            fn (RunParticipant $participant): bool => $participant->character_id === $leader->id,
+        );
+
+        $pools = [];
+
+        foreach (RunnerSkill::cases() as $skill) {
+            $pools[$skill->value] = DicePool::for(
+                leaderSkill: (int) $leader->getAttribute($skill->column()),
+                leaderWounded: $leader->wounds > 0,
+                others: $others
+                    ->mapWithKeys(fn (RunParticipant $participant): array => [
+                        $participant->character_id => [
+                            'skill' => (int) $participant->character->getAttribute($skill->column()),
+                            'wounded' => $participant->character->wounds > 0,
+                        ],
+                    ])
+                    ->all(),
+            )->toArray();
+        }
+
+        return $pools;
+    }
 
     /**
      * The Facility game as this player sees it.
@@ -244,6 +294,16 @@ class RunPresenter
             'cards_remaining' => $privileged ? $cursor->cardsRemaining : null,
 
             'card' => $this->card($cursor, $privileged),
+
+            // What the Runners would throw at this card, both ways round.
+            // Quoted by the server for the reason a reorder cost is: the
+            // contribution rule is half rounded *down* while healthy and a
+            // quarter rounded *up* while Wounded, and a second implementation
+            // of that in the browser is one rule written twice to disagree
+            // about a die. 3.4.5 asks players to work their contribution out in
+            // advance because the Action phase is fifteen minutes long; this is
+            // that, done for them and kept honest.
+            'dice_pool' => $this->dicePool($run),
 
             'leader_character_id' => $run->run_leader_character_id,
             'participants' => $run->participants

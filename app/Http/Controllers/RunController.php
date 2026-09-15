@@ -230,26 +230,57 @@ class RunController extends Controller
      * The Leader's call, because "the consequence must be taken by a single
      * player, decided by the Run Leader" - so the person taking it is an
      * argument rather than the person clicking.
+     *
+     * **Several at once, because a card prints several.** "1 alert, 1 wound" is
+     * one consequence with two parts, and applying them a request at a time did
+     * not work: the first consequence event moves the derived cursor to the
+     * Breather, so the Leader was offered exactly one part of the card and the
+     * rest of the sentence quietly went unpaid. They are applied in the order
+     * given, inside one transaction, and each lands in the log as its own line -
+     * the ledger should read like the card, not like a single lump.
+     *
+     * A part that ends the run stops the rest: there is nobody left to take a
+     * Wound, and {@see RunEngine::applyConsequence()} would refuse it anyway.
      */
     public function consequence(Run $run, Request $request): RedirectResponse
     {
         Gate::authorize('lead', $run);
 
         $validated = $request->validate([
-            'effect' => ['required', Rule::enum(RunConsequence::class)],
-            'character_id' => ['nullable', 'integer'],
+            // One effect, or a list of them. The single form is what a button
+            // that means one thing posts - End the Run has no count and no
+            // companion - and the list is what the card's own sentence needs.
+            'effect' => ['required_without:effects', Rule::enum(RunConsequence::class)],
             'times' => ['nullable', 'integer', 'min:1', 'max:9'],
+            'effects' => ['required_without:effect', 'array', 'min:1', 'max:5'],
+            'effects.*.effect' => ['required', Rule::enum(RunConsequence::class)],
+            'effects.*.times' => ['nullable', 'integer', 'min:1', 'max:9'],
+            'character_id' => ['nullable', 'integer'],
         ]);
 
-        $event = $this->runs->applyConsequence(
-            $run,
-            RunConsequence::from($validated['effect']),
-            $this->character($validated['character_id'] ?? null),
-            (int) ($validated['times'] ?? 1),
-            $request->user(),
-        );
+        $parts = $validated['effects'] ?? [[
+            'effect' => $validated['effect'],
+            'times' => $validated['times'] ?? 1,
+        ]];
 
-        return back()->with('status', $event->description);
+        $taker = $this->character($validated['character_id'] ?? null);
+        $descriptions = [];
+
+        foreach ($parts as $part) {
+            if ($run->refresh()->status->isFinished()) {
+                break;
+            }
+
+            $descriptions[] = $this->runs->applyConsequence(
+                $run,
+                RunConsequence::from($part['effect']),
+                $taker,
+                (int) ($part['times'] ?? 1),
+                $request->user(),
+            )->description;
+        }
+
+        return back()->with('status', implode(' ', $descriptions));
     }
 
     /**

@@ -57,7 +57,14 @@ const ALERT_PRICES: Partial<Record<RunConsequenceEffect, number>> = {
  * them needs. Named so the two little post() helpers below can share it rather
  * than each widening to `object` and losing the check.
  */
-type RunPayload = Record<string, string | number | boolean | null>;
+type RunPayload = Record<
+    string,
+    | string
+    | number
+    | boolean
+    | null
+    | { effect: RunConsequenceEffect; times: number }[]
+>;
 
 const EFFECT_LABELS: Record<RunConsequenceEffect, string> = {
     alert: 'Alert',
@@ -66,6 +73,36 @@ const EFFECT_LABELS: Record<RunConsequenceEffect, string> = {
     retry: 'Retry',
     end_the_run: 'End the Run',
 };
+
+/**
+ * The consequences a card prints a number of, as opposed to the ones it either
+ * does or does not do.
+ *
+ * A card says “2 alerts, 1 wound” but never “two Retries”, so these three get a
+ * counter each and Retry gets a checkbox.
+ */
+const COUNTED_EFFECTS = ['alert', 'tag', 'wound'] as const;
+
+const NO_CONSEQUENCES: Record<(typeof COUNTED_EFFECTS)[number], string> = {
+    alert: '0',
+    tag: '0',
+    wound: '0',
+};
+
+/**
+ * What the Apply button says it is about to do, in the card's own words.
+ */
+function describeParts(
+    parts: { effect: RunConsequenceEffect; times: number }[],
+): string {
+    return parts
+        .map(({ effect, times }) =>
+            effect === 'retry'
+                ? EFFECT_LABELS[effect]
+                : `${times} ${EFFECT_LABELS[effect]}${times === 1 ? '' : 's'}`,
+        )
+        .join(', ');
+}
 
 /**
  * One run, from whichever side of it the viewer is on.
@@ -593,6 +630,67 @@ function SecurityDesk({ run }: { run: RunView }) {
 }
 
 /**
+ * How many dice the Runners have in hand, and where each of them came from.
+ *
+ * 3.4.5 asks players to work their contribution out in advance because the
+ * Action phase is fifteen minutes long, and this is that arithmetic done for
+ * them: the Leader's full skill, half of everyone else's rounded down, or a
+ * quarter rounded up while Wounded. Every number here is the server's, so what
+ * is shown and what is rolled cannot drift apart.
+ *
+ * The die size is the Leader's alone — d6s if they are Wounded, d8s otherwise —
+ * which is why it is said out loud beside the count: a Wounded Leader handing
+ * over before a hard card is a real tactic, and it should be visible that
+ * handing over is what changes it.
+ */
+function DicePoolReadout({
+    run,
+    skill,
+}: {
+    run: RunView;
+    skill: 'brawn' | 'hack';
+}) {
+    const pool = run.dice_pool[skill];
+
+    if (pool === undefined) {
+        return null;
+    }
+
+    const leader = run.participants.find((runner) => runner.is_leader);
+    const contributors = run.participants.filter(
+        (runner) =>
+            !runner.left &&
+            !runner.is_leader &&
+            (pool.others[String(runner.character_id)] ?? 0) > 0,
+    );
+
+    return (
+        <div className="w-full rounded-md bg-muted/50 px-3 py-2 text-sm">
+            <p>
+                <span className="font-medium tabular-nums">
+                    {pool.total}d{pool.die_faces}
+                </span>{' '}
+                <span className="text-muted-foreground">
+                    in the pool, 5+ to succeed.
+                </span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+                {leader?.name ?? 'The Leader'} rolls {pool.leader} (their full{' '}
+                {skill === 'brawn' ? 'Brawn' : 'Hack'})
+                {contributors.length === 0
+                    ? '. Nobody else adds a die.'
+                    : `, and ${contributors
+                          .map(
+                              (runner) =>
+                                  `${runner.name} +${pool.others[String(runner.character_id)]}`,
+                          )
+                          .join(', ')}.`}
+            </p>
+        </div>
+    );
+}
+
+/**
  * The Run Leader's controls: roll, decide who takes what, and move on.
  *
  * The challenge asks for the skill and the printed strength rather than working
@@ -605,10 +703,27 @@ function LeaderDesk({ run }: { run: RunView }) {
     const [skill, setSkill] = useState<'brawn' | 'hack'>('brawn');
     const [strength, setStrength] = useState('');
     const [taker, setTaker] = useState('');
-    const [times, setTimes] = useState('1');
+    const [counts, setCounts] = useState(NO_CONSEQUENCES);
+    const [retrying, setRetrying] = useState(false);
     const [busy, setBusy] = useState(false);
 
     const active = run.participants.filter((runner) => !runner.left);
+
+    // The card's sentence, as a list the server can apply in one go. Built in
+    // the order the cards print them — Alerts, then what lands on a Runner,
+    // then the Retry that sends them back round — so the log reads like the
+    // card rather than like whichever box was filled in first.
+    const parts: { effect: RunConsequenceEffect; times: number }[] = [
+        ...COUNTED_EFFECTS.filter(
+            (effect) => (Number(counts[effect]) || 0) > 0,
+        ).map((effect) => ({
+            effect: effect as RunConsequenceEffect,
+            times: Number(counts[effect]),
+        })),
+        ...(retrying
+            ? [{ effect: 'retry' as RunConsequenceEffect, times: 1 }]
+            : []),
+    ];
     const post = (url: ReturnType<typeof advance>, data: RunPayload = {}) => {
         setBusy(true);
         router.post(url, data, {
@@ -672,6 +787,7 @@ function LeaderDesk({ run }: { run: RunView }) {
                     <Button type="submit" size="sm" disabled={busy}>
                         Roll
                     </Button>
+                    <DicePoolReadout run={run} skill={skill} />
                     <p className="w-full text-xs text-muted-foreground">
                         Read the number off the card. The dice are thrown on the
                         server and every face is kept.
@@ -683,7 +799,10 @@ function LeaderDesk({ run }: { run: RunView }) {
                 <div className="flex flex-col gap-2">
                     <p className="text-sm">
                         You did not break it. Take the consequence the card
-                        prints — one Runner takes it, and that is your call.
+                        prints — all of it: “1 alert, 1 wound” is one
+                        consequence with two parts, so set a count against each
+                        part and apply them together. One Runner takes the lot,
+                        and that is your call.
                     </p>
                     <div className="flex flex-wrap items-end gap-2">
                         <div className="flex flex-col gap-1">
@@ -708,44 +827,54 @@ function LeaderDesk({ run }: { run: RunView }) {
                                 ))}
                             </select>
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor={`times-${run.id}`}>How many</Label>
-                            <Input
-                                id={`times-${run.id}`}
-                                type="number"
-                                min={1}
-                                max={9}
-                                className="w-20"
-                                value={times}
+                        {COUNTED_EFFECTS.map((effect) => (
+                            <div className="flex flex-col gap-1" key={effect}>
+                                <Label htmlFor={`${effect}-${run.id}`}>
+                                    {EFFECT_LABELS[effect]}s
+                                </Label>
+                                <Input
+                                    id={`${effect}-${run.id}`}
+                                    type="number"
+                                    min={0}
+                                    max={9}
+                                    className="w-20"
+                                    value={counts[effect]}
+                                    onChange={(event) =>
+                                        setCounts((was) => ({
+                                            ...was,
+                                            [effect]: event.target.value,
+                                        }))
+                                    }
+                                />
+                            </div>
+                        ))}
+                        <label className="flex h-9 items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={retrying}
                                 onChange={(event) =>
-                                    setTimes(event.target.value)
+                                    setRetrying(event.target.checked)
                                 }
                             />
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {(['alert', 'tag', 'wound', 'retry'] as const).map(
-                            (effect) => (
-                                <Button
-                                    key={effect}
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={busy}
-                                    onClick={() =>
-                                        post(storeConsequence(run.id), {
-                                            effect,
-                                            character_id:
-                                                taker === ''
-                                                    ? null
-                                                    : Number(taker),
-                                            times: Number(times) || 1,
-                                        })
-                                    }
-                                >
-                                    {EFFECT_LABELS[effect]}
-                                </Button>
-                            ),
-                        )}
+                            Retry
+                        </label>
+                        <Button
+                            size="sm"
+                            disabled={busy || parts.length === 0}
+                            onClick={() => {
+                                post(storeConsequence(run.id), {
+                                    effects: parts,
+                                    character_id:
+                                        taker === '' ? null : Number(taker),
+                                });
+                                setCounts(NO_CONSEQUENCES);
+                                setRetrying(false);
+                            }}
+                        >
+                            {parts.length === 0
+                                ? 'Nothing to apply'
+                                : `Apply ${describeParts(parts)}`}
+                        </Button>
                     </div>
                     <div className="flex flex-wrap gap-2 border-t pt-2">
                         <Button

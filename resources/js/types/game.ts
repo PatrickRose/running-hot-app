@@ -981,6 +981,22 @@ export type RunBudget = {
     left: number;
 };
 
+/**
+ * The dice the Runners have in hand for one skill (rulebook 3.4.2).
+ *
+ * The Leader rolls their full skill and everyone else adds to the same pool,
+ * so there is one die size and it comes from the Leader alone: d6s if they are
+ * Wounded, d8s otherwise.
+ */
+export type RunDicePool = {
+    /** The Leader's own dice: their full skill. */
+    leader: number;
+    /** What each other Runner adds, keyed by character id. */
+    others: Record<string, number>;
+    die_faces: number;
+    total: number;
+};
+
 export type RunView = {
     id: number;
     status: 'submitted' | 'running' | 'succeeded' | 'failed';
@@ -1011,6 +1027,14 @@ export type RunView = {
      */
     cards_remaining: number | null;
     card: RunCard | null;
+
+    /**
+     * What the Runners would throw, keyed by skill — quoted by the server so
+     * the half-rounded-down / quarter-rounded-up contribution rule of 3.4.2 is
+     * never written a second time here. Empty while there is no Run Leader on
+     * the run, which is not the same as a pool of no dice.
+     */
+    dice_pool: Record<string, RunDicePool | undefined>;
     leader_character_id: number | null;
     participants: RunParticipantView[];
     /** Null for the Runners: how much defence is left is the Corporation's. */
