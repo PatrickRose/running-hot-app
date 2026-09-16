@@ -338,10 +338,10 @@ export default function ControlCards({
                                             className="border-b align-top last:border-0"
                                         >
                                             <td className="py-2 pr-4">
-                                                {/* Renders nothing when neither
-                                                    face has been drawn, and
-                                                    whichever one there is
-                                                    otherwise. */}
+                                                {/* Whichever face has been
+                                                    drawn, and a placeholder
+                                                    saying so when neither
+                                                    has. */}
                                                 <CardFacesDialog
                                                     name={technology.name}
                                                     code={technology.code}

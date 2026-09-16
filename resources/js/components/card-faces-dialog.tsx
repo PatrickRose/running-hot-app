@@ -25,6 +25,13 @@ import {
  * The thumbnail is a real button, unlike the tooltips elsewhere on this page: it
  * opens something, so it has to be reachable from the keyboard, and there is one
  * per row rather than one per figure in a stack.
+ *
+ * **A card with neither face drawn says so rather than rendering nothing.** An
+ * empty cell in a table of two hundred rows reads as a layout problem, or as
+ * nothing at all - there was no way to tell a card whose artwork is missing from
+ * one whose thumbnail had failed to lay out. The placeholder is deliberately not
+ * a button: there is nothing to open, and a control that does nothing when
+ * pressed is worse than no control.
  */
 export function CardFacesDialog({
     name,
@@ -48,7 +55,15 @@ export function CardFacesDialog({
     );
 
     if (faces.length === 0) {
-        return null;
+        return (
+            <span
+                className="flex h-12 w-12 items-center justify-center rounded border border-dashed p-1 text-center text-[10px] leading-tight text-muted-foreground"
+                // Held to the thumbnail's own height, so a row with no artwork
+                // is the same height as the rows around it.
+            >
+                Image missing
+            </span>
+        );
     }
 
     // Whichever face there is. Sixteen technologies have a back on record and
