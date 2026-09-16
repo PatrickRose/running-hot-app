@@ -68,6 +68,14 @@ const OVERFLOW_FADE =
  * falls back to the text, which also covers a checkout that does not have the
  * artwork committed.
  *
+ * **The text face says that it is one.** Reading as a card is what it is for,
+ * and it does that job so well that a card with artwork and a card without were
+ * indistinguishable at a glance - so somebody looking for a picture that had not
+ * been drawn had no way to tell that from a card that simply looks like that.
+ * The label is small and sits with the code rather than over the words, because
+ * what the card *says* is still the point; it is there to answer "is something
+ * broken?" rather than to apologise for the card.
+ *
  * Every card carries its text on hover, because at this size neither face
  * reliably shows it: the printing on the artwork is not legible, and a wordy
  * card can outrun its box. Control ruling on a challenge needs to read it, so
@@ -136,6 +144,19 @@ export function CardFace({
                                 SHAPES[shape],
                             )}
                         >
+                            {/* Above the fade, so neither the label nor the
+                                code is ever the thing that gets cut off. */}
+                            <div className="flex shrink-0 items-baseline justify-between gap-2 pb-1">
+                                <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                                    Image missing
+                                </span>
+                                {code ? (
+                                    <span className="font-mono text-[10px] text-muted-foreground">
+                                        {code}
+                                    </span>
+                                ) : null}
+                            </div>
+
                             {/* The words fade where they run past the card;
                                 the footer sits below the fade, because what a
                                 card is - a Charge, research-only - is worth
@@ -147,12 +168,6 @@ export function CardFace({
                                     WebkitMaskImage: OVERFLOW_FADE,
                                 }}
                             >
-                                {code ? (
-                                    <span className="self-end font-mono text-[10px] text-muted-foreground">
-                                        {code}
-                                    </span>
-                                ) : null}
-
                                 {printed(lines).map((line, index) => (
                                     <p
                                         key={`${index}-${line.label}`}
