@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { budget as topUpBudget } from '@/routes/facilities';
 import {
     activate,
     advance,
@@ -860,12 +861,13 @@ function FaceDownCard({ card }: { card: RunCard }) {
 function SecurityDesk({ run }: { run: RunView }) {
     const card = run.card;
     const budget = run.budget;
-    // How this Security player is paying for whatever they do next. One
-    // control for all three acts, because only one of them happens at a time:
-    // the slider says how much of a cost the Alerts cover, and whatever is left
-    // comes off the budget - or past it, if the company is willing.
-    const [alerts, setAlerts] = useState(0);
-    const [useCompany, setUseCompany] = useState(false);
+    // One slider per thing that costs something, because each of them names
+    // its own cost and the cost is half of what the control says. They cannot
+    // share: a Boost of three and a Charge of one are on screen together, and
+    // one slider reading "1 required" would be lying about the other.
+    const [activationAlerts, setActivationAlerts] = useState(0);
+    const [boostAlerts, setBoostAlerts] = useState(0);
+    const [chargeAlerts, setChargeAlerts] = useState(0);
     const [boosts, setBoosts] = useState('1');
     const [printed, setPrinted] = useState('');
     const [busy, setBusy] = useState(false);
@@ -873,28 +875,6 @@ function SecurityDesk({ run }: { run: RunView }) {
     if (card === null) {
         return null;
     }
-
-    /**
-     * Split one cost across the three purses.
-     *
-     * Alerts first because the slider is what the player just moved, then the
-     * budget, then the company if they have said it may be reached. The server
-     * checks every one of these against what is actually there - this only
-     * decides the allocation, which is the player's to make.
-     */
-    const split = (cost: number) => {
-        const fromAlerts = Math.min(alerts, cost, run.alerts_available);
-        const rest = cost - fromAlerts;
-        const fromBudget = Math.min(rest, budget?.left ?? 0);
-        const fromCompany = useCompany ? rest - fromBudget : 0;
-
-        return {
-            alerts: fromAlerts,
-            budget: fromBudget,
-            company: fromCompany,
-            short: rest - fromBudget - fromCompany,
-        };
-    };
 
     // What N Boosts cost from here: the next one is next_boost_cost and each
     // after it costs one more, which is the rule the engine applies.
@@ -904,13 +884,20 @@ function SecurityDesk({ run }: { run: RunView }) {
         return (times * (2 * next + times - 1)) / 2;
     };
 
-    const spend = (cost: number): RunPayload => {
-        const parts = split(cost);
+    /**
+     * Split one cost between the Alerts the slider names and the budget.
+     *
+     * Two purses and no third: company money reaches a run by raising the
+     * budget, never by a payment quietly reaching past it. The server checks
+     * both halves against what is really there — this only decides the
+     * allocation, which is the player's to make.
+     */
+    const spend = (cost: number, alerts: number): RunPayload => {
+        const fromAlerts = Math.min(alerts, cost, run.alerts_available);
 
         return {
-            alerts_to_spend: parts.alerts,
-            budget_to_spend: parts.budget,
-            company_to_spend: parts.company,
+            alerts_to_spend: fromAlerts,
+            budget_to_spend: cost - fromAlerts,
         };
     };
     const post = (url: ReturnType<typeof activate>, data: RunPayload = {}) => {
@@ -927,10 +914,12 @@ function SecurityDesk({ run }: { run: RunView }) {
                 <h3 className="font-medium">Security</h3>
                 {budget !== null && (
                     <p className="text-sm text-muted-foreground">
-                        {budget.left} of {budget.placed} Credits left
+                        {budget.left} of {budget.placed} Credits of budget left
                     </p>
                 )}
             </header>
+
+            <BudgetTopUp run={run} />
 
             {!card.settled && (
                 <div className="flex flex-col gap-2">
@@ -939,6 +928,13 @@ function SecurityDesk({ run }: { run: RunView }) {
                             ? 'Switch it on.'
                             : `Switching it on costs ${card.activation_cost}.`}
                     </p>
+                    <PaymentSlider
+                        run={run}
+                        id={`activation-${run.id}`}
+                        cost={card.activation_cost ?? 0}
+                        alerts={activationAlerts}
+                        onAlerts={setActivationAlerts}
+                    />
                     <div className="flex flex-wrap gap-2">
                         <Button
                             size="sm"
@@ -946,7 +942,10 @@ function SecurityDesk({ run }: { run: RunView }) {
                             onClick={() =>
                                 post(activate(run.id), {
                                     activating: true,
-                                    ...spend(card.activation_cost ?? 0),
+                                    ...spend(
+                                        card.activation_cost ?? 0,
+                                        activationAlerts,
+                                    ),
                                 })
                             }
                         >
@@ -974,47 +973,82 @@ function SecurityDesk({ run }: { run: RunView }) {
             )}
 
             {card.active && (
-                <div className="flex flex-wrap items-end gap-2">
-                    <div className="flex flex-col gap-1">
-                        <Label htmlFor={`boosts-${run.id}`}>Boosts</Label>
-                        <Input
-                            id={`boosts-${run.id}`}
-                            type="number"
-                            min={1}
-                            max={9}
-                            className="w-20"
-                            value={boosts}
-                            onChange={(event) => setBoosts(event.target.value)}
+                <div className="flex flex-col gap-3 border-t pt-3">
+                    {/*
+                     * Each of these reads the same way down the column: what
+                     * sets the cost, then how it is being paid, then the button
+                     * that commits it. A Boost's cost moves with the count, so
+                     * the count comes first and the slider re-reads itself.
+                     */}
+                    <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor={`boosts-${run.id}`}>Boosts</Label>
+                            <Input
+                                id={`boosts-${run.id}`}
+                                type="number"
+                                min={1}
+                                max={9}
+                                className="w-20"
+                                value={boosts}
+                                onChange={(event) =>
+                                    setBoosts(event.target.value)
+                                }
+                            />
+                        </div>
+                        <PaymentSlider
+                            run={run}
+                            id={`boost-${run.id}`}
+                            cost={boostCost(Number(boosts) || 1)}
+                            alerts={boostAlerts}
+                            onAlerts={setBoostAlerts}
                         />
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="self-start"
+                            disabled={busy}
+                            onClick={() =>
+                                post(boost(run.id), {
+                                    times: Number(boosts) || 1,
+                                    ...spend(
+                                        boostCost(Number(boosts) || 1),
+                                        boostAlerts,
+                                    ),
+                                })
+                            }
+                        >
+                            Boost (next costs {card.next_boost_cost})
+                        </Button>
                     </div>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() =>
-                            post(boost(run.id), {
-                                times: Number(boosts) || 1,
-                                ...spend(boostCost(Number(boosts) || 1)),
-                            })
-                        }
-                    >
-                        Boost (next costs {card.next_boost_cost})
-                    </Button>
+
                     {card.charge_cost !== null &&
                         card.charge_cost !== undefined && (
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy}
-                                onClick={() =>
-                                    post(
-                                        charge(run.id),
-                                        spend(card.charge_cost ?? 0),
-                                    )
-                                }
-                            >
-                                Charge for {card.charge_cost}
-                            </Button>
+                            <div className="flex flex-col gap-2 border-t pt-3">
+                                <PaymentSlider
+                                    run={run}
+                                    id={`charge-${run.id}`}
+                                    cost={card.charge_cost}
+                                    alerts={chargeAlerts}
+                                    onAlerts={setChargeAlerts}
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="self-start"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        post(
+                                            charge(run.id),
+                                            spend(
+                                                card.charge_cost ?? 0,
+                                                chargeAlerts,
+                                            ),
+                                        )
+                                    }
+                                >
+                                    Charge for {card.charge_cost}
+                                </Button>
+                            </div>
                         )}
                 </div>
             )}
@@ -1058,13 +1092,12 @@ function SecurityDesk({ run }: { run: RunView }) {
             )}
 
             <div className="flex flex-col gap-2 border-t pt-3">
-                <SecurityPurse
-                    run={run}
-                    alerts={alerts}
-                    onAlerts={setAlerts}
-                    useCompany={useCompany}
-                    onUseCompany={setUseCompany}
-                />
+                <p className="text-sm font-medium">
+                    Spend Alerts on a consequence
+                    <span className="ml-2 font-normal text-muted-foreground tabular-nums">
+                        {run.alerts_available} in hand
+                    </span>
+                </p>
 
                 {run.step !== 'consequence' ? (
                     <p className="text-xs text-muted-foreground">
@@ -1101,90 +1134,151 @@ function SecurityDesk({ run }: { run: RunView }) {
 }
 
 /**
- * How Security is paying, as one control for all three things they pay for.
+ * How one cost is being paid, as the slider that names it.
  *
- * Three purses, and which a Credit comes out of is a real decision rather than
+ * Two purses, and which a Credit comes out of is a real decision rather than
  * bookkeeping. Alerts are free in Credits but spending them lowers the Alerts
- * standing, which makes every card the Runners have left *easier* — so the
- * slider is the trade this desk exists to make, and it is a slider because the
- * question is "how much of this", not "type a number".
+ * standing, which makes every card the Runners have left *easier* — so this is
+ * the trade the desk exists to make, and it is a slider because the question is
+ * "how much of this cost", not "type a number".
  *
- * The budget takes whatever the Alerts do not, and company money is behind a
- * switch rather than automatic: reaching past the Facility's budget into the
- * Corporation's own Credits is the one of the three that actually moves a
- * tracker, and it should be something Security chooses rather than something
- * that happens to them when a budget runs dry.
+ * Which is why the slider runs to the *cost* rather than to the Alerts in hand:
+ * a payment of 1 has two answers and a bar the width of a full Alert pool would
+ * spend the first nine tenths of its travel saying the same one. Whatever the
+ * Alerts do not cover comes off the budget, and there is no third purse — the
+ * company reaches a run by raising the budget, which is the button above.
  *
  * Every number here is checked again by the server against what is really
  * there. What this decides is only the allocation, which is the player's.
  */
-function SecurityPurse({
+function PaymentSlider({
     run,
+    id,
+    cost,
     alerts,
     onAlerts,
-    useCompany,
-    onUseCompany,
 }: {
     run: RunView;
+    id: string;
+    cost: number;
     alerts: number;
     onAlerts: (value: number) => void;
-    useCompany: boolean;
-    onUseCompany: (value: boolean) => void;
 }) {
-    const budget = run.budget;
-    const most = run.alerts_available;
+    // Nothing to apportion: a free card has no payment to make a decision
+    // about, and a slider from 0 to 0 is a line with a knob on it.
+    if (cost <= 0) {
+        return null;
+    }
+
+    const most = Math.min(cost, run.alerts_available);
+    const fromAlerts = Math.min(alerts, most);
+    const fromBudget = cost - fromAlerts;
+    const short = fromBudget - (run.budget?.left ?? 0);
 
     return (
-        <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1">
-                <Label htmlFor={`purse-${run.id}`}>
-                    Alerts to spend as Credits
-                    <span className="ml-2 font-normal text-muted-foreground tabular-nums">
-                        {alerts} of {most}
-                    </span>
-                </Label>
-                <input
-                    id={`purse-${run.id}`}
-                    type="range"
-                    min={0}
-                    max={most}
-                    step={1}
-                    value={Math.min(alerts, most)}
-                    disabled={most === 0}
-                    onChange={(event) => onAlerts(Number(event.target.value))}
-                    className="w-full accent-foreground disabled:opacity-50"
-                />
-                <p className="text-xs text-muted-foreground">
-                    {most === 0
-                        ? 'No Alerts in hand.'
-                        : `Spending them makes everything the Runners have left easier — the next point of strength arrives at ${run.next_alert_threshold}.`}
-                </p>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-                <input
-                    type="checkbox"
-                    checked={useCompany}
-                    onChange={(event) => onUseCompany(event.target.checked)}
-                />
-                Reach past the budget into company money
-                {budget !== null && (
-                    <span className="text-muted-foreground tabular-nums">
-                        ({budget.company} in the bank)
+        <div className="flex flex-col gap-1">
+            <Label htmlFor={id}>
+                Alerts to spend as Credits
+                <span className="ml-2 font-normal text-muted-foreground tabular-nums">
+                    {cost} required
+                </span>
+            </Label>
+            <input
+                id={id}
+                type="range"
+                min={0}
+                max={most}
+                step={1}
+                value={fromAlerts}
+                disabled={most === 0}
+                onChange={(event) => onAlerts(Number(event.target.value))}
+                className="w-full accent-foreground disabled:opacity-50"
+            />
+            <p className="text-xs text-muted-foreground">
+                {most === 0
+                    ? `No Alerts in hand, so all ${cost} comes off the budget.`
+                    : `Spending ${fromAlerts} Alert${fromAlerts === 1 ? '' : 's'}, ${fromBudget} Credit${fromBudget === 1 ? '' : 's'} of budget.`}
+                {short > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                        {' '}
+                        The budget is {short} short — top it up, or put more of
+                        it on the Alerts.
                     </span>
                 )}
-            </label>
-
-            {budget !== null && (
-                <p className="text-xs text-muted-foreground">
-                    {budget.left} of {budget.placed} Credits of budget left.
-                    Whatever the Alerts do not cover comes off that
-                    {useCompany
-                        ? ', and past it out of the company — which is the one of the three that leaves the Corporation here and now.'
-                        : ', and a cost it cannot cover is refused.'}
-                </p>
-            )}
+            </p>
         </div>
+    );
+}
+
+/**
+ * Moving company money onto the Facility, mid-run.
+ *
+ * The one way the Corporation's own Credits reach a run, and deliberately a
+ * separate act from paying for anything: a budget is escrow, so raising it
+ * takes the Credits off the Corporation there and then and writes the ledger
+ * row — where a payment reaching quietly past the budget would have spent the
+ * same Credits twice over, once here and once on whatever else the Facility was
+ * funded for.
+ *
+ * It posts the *new total* rather than the top-up, because that is what the
+ * budget route takes and what `setSecurityBudget` reconciles against what has
+ * already been spent. Nothing here is a second implementation of that rule:
+ * a Corporation that cannot afford it is refused by the service.
+ */
+function BudgetTopUp({ run }: { run: RunView }) {
+    const budget = run.budget;
+    const [amount, setAmount] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    if (budget === null) {
+        return null;
+    }
+
+    const adding = Number(amount) || 0;
+
+    return (
+        <form
+            className="flex flex-wrap items-end gap-2 rounded-md bg-muted/40 p-2"
+            onSubmit={(event) => {
+                event.preventDefault();
+                setBusy(true);
+                router.post(
+                    topUpBudget(run.facility.id),
+                    { security_budget: budget.placed + adding },
+                    {
+                        onFinish: () => setBusy(false),
+                        preserveScroll: true,
+                        onSuccess: () => setAmount(''),
+                    },
+                );
+            }}
+        >
+            <div className="flex flex-col gap-1">
+                <Label htmlFor={`top-up-${run.id}`}>Add to the budget</Label>
+                <Input
+                    id={`top-up-${run.id}`}
+                    type="number"
+                    min={1}
+                    max={budget.company}
+                    className="w-24"
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                />
+            </div>
+            <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                disabled={busy || adding < 1}
+            >
+                Take {adding > 0 ? adding : ''} from the company
+            </Button>
+            <p className="text-xs text-muted-foreground">
+                {budget.company} Credit{budget.company === 1 ? '' : 's'} in the
+                company. It leaves the Corporation the moment it lands here, and
+                whatever is unspent goes home when the phase ends.
+            </p>
+        </form>
     );
 }
 

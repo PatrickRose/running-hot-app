@@ -625,7 +625,7 @@ defend is looking at the Facility board.
 
 **Directing Security is not modelled at all, and that is a design decision rather than an omission.** The rulebook (3.3.5) has a Security player place a meeple at one Facility during Setup and makes that the price of Boosting a card, paying a Charge and choosing to leave one switched off. It was built that way and then taken out: a Security player may move where they are directing freely during the Action phase, so the meeple constrained nobody, and the only thing it reliably did was stop somebody Boosting until a second person had ticked a box for them. The `security_directed` column, its service method, Control's toggle and `SecurityDirectionTest` all went with it — a flag nothing reads is worse than no flag, because it looks mechanical on the panel and does nothing.
 
-**The budget is the half that survives, and it is Security's own.** What Credits are on a Facility decides what Security can switch on, Boost and Charge, so it is the decision that was always doing the work. It is placed at `/facilities` by the Security player through `FacilityDefenceController::budget`, not only by Control: escrowed the moment it lands, movable through the Action phase because Security reacts after the attacks do, and refused only where it would drop below what has already been spent. The ledger carries the Security player's name rather than Control's, which is the whole reason the route exists.
+**The budget is the half that survives, and it is Security's own.** What Credits are on a Facility decides what Security can switch on, Boost and Charge, so it is the decision that was always doing the work. It is placed at `/facilities` by the Security player through `FacilityDefenceController::budget`, not only by Control: escrowed the moment it lands, movable through the Action phase because Security reacts after the attacks do, and refused only where it would drop below what has already been spent. The ledger carries the Security player's name rather than Control's, which is the whole reason the route exists. The run screen posts to that same route to top a budget up mid-run, which is the only way the Corporation's own Credits reach a Run at all.
 
 Anything still printed on a card that mentions directing security — the Internet link technology, the Boost and Charge glossary entries — is left exactly as printed. Those are the game's own words for Control to read, not code.
 
@@ -676,7 +676,7 @@ Leader's job) goes in the event payload instead of `run_dice_rolls`, because tha
 table's threshold and successes would be meaningless for it. And a single
 remaining candidate is not rolled for at all: a one-sided die is not a die.
 
-**Security pays from three purses, and which one matters.**
+**Security pays from two purses, and which one matters.**
 `App\Support\Runs\SecurityPayment` is the split, named by the player rather
 than applied in an order the engine picked:
 - **Alerts** are a pool for one run and then gone, so there is no ledger to
@@ -688,16 +688,30 @@ than applied in an order the engine picked:
   placed (`FacilityDefenceService::setSecurityBudget`), so spending only records
   how much of that escrow has gone — the apparent exception to "never write a
   tracker directly" is not one.
-- **Company money** is the Corporation's own Credits reached past the budget,
-  and it *is* a tracker movement, because Credits genuinely leave at that
-  moment. It is behind a switch on the screen rather than an automatic top-up: a
-  Facility whose budget has run dry should not quietly start spending the
-  company's money.
+
+**There is deliberately no third purse.** A payment reaching past the budget
+into the Corporation's own Credits was built and taken out, for the reason
+Directing Security was: it put the same Credits in two places at once, spent on
+this card and still promised to whatever else the Facility was funded for. A
+Facility is defended out of what has been put on it, so company money reaches a
+run by *raising the budget* — one button on the run screen, posting to the
+budget route the Facility board already has, which escrows the Credits in the
+open and writes the ledger row there. Do not give `SecurityPayment` a third
+field back.
 
 Naming no purse at all means the budget, so any caller that never cared about
-the split behaves as it did before there were three. A split that does not add
-up to the cost is refused rather than topped up from somewhere, and a purse
-asked for more than it holds is refused naming which one came up short.
+the split behaves as it did before there was one. A split that does not add up
+to the cost is refused rather than topped up from somewhere, and a purse asked
+for more than it holds is refused naming which one came up short.
+
+**A slider belongs to a cost, not to the desk.** One shared slider had to say
+how many Alerts to spend before knowing what on, so it ran to the Alerts in hand
+and read as a setting rather than a decision. Each payable act draws its own
+instead — Activate, Boost and Charge — running from 0 to *that* cost and saying
+underneath what each purse is covering, because "1 required" is half of what the
+control is for. A Boost's slider re-reads itself as the count changes. Each
+reads down the column the way the act happens: what sets the cost, how it is
+being paid, then the button that commits it.
 
 Everything else — Wounds, Tags, the 3.4.4 payment — goes through
 `TrackerService` like anything else.

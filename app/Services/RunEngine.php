@@ -380,7 +380,7 @@ class RunEngine
      * Runners unable to go anywhere until Security found money it did not have.
      *
      * @param  bool|null  $activating  false only where Security is Directing here
-     * @param  SecurityPayment|null  $payment  how the cost is split between Alerts, the budget and company money
+     * @param  SecurityPayment|null  $payment  how the cost is split between Alerts and the budget
      */
     public function activate(
         Run $run,
@@ -400,14 +400,14 @@ class RunEngine
         $card = $cursor->card;
         $cost = ActivationCost::for($card->kind, $this->activeCyberCards($run));
 
-        $payment ??= new SecurityPayment(0, 0, 0);
+        $payment ??= new SecurityPayment(0, 0);
 
         return DB::transaction(function () use ($run, $cursor, $card, $cost, $activating, $payment, $actor): FacilityCardActivation {
             $declined = $activating === false;
             $affordable = $this->affordable($run, $cost, $payment);
             $activated = ! $declined && $affordable;
 
-            $paid = ['alerts' => 0, 'budget' => 0, 'company' => 0];
+            $paid = ['alerts' => 0, 'budget' => 0];
 
             if ($activated) {
                 $paid = $this->pay(
@@ -496,7 +496,7 @@ class RunEngine
         }
 
         return DB::transaction(function () use ($run, $cursor, $card, $activation, $times, $cost, $payment, $actor): FacilityCardActivation {
-            $this->pay($run, $cost, $payment ?? new SecurityPayment(0, 0, 0), sprintf('Boosting %s', $card->cardType->name), $actor);
+            $this->pay($run, $cost, $payment ?? new SecurityPayment(0, 0), sprintf('Boosting %s', $card->cardType->name), $actor);
 
             $activation->forceFill([
                 'boosts' => $activation->boosts + $times,
@@ -549,7 +549,7 @@ class RunEngine
         $cost = (int) $card->cardType->charge_cost;
 
         return DB::transaction(function () use ($run, $cursor, $card, $cost, $payment, $actor): RunEvent {
-            $this->pay($run, $cost, $payment ?? new SecurityPayment(0, 0, 0), sprintf('Charging %s', $card->cardType->name), $actor);
+            $this->pay($run, $cost, $payment ?? new SecurityPayment(0, 0), sprintf('Charging %s', $card->cardType->name), $actor);
 
             return $this->record(
                 $run,
@@ -2206,8 +2206,7 @@ class RunEngine
 
         return $payment->total() >= $amount
             && $payment->alerts <= $run->alertsAvailable()
-            && $payment->budget <= $run->facility->stateForTurn($run->turn)->unspentBudget()
-            && $payment->company <= $run->facility->corporation->credits;
+            && $payment->budget <= $run->facility->stateForTurn($run->turn)->unspentBudget();
     }
 
     /**
@@ -2218,7 +2217,7 @@ class RunEngine
      * only records how much of that escrow has gone. Whatever is left goes home
      * at the end of the Action phase.
      *
-     * @return array{alerts: int, budget: int, company: int}
+     * @return array{alerts: int, budget: int}
      */
     protected function pay(Run $run, int $amount, SecurityPayment $payment, string $reason, ?User $actor): array
     {
@@ -2244,11 +2243,9 @@ class RunEngine
         }
 
         $state = $run->facility->stateForTurn($run->turn);
-        $corporation = $run->facility->corporation;
 
         $this->requirePurse($payment->alerts, $run->alertsAvailable(), 'Alert', $reason);
         $this->requirePurse($payment->budget, $state->unspentBudget(), 'Credit of budget', $reason);
-        $this->requirePurse($payment->company, $corporation->credits, 'Credit of company money', $reason);
 
         if ($payment->alerts > 0) {
             $run->forceFill(['alerts_spent' => $run->alerts_spent + $payment->alerts])->save();
@@ -2258,19 +2255,6 @@ class RunEngine
             $state->forceFill([
                 'security_budget_spent' => $state->security_budget_spent + $payment->budget,
             ])->save();
-        }
-
-        // The one of the three that is a real tracker movement: Credits leave
-        // the Corporation here and now, where the budget's left when it was
-        // placed and Alerts were never the Corporation's at all.
-        if ($payment->company > 0) {
-            $this->trackers->adjust(
-                $corporation,
-                Tracker::CorporationCredits,
-                -$payment->company,
-                $reason,
-                $actor,
-            );
         }
 
         return $payment->toArray();

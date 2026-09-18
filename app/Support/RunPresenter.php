@@ -496,9 +496,10 @@ class RunPresenter
                 'placed' => $state->security_budget,
                 'spent' => $state->security_budget_spent,
                 'left' => $state->unspentBudget(),
-                // What the Corporation still has behind the budget, so the
-                // screen can offer to reach past it rather than only reporting
-                // that the Facility has run dry.
+                // What the Corporation still has behind the budget. No payment
+                // may reach it - it is what the screen's top-up button draws
+                // on, so Security can see whether raising the budget is even
+                // an option before the Facility runs dry.
                 'company' => $run->facility->corporation->credits,
             ] : null,
 

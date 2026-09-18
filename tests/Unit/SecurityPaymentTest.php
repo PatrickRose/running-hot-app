@@ -7,18 +7,18 @@ use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The three purses a Security player pays from (rulebook 3.3.5, 3.4.2).
+ * The two purses a Security player pays from (rulebook 3.3.5, 3.4.2).
  */
 class SecurityPaymentTest extends TestCase
 {
-    public function test_it_adds_the_three_purses_together(): void
+    public function test_it_adds_the_two_purses_together(): void
     {
-        $payment = new SecurityPayment(alerts: 2, budget: 3, company: 5);
+        $payment = new SecurityPayment(alerts: 2, budget: 3);
 
-        $this->assertSame(10, $payment->total());
+        $this->assertSame(5, $payment->total());
         $this->assertFalse($payment->isEmpty());
         $this->assertSame(
-            ['alerts' => 2, 'budget' => 3, 'company' => 5],
+            ['alerts' => 2, 'budget' => 3],
             $payment->toArray(),
         );
     }
@@ -29,8 +29,8 @@ class SecurityPaymentTest extends TestCase
      */
     public function test_naming_nothing_is_empty_rather_than_zero_of_each(): void
     {
-        $this->assertTrue(SecurityPayment::of(null, null, null)->isEmpty());
-        $this->assertFalse(SecurityPayment::of(0, 1, 0)->isEmpty());
+        $this->assertTrue(SecurityPayment::of(null, null)->isEmpty());
+        $this->assertFalse(SecurityPayment::of(0, 1)->isEmpty());
     }
 
     public function test_the_budget_is_the_default_purse(): void
@@ -39,7 +39,6 @@ class SecurityPaymentTest extends TestCase
 
         $this->assertSame(0, $payment->alerts);
         $this->assertSame(4, $payment->budget);
-        $this->assertSame(0, $payment->company);
     }
 
     /**
@@ -50,19 +49,18 @@ class SecurityPaymentTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new SecurityPayment(alerts: -1, budget: 0, company: 0);
+        new SecurityPayment(alerts: -1, budget: 0);
     }
 
     /**
      * The sentence names only the purses actually used, because "2 Alerts and
-     * 0 from the budget and 0 from the company" is a worse way of saying two
-     * Alerts.
+     * 0 from the budget" is a worse way of saying two Alerts.
      */
     public function test_it_explains_only_what_was_used(): void
     {
-        $this->assertSame('2 Alerts', (new SecurityPayment(2, 0, 0))->explain());
-        $this->assertSame('1 Alert and 3 from the budget', (new SecurityPayment(1, 3, 0))->explain());
-        $this->assertSame('4 from the company', (new SecurityPayment(0, 0, 4))->explain());
-        $this->assertSame('nothing', (new SecurityPayment(0, 0, 0))->explain());
+        $this->assertSame('2 Alerts', (new SecurityPayment(2, 0))->explain());
+        $this->assertSame('1 Alert and 3 from the budget', (new SecurityPayment(1, 3))->explain());
+        $this->assertSame('3 from the budget', (new SecurityPayment(0, 3))->explain());
+        $this->assertSame('nothing', (new SecurityPayment(0, 0))->explain());
     }
 }

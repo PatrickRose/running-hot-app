@@ -22,6 +22,7 @@ use App\Models\TechnologyHolding;
 use App\Models\TrackerAdjustment;
 use App\Models\Turn;
 use App\Services\Dice;
+use App\Services\FacilityDefenceService;
 use App\Services\RunEngine;
 use App\Support\Runs\ChallengeStrength;
 use App\Support\Runs\DicePool;
@@ -361,10 +362,10 @@ class RunEngineTest extends TestCase
     // ------------------------------------------------------------------
 
     /**
-     * A cost may be split across all three purses, and the split is the
-     * player's to name rather than an order the engine applies.
+     * A cost may be split between both purses, and the split is the player's
+     * to name rather than an order the engine applies.
      */
-    public function test_a_cost_splits_across_alerts_budget_and_company_money(): void
+    public function test_a_cost_splits_between_alerts_and_the_budget(): void
     {
         $run = $this->started(physical: 0, cyber: 2, tags: 3);
         $this->budget($run, 1);
@@ -379,23 +380,23 @@ class RunEngineTest extends TestCase
         $this->engine()->activate($run, payment: new SecurityPayment(
             alerts: 1,
             budget: 0,
-            company: 0,
         ));
 
-        // Paid out of the Alerts, so no budget and no company money moved.
+        // Paid out of the Alerts, so nothing left the Corporation.
         $this->assertSame($spent + 1, $run->refresh()->alerts_spent);
         $this->assertSame($before, $run->facility->corporation->refresh()->credits);
     }
 
     /**
-     * Company money is the one of the three that really leaves the
-     * Corporation, so it lands in the ledger. The budget left when it was
-     * placed and Alerts were never the Corporation's at all.
+     * A payment never reaches the Corporation's own Credits, however rich it
+     * is. A Facility is defended out of what has been put on it, so a budget
+     * that has run dry refuses the cost - and the way through is to raise the
+     * budget, which escrows the Credits in the open.
      */
-    public function test_company_money_lands_in_the_ledger_and_the_others_do_not(): void
+    public function test_a_payment_never_reaches_the_corporations_own_credits(): void
     {
         $run = $this->started();
-        $this->budget($run, 2);
+        $this->budget($run, 0);
 
         $this->engine()->activate($run);
 
@@ -405,20 +406,60 @@ class RunEngineTest extends TestCase
         $corporation->forceFill(['credits' => 20])->save();
         $before = $corporation->refresh()->credits;
 
-        $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
-            alerts: 0,
-            budget: 0,
-            company: 1,
-        ));
+        try {
+            // Nothing on the Facility, and 20 Credits in the bank buy nothing
+            // here.
+            $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
+                alerts: 0,
+                budget: 1,
+            ));
+            $this->fail('A budget that cannot cover the cost should have been refused.');
+        } catch (ValidationException $refusal) {
+            $this->assertStringContainsString('Credit of budget', implode(' ', $refusal->errors()['payment']));
+        }
 
-        $this->assertSame($before - 1, $corporation->refresh()->credits);
-        $this->assertDatabaseHas('tracker_adjustments', [
+        $this->assertSame($before, $corporation->refresh()->credits);
+        $this->assertDatabaseMissing('tracker_adjustments', [
             'tracker' => Tracker::CorporationCredits->value,
             'delta' => -1,
         ]);
+    }
 
-        // The budget is untouched: it was not what paid.
-        $this->assertSame(0, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
+    /**
+     * Which leaves one way in for company money, and it is the one that writes
+     * the ledger: putting more Credits on the Facility mid-run.
+     */
+    public function test_topping_up_the_budget_is_how_company_money_reaches_a_run(): void
+    {
+        $run = $this->started();
+        $this->budget($run, 1);
+        $this->engine()->activate($run);
+
+        $corporation = $run->facility->corporation;
+        $corporation->forceFill(['credits' => 20])->save();
+
+        app(FacilityDefenceService::class)->setSecurityBudget(
+            $run->facility,
+            5,
+            $run->turn,
+        );
+
+        $this->assertSame(16, $corporation->refresh()->credits);
+        $this->assertDatabaseHas('tracker_adjustments', [
+            'tracker' => Tracker::CorporationCredits->value,
+            'delta' => -4,
+        ]);
+
+        // And the run can now spend what has been put on it.
+        $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
+            alerts: 0,
+            budget: 1,
+        ));
+
+        $this->assertSame(
+            1,
+            $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent,
+        );
     }
 
     /**
@@ -436,7 +477,6 @@ class RunEngineTest extends TestCase
         $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
             alerts: 99,
             budget: 0,
-            company: 0,
         ));
     }
 
@@ -456,13 +496,12 @@ class RunEngineTest extends TestCase
         $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
             alerts: 0,
             budget: 3,
-            company: 0,
         ));
     }
 
     /**
      * Naming nothing still means the budget, so every caller that never cared
-     * about the split behaves exactly as it did before there were three.
+     * about the split behaves exactly as it did before there was one.
      */
     public function test_naming_no_purse_still_takes_it_from_the_budget(): void
     {
@@ -714,7 +753,7 @@ class RunEngineTest extends TestCase
         $this->walkPast($run->refresh());
 
         // Paid out of the Alert pool, since the budget is empty.
-        $this->engine()->activate($run->refresh(), payment: new SecurityPayment(alerts: 1, budget: 0, company: 0));
+        $this->engine()->activate($run->refresh(), payment: new SecurityPayment(alerts: 1, budget: 0));
 
         $run = $run->refresh();
         $this->assertSame(1, $run->alerts_spent);
