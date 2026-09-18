@@ -29,7 +29,6 @@ import {
     challenge,
     charge,
     defend,
-    ignoreEnd,
     leave,
 } from '@/routes/runs';
 import {
@@ -37,7 +36,10 @@ import {
     store as storeAccess,
 } from '@/routes/runs/accesses';
 import { trigger as triggerAlerts } from '@/routes/runs/alerts';
-import { store as storeConsequence } from '@/routes/runs/consequences';
+import {
+    mark as markConsequence,
+    store as storeConsequence,
+} from '@/routes/runs/consequences';
 import type {
     RunCard,
     RunConsequenceEffect,
@@ -77,7 +79,9 @@ type RunPayload = Record<
     | number
     | boolean
     | null
-    | { effect: RunConsequenceEffect; times: number }[]
+    // What Security marks: a count per effect, which is how a card's own
+    // sentence goes over the wire.
+    | Record<string, number>
 >;
 
 const EFFECT_LABELS: Record<RunConsequenceEffect, string> = {
@@ -96,27 +100,6 @@ const EFFECT_LABELS: Record<RunConsequenceEffect, string> = {
  * counter each and Retry gets a checkbox.
  */
 const COUNTED_EFFECTS = ['alert', 'tag', 'wound'] as const;
-
-const NO_CONSEQUENCES: Record<(typeof COUNTED_EFFECTS)[number], string> = {
-    alert: '0',
-    tag: '0',
-    wound: '0',
-};
-
-/**
- * What the Apply button says it is about to do, in the card's own words.
- */
-function describeParts(
-    parts: { effect: RunConsequenceEffect; times: number }[],
-): string {
-    return parts
-        .map(({ effect, times }) =>
-            effect === 'retry'
-                ? EFFECT_LABELS[effect]
-                : `${times} ${EFFECT_LABELS[effect]}${times === 1 ? '' : 's'}`,
-        )
-        .join(', ');
-}
 
 /**
  * Doing one thing to a run, and hearing back when the server says no.
@@ -1158,24 +1141,144 @@ function SecurityDesk({ run }: { run: RunView }) {
                 </p>
             )}
 
+            {run.step === 'consequence' && (
+                <ConsequenceMarkings run={run} busy={busy} post={post} />
+            )}
+        </section>
+    );
+}
+
+/**
+ * Security writing down what the Runners are about to take.
+ *
+ * The card is Security's to read — they are holding it, and at this step they
+ * are the only person who has certainly seen it — so this is where a
+ * consequence enters the run. The Run Leader's part is deciding who takes it,
+ * which is the only part of it rulebook 3.4.2 gives them.
+ *
+ * Two halves, and they behave differently on purpose. Marking the card is free
+ * and can be done again: a count typed wrong is corrected by marking the right
+ * one, so the form is a set of boxes and a Mark button. Buying with Alerts is
+ * not: the Alerts are gone the moment the button is pressed, so each purchase
+ * is its own act and lands on the slip beside the card's own effects.
+ */
+function ConsequenceMarkings({
+    run,
+    busy,
+    post,
+}: {
+    run: RunView;
+    busy: boolean;
+    post: (
+        url: ReturnType<typeof activate> | string,
+        data?: RunPayload,
+    ) => void;
+}) {
+    const slip = run.consequence;
+    // Seeded from whatever is already marked, so re-marking is a correction
+    // rather than starting again — and so a poll landing mid-edit does not
+    // wipe what somebody is typing, because this only reads it once.
+    const [counts, setCounts] = useState<Record<string, string>>(() =>
+        Object.fromEntries(
+            COUNTED_EFFECTS.map((effect) => [
+                effect,
+                String(slip.effects[effect] ?? 0),
+            ]),
+        ),
+    );
+    const [retrying, setRetrying] = useState(slip.effects.retry !== undefined);
+    const [ending, setEnding] = useState(slip.ends_the_run);
+
+    const effects: Record<string, number> = {
+        ...Object.fromEntries(
+            COUNTED_EFFECTS.map((effect) => [
+                effect,
+                Number(counts[effect]) || 0,
+            ]),
+        ),
+        retry: retrying ? 1 : 0,
+        end_the_run: ending ? 1 : 0,
+    };
+
+    return (
+        <div className="flex flex-col gap-3 border-t pt-3">
+            <div className="flex flex-col gap-2">
+                <p className="text-sm">
+                    They did not break it. Write down what the card does to them
+                    — all of it: “1 alert, 1 wound” is one consequence with two
+                    parts.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                    {COUNTED_EFFECTS.map((effect) => (
+                        <div className="flex flex-col gap-1" key={effect}>
+                            <Label htmlFor={`mark-${effect}-${run.id}`}>
+                                {EFFECT_LABELS[effect]}s
+                            </Label>
+                            <Input
+                                id={`mark-${effect}-${run.id}`}
+                                type="number"
+                                min={0}
+                                max={9}
+                                className="w-20"
+                                value={counts[effect]}
+                                onChange={(event) =>
+                                    setCounts((was) => ({
+                                        ...was,
+                                        [effect]: event.target.value,
+                                    }))
+                                }
+                            />
+                        </div>
+                    ))}
+                    <label className="flex h-9 items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={retrying}
+                            onChange={(event) =>
+                                setRetrying(event.target.checked)
+                            }
+                        />
+                        Retry
+                    </label>
+                    <label className="flex h-9 items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={ending}
+                            onChange={(event) =>
+                                setEnding(event.target.checked)
+                            }
+                        />
+                        End the Run
+                    </label>
+                    <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() =>
+                            post(markConsequence(run.id), { effects })
+                        }
+                    >
+                        {slip.marked ? 'Mark again' : 'Mark it'}
+                    </Button>
+                </div>
+                {slip.marked && (
+                    <p className="text-xs text-muted-foreground">
+                        Marked: {slip.description}. Waiting on the Run Leader to
+                        say who takes it. Marking again replaces what the card
+                        does; Alerts already spent stay on the slip.
+                    </p>
+                )}
+            </div>
+
             <div className="flex flex-col gap-2 border-t pt-3">
                 <p className="text-sm font-medium">
-                    Spend Alerts on a consequence
+                    Spend Alerts to add to it
                     <span className="ml-2 font-normal text-muted-foreground tabular-nums">
                         {run.alerts_available} in hand
                     </span>
                 </p>
-
-                {run.step !== 'consequence' ? (
-                    <p className="text-xs text-muted-foreground">
-                        A consequence bought with Alerts is added to the one the
-                        card prints, so it waits for the Consequence step.
-                    </p>
-                ) : (
-                    <div className="flex flex-wrap gap-2">
-                        {(
-                            ['tag', 'wound', 'retry', 'end_the_run'] as const
-                        ).map((effect) => (
+                <div className="flex flex-wrap gap-2">
+                    {(['tag', 'wound', 'retry', 'end_the_run'] as const).map(
+                        (effect) => (
                             <Button
                                 key={effect}
                                 size="sm"
@@ -1192,11 +1295,16 @@ function SecurityDesk({ run }: { run: RunView }) {
                                 {EFFECT_LABELS[effect]} · {ALERT_PRICES[effect]}{' '}
                                 Alerts
                             </Button>
-                        ))}
-                    </div>
-                )}
+                        ),
+                    )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Spent the moment you press it, and added to what the card
+                    does rather than happening on its own — so the Run Leader
+                    still names who takes it.
+                </p>
             </div>
-        </section>
+        </div>
     );
 }
 
@@ -1469,28 +1577,7 @@ function DicePoolReadout({
  */
 function LeaderDesk({ run }: { run: RunView }) {
     const [skill, setSkill] = useState<'brawn' | 'hack'>('brawn');
-    const [taker, setTaker] = useState('');
-    const [counts, setCounts] = useState(NO_CONSEQUENCES);
-    const [retrying, setRetrying] = useState(false);
     const { busy, refusal, post } = useRunAction();
-
-    const active = run.participants.filter((runner) => !runner.left);
-
-    // The card's sentence, as a list the server can apply in one go. Built in
-    // the order the cards print them — Alerts, then what lands on a Runner,
-    // then the Retry that sends them back round — so the log reads like the
-    // card rather than like whichever box was filled in first.
-    const parts: { effect: RunConsequenceEffect; times: number }[] = [
-        ...COUNTED_EFFECTS.filter(
-            (effect) => (Number(counts[effect]) || 0) > 0,
-        ).map((effect) => ({
-            effect: effect as RunConsequenceEffect,
-            times: Number(counts[effect]),
-        })),
-        ...(retrying
-            ? [{ effect: 'retry' as RunConsequenceEffect, times: 1 }]
-            : []),
-    ];
 
     return (
         <section className="flex flex-col gap-4 rounded-md border p-3">
@@ -1546,115 +1633,7 @@ function LeaderDesk({ run }: { run: RunView }) {
             )}
 
             {run.step === 'consequence' && (
-                <div className="flex flex-col gap-2">
-                    <p className="text-sm">
-                        You did not break it. Take the consequence the card
-                        prints — all of it: “1 alert, 1 wound” is one
-                        consequence with two parts, so set a count against each
-                        part and apply them together. One Runner takes the lot,
-                        and that is your call.
-                    </p>
-                    <div className="flex flex-wrap items-end gap-2">
-                        <div className="flex flex-col gap-1">
-                            <Label htmlFor={`taker-${run.id}`}>Taken by</Label>
-                            <select
-                                id={`taker-${run.id}`}
-                                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                                value={taker}
-                                onChange={(event) =>
-                                    setTaker(event.target.value)
-                                }
-                            >
-                                <option value="">Nobody (Alerts only)</option>
-                                {active.map((runner) => (
-                                    <option
-                                        key={runner.character_id}
-                                        value={runner.character_id}
-                                    >
-                                        {runner.name} ({runner.wounds}/
-                                        {runner.body} Wounds)
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        {COUNTED_EFFECTS.map((effect) => (
-                            <div className="flex flex-col gap-1" key={effect}>
-                                <Label htmlFor={`${effect}-${run.id}`}>
-                                    {EFFECT_LABELS[effect]}s
-                                </Label>
-                                <Input
-                                    id={`${effect}-${run.id}`}
-                                    type="number"
-                                    min={0}
-                                    max={9}
-                                    className="w-20"
-                                    value={counts[effect]}
-                                    onChange={(event) =>
-                                        setCounts((was) => ({
-                                            ...was,
-                                            [effect]: event.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                        ))}
-                        <label className="flex h-9 items-center gap-2 text-sm">
-                            <input
-                                type="checkbox"
-                                checked={retrying}
-                                onChange={(event) =>
-                                    setRetrying(event.target.checked)
-                                }
-                            />
-                            Retry
-                        </label>
-                        <Button
-                            size="sm"
-                            disabled={busy || parts.length === 0}
-                            onClick={() => {
-                                post(storeConsequence(run.id), {
-                                    effects: parts,
-                                    character_id:
-                                        taker === '' ? null : Number(taker),
-                                });
-                                setCounts(NO_CONSEQUENCES);
-                                setRetrying(false);
-                            }}
-                        >
-                            {parts.length === 0
-                                ? 'Nothing to apply'
-                                : `Apply ${describeParts(parts)}`}
-                        </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2 border-t pt-2">
-                        <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={busy}
-                            onClick={() =>
-                                post(storeConsequence(run.id), {
-                                    effect: 'end_the_run',
-                                })
-                            }
-                        >
-                            End the Run
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={busy || taker === ''}
-                            onClick={() =>
-                                post(ignoreEnd(run.id), {
-                                    character_id: Number(taker),
-                                })
-                            }
-                        >
-                            Ignore it: {run.ignored_end_the_run + 1} Wound
-                            {run.ignored_end_the_run + 1 === 1 ? '' : 's'}, Tags
-                            and Alerts, then retry
-                        </Button>
-                    </div>
-                </div>
+                <ConsequenceToTake run={run} busy={busy} post={post} />
             )}
 
             {run.step === 'breather' && (
@@ -1675,6 +1654,137 @@ function LeaderDesk({ run }: { run: RunView }) {
                 </div>
             )}
         </section>
+    );
+}
+
+/**
+ * What the Runners are taking, and the one decision left on it.
+ *
+ * The Run Leader does not retype the card here: Security has read it off the
+ * card and written it down, and rulebook 3.4.2 gives the Leader exactly one
+ * job — "the consequence must be taken by a single player, decided by the Run
+ * Leader". So this reads the slip and asks who.
+ *
+ * An End the Run on the slip is the other question, and it is a real choice
+ * rather than a way out: stop the run, or take Wounds and Tags instead and go
+ * round again. The price climbs — "for each 'End the Run' that you have
+ * ignored (including this one), you take 1 Wound, 1 Tag and 1 Alert" — so the
+ * second one costs 2 of each, and both buttons say what they cost before they
+ * are pressed. The Alert is worst of the three: it makes every card still
+ * ahead of them harder.
+ */
+function ConsequenceToTake({
+    run,
+    busy,
+    post,
+}: {
+    run: RunView;
+    busy: boolean;
+    post: (
+        url: ReturnType<typeof activate> | string,
+        data?: RunPayload,
+    ) => void;
+}) {
+    const slip = run.consequence;
+    const active = run.participants.filter((runner) => !runner.left);
+    const [taker, setTaker] = useState('');
+
+    if (!slip.marked) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                You did not break it. Waiting on Security to write down what the
+                card does to you.
+            </p>
+        );
+    }
+
+    const apply = (ignore: boolean) =>
+        post(storeConsequence(run.id), {
+            character_id: taker === '' ? null : Number(taker),
+            ignore_end_the_run: ignore,
+        });
+
+    const cost = slip.ignore_cost;
+    const each = `${cost} Wound${cost === 1 ? '' : 's'}, ${cost} Tag${cost === 1 ? '' : 's'} and ${cost} Alert${cost === 1 ? '' : 's'}`;
+
+    return (
+        <div className="flex flex-col gap-3">
+            <p className="text-sm">
+                Security marked the card:{' '}
+                <span className="font-medium">{slip.description}</span>. One
+                Runner takes the lot, and that is your call.
+            </p>
+
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="flex flex-col gap-1">
+                    <Label htmlFor={`taker-${run.id}`}>Taken by</Label>
+                    <select
+                        id={`taker-${run.id}`}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        value={taker}
+                        onChange={(event) => setTaker(event.target.value)}
+                    >
+                        <option value="">Nobody (Alerts only)</option>
+                        {active.map((runner) => (
+                            <option
+                                key={runner.character_id}
+                                value={runner.character_id}
+                            >
+                                {runner.name} ({runner.wounds}/{runner.body}{' '}
+                                Wounds)
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {!slip.ends_the_run && (
+                    <Button
+                        size="sm"
+                        disabled={busy || slip.is_empty}
+                        onClick={() => apply(false)}
+                    >
+                        {slip.is_empty
+                            ? 'Nothing to take'
+                            : `Take ${slip.description}`}
+                    </Button>
+                )}
+            </div>
+
+            {slip.ends_the_run && (
+                <div className="flex flex-col gap-2 border-t pt-3">
+                    <p className="text-sm">
+                        It ends the run — unless you would rather take{' '}
+                        <span className="font-medium">{each}</span> and face the
+                        card again. That price goes up by one every time you
+                        shrug one off.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={busy}
+                            onClick={() => apply(false)}
+                        >
+                            Take it — the run is over
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={busy || taker === ''}
+                            onClick={() => apply(true)}
+                        >
+                            Ignore it — {each}, then retry
+                        </Button>
+                    </div>
+                    {taker === '' && (
+                        <p className="text-xs text-muted-foreground">
+                            Name the Runner taking the Wounds and Tags before
+                            you can ignore it.
+                        </p>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 

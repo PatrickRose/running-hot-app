@@ -15,6 +15,7 @@ use App\Models\RunAccess;
 use App\Models\RunEvent;
 use App\Models\TechnologyHolding;
 use App\Services\RunEngine;
+use App\Support\Runs\ConsequenceSlip;
 use App\Support\Runs\SecurityPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -269,80 +270,36 @@ class RunController extends Controller
     }
 
     /**
-     * Take a consequence (rulebook 3.4.2).
+     * Security writes down what the card does (rulebook 3.4.2).
      *
-     * The Leader's call, because "the consequence must be taken by a single
-     * player, decided by the Run Leader" - so the person taking it is an
-     * argument rather than the person clicking.
+     * `defend`, because the card is Security's to read: they are holding it,
+     * and at the Consequence step they are the only person who has certainly
+     * seen it. What the Leader decides is who takes it, which is below.
      *
-     * **Several at once, because a card prints several.** "1 alert, 1 wound" is
-     * one consequence with two parts, and applying them a request at a time did
-     * not work: the first consequence event moves the derived cursor to the
-     * Breather, so the Leader was offered exactly one part of the card and the
-     * rest of the sentence quietly went unpaid. They are applied in the order
-     * given, inside one transaction, and each lands in the log as its own line -
-     * the ledger should read like the card, not like a single lump.
-     *
-     * A part that ends the run stops the rest: there is nobody left to take a
-     * Wound, and {@see RunEngine::applyConsequence()} would refuse it anyway.
+     * The whole slip at once, because a card prints one consequence however
+     * many parts it has: "1 alert, 1 wound" is two counts on one card, and
+     * marking them a request at a time would be two cards as far as the log
+     * was concerned. Marking again replaces it.
      */
-    public function consequence(Run $run, Request $request): RedirectResponse
-    {
-        Gate::authorize('lead', $run);
-
-        $validated = $request->validate([
-            // One effect, or a list of them. The single form is what a button
-            // that means one thing posts - End the Run has no count and no
-            // companion - and the list is what the card's own sentence needs.
-            'effect' => ['required_without:effects', Rule::enum(RunConsequence::class)],
-            'times' => ['nullable', 'integer', 'min:1', 'max:9'],
-            'effects' => ['required_without:effect', 'array', 'min:1', 'max:5'],
-            'effects.*.effect' => ['required', Rule::enum(RunConsequence::class)],
-            'effects.*.times' => ['nullable', 'integer', 'min:1', 'max:9'],
-            'character_id' => ['nullable', 'integer'],
-        ]);
-
-        $parts = $validated['effects'] ?? [[
-            'effect' => $validated['effect'],
-            'times' => $validated['times'] ?? 1,
-        ]];
-
-        $taker = $this->character($validated['character_id'] ?? null);
-        $descriptions = [];
-
-        foreach ($parts as $part) {
-            if ($run->refresh()->status->isFinished()) {
-                break;
-            }
-
-            $descriptions[] = $this->runs->applyConsequence(
-                $run,
-                RunConsequence::from($part['effect']),
-                $taker,
-                (int) ($part['times'] ?? 1),
-                $request->user(),
-            )->description;
-        }
-
-        return back()->with('status', implode(' ', $descriptions));
-    }
-
-    /**
-     * Spend Alerts to add a consequence Security's own way (rulebook 3.4.2).
-     */
-    public function triggerWithAlerts(Run $run, Request $request): RedirectResponse
+    public function markConsequence(Run $run, Request $request): RedirectResponse
     {
         Gate::authorize('defend', $run);
 
         $validated = $request->validate([
-            'effect' => ['required', Rule::enum(RunConsequence::class)],
-            'character_id' => ['nullable', 'integer'],
+            'effects' => ['present', 'array'],
+            'effects.*' => ['nullable', 'integer', 'min:0', 'max:9'],
         ]);
 
-        $event = $this->runs->triggerWithAlerts(
+        /** @var array<string, int> $effects */
+        $effects = array_filter(
+            $validated['effects'],
+            fn (mixed $times, string $key): bool => RunConsequence::tryFrom($key) !== null && (int) $times > 0,
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        $event = $this->runs->markConsequence(
             $run,
-            RunConsequence::from($validated['effect']),
-            $this->character($validated['character_id'] ?? null),
+            ConsequenceSlip::of($effects),
             $request->user(),
         );
 
@@ -350,20 +307,57 @@ class RunController extends Controller
     }
 
     /**
-     * Shrug off an End the Run and pay for it (rulebook 3.4.2).
+     * The Run Leader takes what Security marked (rulebook 3.4.2).
+     *
+     * The Leader's call, because "the consequence must be taken by a single
+     * player, decided by the Run Leader" - so the person taking it is an
+     * argument rather than the person clicking, and it is asked once for the
+     * whole slip rather than once per part.
+     *
+     * `end_the_run` is the other half of the decision and only means anything
+     * where the slip carries one: taking it stops the run, and ignoring it
+     * swaps it for Wounds, Tags, an Alert and a Retry at a price that climbs
+     * every time (3.4.2).
      */
-    public function ignoreEnd(Run $run, Request $request): RedirectResponse
+    public function consequence(Run $run, Request $request): RedirectResponse
     {
         Gate::authorize('lead', $run);
 
         $validated = $request->validate([
-            'character_id' => ['required', 'integer'],
+            'character_id' => ['nullable', 'integer'],
+            'ignore_end_the_run' => ['nullable', 'boolean'],
         ]);
 
-        /** @var Character $taker */
-        $taker = Character::query()->findOrFail($validated['character_id']);
+        $slip = $this->runs->applyMarkedConsequence(
+            $run,
+            $this->character($validated['character_id'] ?? null),
+            (bool) ($validated['ignore_end_the_run'] ?? false),
+            $request->user(),
+        );
 
-        $event = $this->runs->ignoreEndTheRun($run, $taker, $request->user());
+        return back()->with('status', sprintf('Applied: %s.', $slip->describe()));
+    }
+
+    /**
+     * Spend Alerts to add a consequence Security's own way (rulebook 3.4.2).
+     *
+     * It lands on the slip rather than happening on its own, so the Leader
+     * still names who takes it and still answers for an End the Run bought
+     * this way. The Alerts leave the moment this is called.
+     */
+    public function triggerWithAlerts(Run $run, Request $request): RedirectResponse
+    {
+        Gate::authorize('defend', $run);
+
+        $validated = $request->validate([
+            'effect' => ['required', Rule::enum(RunConsequence::class)],
+        ]);
+
+        $event = $this->runs->buyConsequenceWithAlerts(
+            $run,
+            RunConsequence::from($validated['effect']),
+            $request->user(),
+        );
 
         return back()->with('status', $event->description);
     }

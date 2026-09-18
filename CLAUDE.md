@@ -734,10 +734,44 @@ left, so spending them buys something now and makes the rest of the Facility
 easier. Which means the strength curve reads the Alerts *standing*, not the
 Alerts generated.
 
-**Ignoring an End the Run is priced on the count, not as a flag.** "For each
+**The Consequence step is a handshake, and the two halves are different
+jobs.** Security marks what the card does and the Run Leader takes it. That is
+3.4.2's own division: the consequence comes off the card, which Security is
+holding and has certainly read, and the one thing the rulebook gives the Leader
+is that "the consequence must be taken by a single player, decided by the Run
+Leader". The Leader used to type the card's numbers in themselves, which asked
+the side that cannot see the card to read it out.
+
+So there is a **slip**, `App\Support\Runs\ConsequenceSlip`, derived off the
+pass's own events rather than stored — same reason the cursor is, and it matters
+more here because both sides read it at once. Its two halves behave differently
+on purpose: `markConsequence()` *replaces* the card half, because a count typed
+wrong is corrected by marking the right one, while `buyConsequenceWithAlerts()`
+appends and survives a re-mark, because those Alerts are already gone. Marking
+an empty slip is a real answer — "the card does nothing" — so
+`consequenceIsMarked()` reads the event rather than the slip, and nothing can be
+taken before Security has written something down.
+
+**An Alert-bought consequence lands on the slip rather than happening on its
+own.** "Security players may also use any alerts to trigger one of the other
+effects as well" reads as one more thing on the pile the Runners are about to
+take, so the Leader still names who takes it and still answers for an End the
+Run bought that way. It used to apply immediately, which took the choice off the
+Leader and moved the cursor to the Breather underneath them.
+
+**An End the Run is a question, not a consequence, so it is answered last.**
+Everything else on the slip lands first — the Runners take what the card does to
+them either way — and then the run either stops or does not.
+`applyMarkedConsequence()` is the one act that does all of it, so a card
+printing "1 tag, End the run" can no longer pay half of itself.
+
+**Ignoring one is priced on the count, not as a flag.** "For each
 'End the Run' that you have ignored (including this one), you take 1 Wound, 1
 Tag and 1 Alert" — so the first costs 1 of each and the second 2 of each, and it
-converts into a Retry.
+converts into a Retry. The screen says that number before the button is pressed,
+quoted by the server as `ignore_cost`. There is deliberately no separate
+`ignore-end` route any more: it was a second way to reach `ignoreEndTheRun()`
+that skipped Security's marking entirely.
 
 **Where the rulebook says "may", nothing moves.** Walking away at the Breather
 "may have an effect on your gang's Notoriety", so no Notoriety moves and the

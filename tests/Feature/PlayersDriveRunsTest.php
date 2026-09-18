@@ -29,6 +29,9 @@ use App\Services\RunEngine;
 use App\Services\TurnEngine;
 use App\Support\FacilityTypeBlueprint;
 use App\Support\RunPresenter;
+use App\Support\Runs\ChallengeStrength;
+use App\Support\Runs\ConsequenceSlip;
+use App\Support\Runs\DicePool;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\FakeDice;
 use Tests\TestCase;
@@ -385,23 +388,30 @@ class PlayersDriveRunsTest extends TestCase
      * The bug this pins: the cursor is derived from the log, and the *first*
      * consequence event moves the run to the Breather - so applying the parts
      * one request at a time offered the Leader exactly one of them and the rest
-     * of the card's sentence went unpaid. They go in together.
+     * of the card's sentence went unpaid. Security marks the whole card and the
+     * Leader takes the whole card.
      */
     public function test_a_card_printing_several_consequences_applies_all_of_them(): void
     {
         [$leaderUser, $leader] = $this->runner();
+        $securityUser = $this->seat(CharacterRole::Security);
         $run = $this->begun($leader);
-        $this->activate($run);
+        $this->atConsequence($run);
 
         $alertsBefore = $run->refresh()->alerts;
+
+        $this->actingAs($securityUser)
+            ->post(route('runs.consequences.mark', $run), [
+                'effects' => [
+                    RunConsequence::Alert->value => 2,
+                    RunConsequence::Wound->value => 1,
+                ],
+            ])
+            ->assertRedirect();
 
         $this->actingAs($leaderUser)
             ->post(route('runs.consequences.store', $run), [
                 'character_id' => $leader->id,
-                'effects' => [
-                    ['effect' => RunConsequence::Alert->value, 'times' => 2],
-                    ['effect' => RunConsequence::Wound->value, 'times' => 1],
-                ],
             ])
             ->assertRedirect();
 
@@ -413,26 +423,125 @@ class PlayersDriveRunsTest extends TestCase
     }
 
     /**
-     * A part that ends the run stops the rest of the sentence: there is nobody
-     * left to take the Wound, and the engine would refuse it anyway.
+     * A card that prints damage *and* an End the Run does both, in that order:
+     * the Runners take what the card does to them and then the run stops. The
+     * End the Run is answered last because it is the one part of the slip that
+     * is a question rather than a consequence.
      */
-    public function test_a_consequence_that_ends_the_run_stops_the_ones_after_it(): void
+    public function test_a_card_that_ends_the_run_lands_its_damage_first(): void
     {
         [$leaderUser, $leader] = $this->runner();
+        $securityUser = $this->seat(CharacterRole::Security);
         $run = $this->begun($leader);
-        $this->activate($run);
+        $this->atConsequence($run);
 
-        $this->actingAs($leaderUser)
-            ->post(route('runs.consequences.store', $run), [
-                'character_id' => $leader->id,
+        $this->actingAs($securityUser)
+            ->post(route('runs.consequences.mark', $run), [
                 'effects' => [
-                    ['effect' => RunConsequence::EndTheRun->value],
-                    ['effect' => RunConsequence::Wound->value, 'times' => 3],
+                    RunConsequence::Wound->value => 1,
+                    RunConsequence::EndTheRun->value => 1,
                 ],
             ])
             ->assertRedirect();
 
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(1, $leader->refresh()->wounds);
         $this->assertSame(RunStatus::Failed, $run->refresh()->status);
+    }
+
+    /**
+     * The other answer to an End the Run: take Wounds, Tags and an Alert
+     * instead and face the card again (3.4.2). The price is the number already
+     * ignored plus this one, so the first costs 1 of each.
+     */
+    public function test_the_run_leader_may_ignore_an_end_the_run(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $securityUser = $this->seat(CharacterRole::Security);
+        $run = $this->begun($leader);
+        $this->atConsequence($run);
+
+        $alertsBefore = $run->refresh()->alerts;
+
+        $this->actingAs($securityUser)
+            ->post(route('runs.consequences.mark', $run), [
+                'effects' => [RunConsequence::EndTheRun->value => 1],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+                'ignore_end_the_run' => true,
+            ])
+            ->assertRedirect();
+
+        $run = $run->refresh();
+        $leader = $leader->refresh();
+
+        $this->assertSame(RunStatus::Running, $run->status);
+        $this->assertSame(1, $run->ignored_end_the_run);
+        $this->assertTrue($run->retry_pending);
+        $this->assertSame(1, $leader->wounds);
+        $this->assertSame(1, $leader->tags);
+        $this->assertSame($alertsBefore + 1, $run->alerts);
+    }
+
+    /**
+     * The card is Security's to read, so the Run Leader cannot write down what
+     * it does - and Security cannot decide who takes it. Two halves, two
+     * seats, which is the whole point of the handshake.
+     */
+    public function test_the_run_leader_cannot_mark_the_card(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $run = $this->begun($leader);
+        $this->atConsequence($run);
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.mark', $run), [
+                'effects' => [RunConsequence::Wound->value => 9],
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_security_cannot_decide_who_takes_it(): void
+    {
+        [, $leader] = $this->runner();
+        $securityUser = $this->seat(CharacterRole::Security);
+        $run = $this->begun($leader);
+        $this->atConsequence($run);
+
+        $this->mark($run, [RunConsequence::Wound->value => 1]);
+
+        $this->actingAs($securityUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+            ])
+            ->assertForbidden();
+    }
+
+    /**
+     * And the Leader cannot take a consequence nobody has written down, which
+     * is what stops the old form's numbers being invented at this end.
+     */
+    public function test_nothing_can_be_taken_before_security_marks_it(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $run = $this->begun($leader);
+        $this->atConsequence($run);
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+            ])
+            ->assertSessionHasErrors('consequence');
+
         $this->assertSame(0, $leader->refresh()->wounds);
     }
 
@@ -936,6 +1045,58 @@ class PlayersDriveRunsTest extends TestCase
     private function activate(Run $run): void
     {
         app(RunEngine::class)->activate($run);
+    }
+
+    /**
+     * A run at the Consequence step, which is the only way to reach one: the
+     * card comes on, Security rolls, and the Runners fail to break it.
+     *
+     * Both pools are asked for rather than written out, for the reason
+     * RunEngineTest's walkPast() does it - a strength or a group size the test
+     * guessed at would run the fake dice dry somewhere else entirely.
+     */
+    private function atConsequence(Run $run, RunnerSkill $skill = RunnerSkill::Brawn): void
+    {
+        $this->activate($run);
+
+        $engine = app(RunEngine::class);
+        $run = $run->refresh();
+        $cursor = $engine->cursor($run);
+
+        $strength = ChallengeStrength::for(
+            printed: 1,
+            cardsPassed: $run->active_cards_passed,
+            alerts: $run->alertsAvailable(),
+            boosts: $cursor->activation?->boosts ?? 0,
+        );
+
+        $this->dice->willRoll($strength->total(), 8);
+        $engine->defend($run, 1);
+
+        $pool = DicePool::for(
+            leaderSkill: (int) $run->leader?->getAttribute($skill->column()),
+            leaderWounded: ($run->leader?->wounds ?? 0) > 0,
+            others: $run->activeParticipants()
+                ->reject(fn ($p): bool => $p->character_id === $run->run_leader_character_id)
+                ->mapWithKeys(fn ($p): array => [$p->character_id => [
+                    'skill' => (int) $p->character->getAttribute($skill->column()),
+                    'wounded' => $p->character->wounds > 0,
+                ]])
+                ->all(),
+        );
+
+        $this->dice->willRoll($pool->total(), 1);
+        $engine->challenge($run->refresh(), $skill);
+    }
+
+    /**
+     * Security writing the card down, which is what the Run Leader then takes.
+     *
+     * @param  array<string, int>  $effects
+     */
+    private function mark(Run $run, array $effects): void
+    {
+        app(RunEngine::class)->markConsequence($run->refresh(), ConsequenceSlip::of($effects));
     }
 
     /**

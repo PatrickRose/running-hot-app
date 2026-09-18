@@ -33,6 +33,7 @@ use App\Support\Runs\ActivationCost;
 use App\Support\Runs\AlertSchedule;
 use App\Support\Runs\ChallengeOutcome;
 use App\Support\Runs\ChallengeStrength;
+use App\Support\Runs\ConsequenceSlip;
 use App\Support\Runs\DicePool;
 use App\Support\Runs\RunCursor;
 use App\Support\Runs\RunGroup;
@@ -901,6 +902,49 @@ class RunEngine
     }
 
     /**
+     * Security writes down what the card does (rulebook 3.4.2).
+     *
+     * The card is Security's to read - they are holding it, and 3.4.2 has the
+     * consequence come off the card rather than out of a negotiation - so this
+     * is where a consequence enters the run. What the Run Leader then decides
+     * is who takes it, which is the only part of it the rulebook gives them.
+     *
+     * Marking again **replaces** the card half rather than adding to it, for
+     * the reason handing cards to the Chair sets the Council's hand: a count
+     * typed wrong is corrected by marking the right one, not by finding an
+     * undo. Alerts already spent survive it, because they are gone - they are
+     * their own events and {@see self::markedConsequence()} adds them back on.
+     */
+    public function markConsequence(Run $run, ConsequenceSlip $slip, ?User $actor = null): RunEvent
+    {
+        $this->requireRunning($run);
+
+        $cursor = $this->cursor($run);
+
+        if ($cursor->step !== RunStep::Consequence) {
+            throw ValidationException::withMessages([
+                'consequence' => sprintf(
+                    'A consequence is marked once the Runners have failed to break the card, and they have not: the run is at the %s step.',
+                    $cursor->step->label(),
+                ),
+            ]);
+        }
+
+        return $this->record(
+            $run,
+            RunEvent::TYPE_CONSEQUENCE_MARKED,
+            $slip->isEmpty()
+                ? 'Security marked the card as doing nothing.'
+                : sprintf('Security marked the card: %s.', $slip->describe()),
+            actor: $actor,
+            card: $cursor->card,
+            pass: $cursor->pass,
+            step: RunStep::Consequence,
+            payload: ['effects' => $slip->toArray()],
+        );
+    }
+
+    /**
      * Spend Alerts to add a consequence Security's own way (rulebook 3.4.2).
      *
      * The other thing Alerts are for. The prices are steep - 2 for a Tag, 5 for
@@ -908,11 +952,17 @@ class RunEngine
      * Alerts being spent as temporary Credits, which is the decision the
      * Security player is there to make. Spending them also lowers the strength
      * every remaining card is getting from the Alert curve.
+     *
+     * It *adds to the slip* rather than happening on its own: "Security players
+     * may also use any alerts to trigger one of the other effects as well"
+     * reads as one more thing on the pile the Runners are about to take, so the
+     * Run Leader still decides who takes it and still answers for an End the
+     * Run bought this way. The Alerts leave here and now, which is why this is
+     * an event of its own rather than a re-mark.
      */
-    public function triggerWithAlerts(
+    public function buyConsequenceWithAlerts(
         Run $run,
         RunConsequence $effect,
-        ?Character $taker = null,
         ?User $actor = null,
     ): RunEvent {
         $this->requireRunning($run);
@@ -935,11 +985,152 @@ class RunEngine
             ]);
         }
 
-        return DB::transaction(function () use ($run, $effect, $taker, $cost, $actor): RunEvent {
+        $cursor = $this->cursor($run);
+
+        if ($cursor->step !== RunStep::Consequence) {
+            throw ValidationException::withMessages([
+                'alerts' => sprintf(
+                    'A consequence bought with Alerts is added to the one the card prints, so it waits for the Consequence step: the run is at the %s step.',
+                    $cursor->step->label(),
+                ),
+            ]);
+        }
+
+        return DB::transaction(function () use ($run, $cursor, $effect, $cost, $actor): RunEvent {
             $run->forceFill(['alerts_spent' => $run->alerts_spent + $cost])->save();
 
-            return $this->applyConsequence($run->refresh(), $effect, $taker, 1, $actor);
+            return $this->record(
+                $run->refresh(),
+                RunEvent::TYPE_CONSEQUENCE_BOUGHT,
+                sprintf(
+                    'Security spent %d Alert%s to add %s to the consequence.',
+                    $cost,
+                    $cost === 1 ? '' : 's',
+                    $effect->label(),
+                ),
+                actor: $actor,
+                card: $cursor->card,
+                pass: $cursor->pass,
+                step: RunStep::Consequence,
+                payload: ['effect' => $effect->value, 'cost' => $cost],
+            );
         });
+    }
+
+    /**
+     * What is on the slip right now: the card, plus whatever Alerts have bought.
+     *
+     * Derived off the pass's own events for the reason the cursor is - a slip
+     * kept in a column beside the log is a second source of truth, and this one
+     * would be read by both sides of a run at once. The card half is the *last*
+     * mark, because marking again replaces it; the bought half is every
+     * purchase, because each one has already cost Alerts.
+     */
+    public function markedConsequence(Run $run): ConsequenceSlip
+    {
+        $cursor = $this->cursor($run);
+        $events = $this->passEvents($run, $cursor->pass);
+
+        // Applied already, so there is nothing waiting. A pass only ever
+        // resolves once.
+        if ($events->whereIn('type', [RunEvent::TYPE_CONSEQUENCE, RunEvent::TYPE_IGNORED_END_THE_RUN])->isNotEmpty()) {
+            return ConsequenceSlip::empty();
+        }
+
+        $marked = $events->where('type', RunEvent::TYPE_CONSEQUENCE_MARKED)->last();
+
+        /** @var array<string, int> $effects */
+        $effects = $marked?->payload['effects'] ?? [];
+        $slip = ConsequenceSlip::of($effects);
+
+        foreach ($events->where('type', RunEvent::TYPE_CONSEQUENCE_BOUGHT) as $bought) {
+            $effect = RunConsequence::tryFrom((string) ($bought->payload['effect'] ?? ''));
+
+            if ($effect !== null) {
+                $slip = $slip->plus($effect);
+            }
+        }
+
+        return $slip;
+    }
+
+    /**
+     * Whether Security has written anything down for this pass at all.
+     *
+     * Read off the mark rather than off the slip, because "the card does
+     * nothing" is a real answer and an empty slip is what it looks like.
+     */
+    public function consequenceIsMarked(Run $run): bool
+    {
+        $cursor = $this->cursor($run);
+
+        return $this->passEvents($run, $cursor->pass)
+            ->whereIn('type', [RunEvent::TYPE_CONSEQUENCE_MARKED, RunEvent::TYPE_CONSEQUENCE_BOUGHT])
+            ->isNotEmpty();
+    }
+
+    /**
+     * The Run Leader takes what is on the slip (rulebook 3.4.2).
+     *
+     * One act rather than one per effect, because the card prints one
+     * consequence however many parts it has and "the consequence must be taken
+     * by a single player, decided by the Run Leader" is a decision about all of
+     * it. So the Leader names the Runner once.
+     *
+     * An End the Run on the slip is not applied with the rest: it is the
+     * question 3.4.2 hands the Runners - stop, or take Wounds and Tags instead
+     * and go round again - so it is answered here and answered last, after the
+     * damage the card does either way has landed.
+     */
+    public function applyMarkedConsequence(
+        Run $run,
+        ?Character $taker = null,
+        bool $ignoreEndTheRun = false,
+        ?User $actor = null,
+    ): ConsequenceSlip {
+        $this->requireRunning($run);
+
+        if (! $this->consequenceIsMarked($run)) {
+            throw ValidationException::withMessages([
+                'consequence' => 'Security has not marked what the card does yet.',
+            ]);
+        }
+
+        $slip = $this->markedConsequence($run);
+
+        // Every part of the slip but the Alerts lands on somebody, so the
+        // Leader is asked for a Runner up front rather than part way through.
+        $needsTaker = collect($slip->damage())
+            ->contains(fn (array $part): bool => $part['effect']->appliesToCharacter());
+
+        if (($needsTaker || ($slip->endsTheRun() && $ignoreEndTheRun)) && $taker === null) {
+            throw ValidationException::withMessages([
+                'character_id' => 'Name the Runner taking it.',
+            ]);
+        }
+
+        if ($taker !== null) {
+            $taker = $this->requireActiveRunner($run, $taker);
+        }
+
+        foreach ($slip->damage() as $part) {
+            if ($run->refresh()->status->isFinished()) {
+                break;
+            }
+
+            $this->applyConsequence($run, $part['effect'], $taker, $part['times'], $actor);
+        }
+
+        if ($slip->endsTheRun() && ! $run->refresh()->status->isFinished()) {
+            if ($ignoreEndTheRun) {
+                /** @var Character $taker */
+                $this->ignoreEndTheRun($run, $taker, $actor);
+            } else {
+                $this->applyConsequence($run, RunConsequence::EndTheRun, null, 1, $actor);
+            }
+        }
+
+        return $slip;
     }
 
     /**

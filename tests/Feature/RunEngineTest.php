@@ -25,6 +25,7 @@ use App\Services\Dice;
 use App\Services\FacilityDefenceService;
 use App\Services\RunEngine;
 use App\Support\Runs\ChallengeStrength;
+use App\Support\Runs\ConsequenceSlip;
 use App\Support\Runs\DicePool;
 use App\Support\Runs\SecurityPayment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -770,36 +771,137 @@ class RunEngineTest extends TestCase
         $this->assertSame(1, $outcome->strength->fromAlerts);
     }
 
-    public function test_security_may_spend_alerts_to_trigger_an_effect(): void
+    /**
+     * Alerts buy a consequence onto the slip rather than applying one on their
+     * own: the Alerts are gone at once, and the Run Leader still decides who
+     * takes what Security has bought.
+     */
+    public function test_security_may_spend_alerts_to_add_to_the_consequence(): void
     {
-        $run = $this->started(['body' => 9]);
-        $this->engine()->applyConsequence($run, RunConsequence::Alert, times: 6);
+        $run = $this->atConsequence(['body' => 9]);
+        $this->raiseAlerts($run, 6);
 
-        $this->engine()->triggerWithAlerts($run->refresh(), RunConsequence::Wound, $run->leader);
+        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Wound);
 
         $run = $run->refresh();
         $this->assertSame(5, $run->alerts_spent);
-        $this->assertSame(1, $run->alertsAvailable());
+
+        // On the slip, and nobody has taken it yet.
+        $this->assertSame(1, $this->engine()->markedConsequence($run)->timesOf(RunConsequence::Wound));
+        $this->assertSame(0, $run->leader?->refresh()->wounds);
+
+        $this->engine()->applyMarkedConsequence($run, $run->leader);
+
         $this->assertSame(1, $run->leader?->refresh()->wounds);
     }
 
     public function test_alerts_cannot_buy_more_alerts(): void
+    {
+        $run = $this->atConsequence();
+        $this->raiseAlerts($run, 20);
+
+        $this->expectException(ValidationException::class);
+
+        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Alert);
+    }
+
+    public function test_an_effect_security_cannot_afford_is_refused(): void
+    {
+        $run = $this->atConsequence();
+
+        $this->expectException(ValidationException::class);
+
+        $this->engine()->buyConsequenceWithAlerts($run, RunConsequence::EndTheRun);
+    }
+
+    /**
+     * And it waits for the step it belongs to: a consequence bought with
+     * Alerts is added to the one the card prints, so there is nothing to add
+     * it to before the Runners have failed the check.
+     */
+    public function test_alerts_cannot_buy_a_consequence_before_there_is_one(): void
     {
         $run = $this->started();
         $this->engine()->applyConsequence($run, RunConsequence::Alert, times: 20);
 
         $this->expectException(ValidationException::class);
 
-        $this->engine()->triggerWithAlerts($run->refresh(), RunConsequence::Alert);
+        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Wound);
     }
 
-    public function test_an_effect_security_cannot_afford_is_refused(): void
+    /**
+     * Marking again replaces the card half, because a count typed wrong is
+     * corrected rather than undone - but Alerts already spent stay on the
+     * slip, since they are gone either way.
+     */
+    public function test_marking_again_replaces_the_card_but_not_what_alerts_bought(): void
     {
-        $run = $this->started();
+        $run = $this->atConsequence(['body' => 9]);
+        $this->raiseAlerts($run, 6);
+
+        $this->engine()->markConsequence($run->refresh(), ConsequenceSlip::of(['wound' => 3]));
+        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Tag);
+        $this->engine()->markConsequence($run->refresh(), ConsequenceSlip::of(['wound' => 1]));
+
+        $slip = $this->engine()->markedConsequence($run->refresh());
+
+        $this->assertSame(1, $slip->timesOf(RunConsequence::Wound));
+        $this->assertSame(1, $slip->timesOf(RunConsequence::Tag));
+    }
+
+    /**
+     * Nothing is taken until Security has written something down. "The card
+     * does nothing" is a real answer and is not this - it is a mark of its own.
+     */
+    public function test_a_consequence_cannot_be_taken_before_it_is_marked(): void
+    {
+        $run = $this->atConsequence();
 
         $this->expectException(ValidationException::class);
 
-        $this->engine()->triggerWithAlerts($run, RunConsequence::EndTheRun);
+        $this->engine()->applyMarkedConsequence($run, $run->leader);
+    }
+
+    /**
+     * An End the Run on the slip is a question rather than a consequence, and
+     * both answers are real. Taking it stops the run.
+     */
+    public function test_taking_an_end_the_run_stops_the_run(): void
+    {
+        $run = $this->atConsequence();
+
+        $this->engine()->markConsequence($run, ConsequenceSlip::of(['end_the_run' => 1]));
+        $this->engine()->applyMarkedConsequence($run->refresh(), $run->leader);
+
+        $this->assertSame(RunStatus::Failed, $run->refresh()->status);
+    }
+
+    /**
+     * And ignoring it costs one more of each every time, which is what "for
+     * each 'End the Run' that you have ignored (including this one)" prices.
+     */
+    public function test_ignoring_an_end_the_run_costs_one_more_each_time(): void
+    {
+        $run = $this->atConsequence(['body' => 20]);
+        $leader = $run->leader;
+
+        $this->engine()->markConsequence($run, ConsequenceSlip::of(['end_the_run' => 1]));
+        $this->engine()->applyMarkedConsequence($run->refresh(), $leader, ignoreEndTheRun: true);
+
+        $this->assertSame(1, $leader?->refresh()->wounds);
+        $this->assertSame(1, $leader?->refresh()->tags);
+        $this->assertTrue($run->refresh()->retry_pending);
+
+        // Round again, and the second one costs 2 of each on top of the first.
+        $this->engine()->advance($run->refresh());
+        $run = $this->toConsequence($run->refresh());
+
+        $this->engine()->markConsequence($run, ConsequenceSlip::of(['end_the_run' => 1]));
+        $this->engine()->applyMarkedConsequence($run->refresh(), $leader, ignoreEndTheRun: true);
+
+        $this->assertSame(3, $leader?->refresh()->wounds);
+        $this->assertSame(3, $leader?->refresh()->tags);
+        $this->assertSame(2, $run->refresh()->ignored_end_the_run);
     }
 
     public function test_a_retry_faces_the_same_card_again(): void
@@ -1832,6 +1934,69 @@ class RunEngineTest extends TestCase
         return $this->engine()->begin(
             $this->engine()->submit($turn, $facility, $leader)
         );
+    }
+
+    /**
+     * Alerts standing, written straight onto the run.
+     *
+     * Applying an Alert as a *consequence* would be the honest way round and is
+     * no good here: the consequence event is what moves the cursor off the step
+     * these tests are trying to sit on. Alerts are a pool for the run and not a
+     * tracker, so nothing is bypassed by putting them there.
+     */
+    private function raiseAlerts(Run $run, int $alerts): void
+    {
+        $run->forceFill(['alerts' => $run->alerts + $alerts])->save();
+    }
+
+    /**
+     * A run already at the Consequence step, which is the only way to reach
+     * one: the card comes on, Security rolls, and the Runners fail the check.
+     *
+     * @param  array<string, mixed>  $leaderAttributes
+     */
+    private function atConsequence(array $leaderAttributes = [], int $physical = 2): Run
+    {
+        return $this->toConsequence($this->started($leaderAttributes, physical: $physical));
+    }
+
+    /**
+     * The same, for a run that is already going - a Retry sends the Runners
+     * back at the same card, and they have to fail it again to be asked the
+     * question a second time.
+     */
+    private function toConsequence(Run $run): Run
+    {
+        if (! $this->engine()->cursor($run)->cardIsActive()) {
+            $this->engine()->activate($run);
+        }
+
+        $run = $run->refresh();
+        $cursor = $this->engine()->cursor($run);
+
+        // Both pools are asked for rather than written out, for the reason
+        // walkPast() asks: a strength this test guessed at would run the fake
+        // dice dry somewhere else entirely.
+        $strength = ChallengeStrength::for(
+            printed: 1,
+            cardsPassed: $run->active_cards_passed,
+            alerts: $run->alertsAvailable(),
+            boosts: $cursor->activation?->boosts ?? 0,
+        );
+
+        $this->dice->willRoll($strength->total(), 8);
+        $this->engine()->defend($run, 1);
+
+        $pool = DicePool::for(
+            leaderSkill: (int) $run->leader?->brawn,
+            leaderWounded: ($run->leader?->wounds ?? 0) > 0,
+            others: [],
+        );
+
+        $this->dice->willRoll($pool->total(), 1);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
+
+        return $run->refresh();
     }
 
     /**

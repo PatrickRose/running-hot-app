@@ -1046,6 +1046,26 @@ export type RunDicePool = {
     total: number;
 };
 
+/**
+ * What Security has written down that the Runners are about to take.
+ *
+ * Both sides get it: Security marks the card and the Run Leader decides who
+ * takes it, so it has to be the same slip in front of both of them.
+ */
+export type RunConsequenceSlip = {
+    /** Whether Security has written anything at all, which "nothing" is not. */
+    marked: boolean;
+    effects: Partial<Record<RunConsequenceEffect, number>>;
+    description: string;
+    is_empty: boolean;
+    ends_the_run: boolean;
+    /**
+     * Wounds, Tags and Alerts it would cost to shrug off an End the Run right
+     * now — one more than the number already ignored (rulebook 3.4.2).
+     */
+    ignore_cost: number;
+};
+
 export type RunView = {
     id: number;
     status: 'submitted' | 'running' | 'succeeded' | 'failed';
@@ -1070,6 +1090,7 @@ export type RunView = {
     pass: number;
     step: RunStep;
     step_label: string;
+    consequence: RunConsequenceSlip;
     /**
      * Null for the Runners. A Facility's stack depth is Secret (rulebook 3.4.1,
      * footnote 11), so they find out by running out of cards.

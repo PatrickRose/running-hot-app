@@ -451,6 +451,14 @@ class RunPresenter
             'step' => $cursor->step->value,
             'step_label' => $cursor->step->label(),
 
+            // What Security has written down that the Runners are about to
+            // take. Both sides read it, and that is the point of it: Security
+            // fills it in and the Run Leader decides who takes it, so it has to
+            // be the same slip in front of both of them. Nothing is given away
+            // - by the Consequence step the card is Active and face up, so the
+            // Runners could read the same sentence off it themselves.
+            'consequence' => $this->consequence($run),
+
             // Footnote 11 makes the depth of a stack Secret, so this is the one
             // number that is withheld from the Runners outright rather than
             // shown in less detail.
@@ -523,6 +531,36 @@ class RunPresenter
             'known_technologies' => $this->knownTechnologies($run),
 
             'log' => $this->log($run, $privileged),
+        ];
+    }
+
+    /**
+     * The slip Security has written down, and what answering it would cost.
+     *
+     * Not secret from either side: at the Consequence step the card is Active
+     * and face up, so the Runners can read the same sentence off it. What this
+     * saves them is disagreeing about it - Security marks the card, the Run
+     * Leader takes what is marked, and neither is retyping the other's numbers.
+     *
+     * `ignore_cost` is the escalating price of shrugging off an End the Run:
+     * "for each 'End the Run' that you have ignored (including this one), you
+     * take 1 Wound, 1 Tag and 1 Alert", so the number on offer now is one more
+     * than the number already ignored (3.4.2). Quoted here rather than added up
+     * in the browser, for the reason every other number on this page is.
+     *
+     * @return array<string, mixed>
+     */
+    private function consequence(Run $run): array
+    {
+        $slip = $this->engine->markedConsequence($run);
+
+        return [
+            'marked' => $this->engine->consequenceIsMarked($run),
+            'effects' => $slip->toArray(),
+            'description' => $slip->describe(),
+            'is_empty' => $slip->isEmpty(),
+            'ends_the_run' => $slip->endsTheRun(),
+            'ignore_cost' => $run->ignored_end_the_run + 1,
         ];
     }
 

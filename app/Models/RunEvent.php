@@ -90,6 +90,20 @@ class RunEvent extends Model
 
     public const TYPE_CHALLENGE = 'challenge';
 
+    /**
+     * Security writing down what the card does, before anybody takes it. The
+     * card half of the slip: marking again replaces it, so a mistyped count is
+     * corrected rather than added to.
+     */
+    public const TYPE_CONSEQUENCE_MARKED = 'consequence_marked';
+
+    /**
+     * Security spending Alerts to add one more consequence to that slip. Its
+     * own event because the Alerts are gone the moment it is recorded, so it
+     * survives Security re-marking the card half.
+     */
+    public const TYPE_CONSEQUENCE_BOUGHT = 'consequence_bought';
+
     public const TYPE_CONSEQUENCE = 'consequence';
 
     public const TYPE_IGNORED_END_THE_RUN = 'ignored_end_the_run';

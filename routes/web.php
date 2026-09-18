@@ -113,11 +113,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('runs/{run}/charge', [RunController::class, 'charge'])->name('runs.charge');
     Route::post('runs/{run}/defend', [RunController::class, 'defend'])->name('runs.defend');
     Route::post('runs/{run}/challenge', [RunController::class, 'challenge'])->name('runs.challenge');
+    Route::post('runs/{run}/consequences/mark', [RunController::class, 'markConsequence'])
+        ->name('runs.consequences.mark');
     Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
         ->name('runs.consequences.store');
     Route::post('runs/{run}/alerts', [RunController::class, 'triggerWithAlerts'])
         ->name('runs.alerts.trigger');
-    Route::post('runs/{run}/ignore-end', [RunController::class, 'ignoreEnd'])->name('runs.ignore-end');
     Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
     Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 
