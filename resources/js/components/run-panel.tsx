@@ -1,4 +1,5 @@
 import { router } from '@inertiajs/react';
+import { ChevronDownIcon } from 'lucide-react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
@@ -11,8 +12,14 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import {
     activate,
     advance,
@@ -119,76 +126,160 @@ export function RunPanel({ run }: { run: RunView }) {
     const finished = run.status === 'succeeded' || run.status === 'failed';
     const active = run.participants.filter((runner) => !runner.left);
 
+    // A failed run opens closed: there is nothing left to do on it, and a turn
+    // can leave four or five of them stacked above the one group still inside.
+    // A successful one opens open, because its accesses are still to spend -
+    // and stays collapsible by hand for once they have been.
+    //
+    // Read once, on mount, rather than followed: a run that fails while
+    // somebody is watching it must not snap shut under them mid-sentence. The
+    // page polls every five seconds, so that would otherwise happen to whoever
+    // was reading the log at the moment it ended.
+    const [open, setOpen] = useState(run.status !== 'failed');
+
     return (
         <Card>
-            <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <FactionBadge faction={run.facility.corporation} />
-                        <div>
-                            <CardTitle>{run.facility.name}</CardTitle>
-                            <CardDescription>
-                                {run.facility.corporation.name} ·{' '}
-                                {run.facility.facility_type}
-                            </CardDescription>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {run.order_index !== null && (
-                            <Badge
-                                variant="outline"
-                                title={run.order_reason ?? undefined}
-                            >
-                                Going {ordinal(run.order_index)}
-                            </Badge>
-                        )}
-                        <Badge
-                            variant={finished ? 'secondary' : 'default'}
-                            className={
-                                run.status === 'succeeded'
-                                    ? 'bg-emerald-600 hover:bg-emerald-600'
-                                    : run.status === 'failed'
-                                      ? 'bg-rose-600 hover:bg-rose-600'
-                                      : undefined
-                            }
-                        >
-                            {run.status_label}
-                        </Badge>
-                    </div>
-                </div>
-            </CardHeader>
-
-            <CardContent className="flex flex-col gap-6">
-                <RunGauges run={run} />
-
-                {run.status === 'submitted' && <NotInYet run={run} />}
-
-                {run.status === 'running' && (
-                    <>
-                        <StepTrack run={run} />
-                        <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-                            <FacingCard run={run} />
-                            <div className="flex flex-col gap-4">
-                                {run.can_defend && <SecurityDesk run={run} />}
-                                {run.can_lead && <LeaderDesk run={run} />}
-                                {!run.can_lead && !run.can_defend && (
-                                    <p className="text-sm text-muted-foreground">
-                                        Watching. The Run Leader rolls and moves
-                                        the group on; you may still walk away at
-                                        a Breather.
-                                    </p>
-                                )}
+            <Collapsible
+                // Only a finished run can be shut, so a live one is held open
+                // whatever the state says.
+                open={finished ? open : true}
+                onOpenChange={setOpen}
+            >
+                <CardHeader>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <FactionBadge faction={run.facility.corporation} />
+                            <div>
+                                <CardTitle>{run.facility.name}</CardTitle>
+                                <CardDescription>
+                                    {run.facility.corporation.name} ·{' '}
+                                    {run.facility.facility_type}
+                                </CardDescription>
                             </div>
                         </div>
-                    </>
-                )}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {run.order_index !== null && (
+                                <Badge
+                                    variant="outline"
+                                    title={run.order_reason ?? undefined}
+                                >
+                                    Going {ordinal(run.order_index)}
+                                </Badge>
+                            )}
+                            <Badge
+                                variant={finished ? 'secondary' : 'default'}
+                                className={
+                                    run.status === 'succeeded'
+                                        ? 'bg-emerald-600 hover:bg-emerald-600'
+                                        : run.status === 'failed'
+                                          ? 'bg-rose-600 hover:bg-rose-600'
+                                          : undefined
+                                }
+                            >
+                                {run.status_label}
+                            </Badge>
+                            {finished && (
+                                <CollapsibleTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-1"
+                                    >
+                                        {open ? 'Hide' : 'Show'}
+                                        <ChevronDownIcon
+                                            aria-hidden
+                                            className={cn(
+                                                'size-4 transition-transform',
+                                                open && 'rotate-180',
+                                            )}
+                                        />
+                                        <span className="sr-only">
+                                            {open ? 'Hide' : 'Show'} the run on{' '}
+                                            {run.facility.name}
+                                        </span>
+                                    </Button>
+                                </CollapsibleTrigger>
+                            )}
+                        </div>
+                    </div>
 
-                {run.status === 'succeeded' && <AccessDesk run={run} />}
+                    {/* What a shut run still has to say. Collapsing it must not
+                    turn it into a name and a colour - how it ended and how far
+                    they got is most of why anybody looks at a finished run. */}
+                    {finished && !open && <FinishedSummary run={run} />}
+                </CardHeader>
 
-                <Party run={run} active={active} />
-                <RunLog run={run} />
-            </CardContent>
+                <CollapsibleContent>
+                    <CardContent className="flex flex-col gap-6">
+                        <RunGauges run={run} />
+
+                        {run.status === 'submitted' && <NotInYet run={run} />}
+
+                        {run.status === 'running' && (
+                            <>
+                                <StepTrack run={run} />
+                                <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+                                    <FacingCard run={run} />
+                                    <div className="flex flex-col gap-4">
+                                        {run.can_defend && (
+                                            <SecurityDesk run={run} />
+                                        )}
+                                        {run.can_lead && (
+                                            <LeaderDesk run={run} />
+                                        )}
+                                        {!run.can_lead && !run.can_defend && (
+                                            <p className="text-sm text-muted-foreground">
+                                                Watching. The Run Leader rolls
+                                                and moves the group on; you may
+                                                still walk away at a Breather.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {run.status === 'succeeded' && <AccessDesk run={run} />}
+
+                        <Party run={run} active={active} />
+                        <RunLog run={run} />
+                    </CardContent>
+                </CollapsibleContent>
+            </Collapsible>
         </Card>
+    );
+}
+
+/**
+ * The line a collapsed run still shows.
+ *
+ * Cards passed rather than Alerts or budget, because those are about a run in
+ * progress and this one is over: what is worth knowing at a glance afterwards
+ * is how far the group got, who was still standing, and - on a run that got in
+ * - whether there is an access nobody has spent.
+ */
+function FinishedSummary({ run }: { run: RunView }) {
+    const standing = run.participants.filter((runner) => !runner.left).length;
+    const unspent = Object.values(run.accesses.left).reduce<number>(
+        (total, left) => total + (left ?? 0),
+        0,
+    );
+
+    return (
+        <p className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+            <span>
+                {run.cards_passed} card{run.cards_passed === 1 ? '' : 's'}{' '}
+                passed
+            </span>
+            <span>
+                {standing} of {run.participants.length} still standing
+            </span>
+            {unspent > 0 && (
+                <span className="font-medium text-foreground">
+                    {unspent} access{unspent === 1 ? '' : 'es'} still to spend
+                </span>
+            )}
+        </p>
     );
 }
 
