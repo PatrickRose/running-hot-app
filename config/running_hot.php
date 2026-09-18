@@ -205,8 +205,28 @@ return [
     |
     */
 
+    /**
+     * Equipment a Freelancer starts with, keyed by character name.
+     *
+     * Freelancers belong to no gang - 3.4 hands the Facility game to a side
+     * rather than to a roster - so they are named directly rather than through
+     * a faction, and they have a briefing of their own.
+     */
+    'freelancer_equipment' => [],
+
     'gangs' => [
         [
+            // Equipment a gang starts with (rulebook 3.4.1), keyed by the code
+            // printed on the card. Every Runner in the gang gets these copies -
+            // five Runners each carrying their own Medkit, not five sharing
+            // one - because a holding lives on the Character. A named Runner
+            // may also carry an 'equipment' list of their own, which adds to
+            // this rather than replacing it.
+            //
+            // Empty until the briefings are transcribed: a gang the config says
+            // nothing about opens with nothing, which is the same choice
+            // CreateDefaultFacilities makes about Facilities.
+            'equipment' => [],
             'name' => 'Facers',
             'notoriety' => 0,
             'runners' => [

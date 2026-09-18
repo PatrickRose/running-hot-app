@@ -28,7 +28,10 @@ use Illuminate\Support\Facades\DB;
  */
 class CreateDefaultRoster
 {
-    public function __construct(private readonly SeedResearchDecks $researchDecks) {}
+    public function __construct(
+        private readonly SeedResearchDecks $researchDecks,
+        private readonly SeedEquipmentHoldings $equipment,
+    ) {}
 
     /**
      * The three roles every Corporation fields (rulebook 1.3).
@@ -63,11 +66,17 @@ class CreateDefaultRoster
 
             $decks = $this->researchDecks->handle($game);
 
+            // After the Runners exist, because Equipment is held per Character
+            // rather than per gang - there is nothing to give a copy to until
+            // the people are there.
+            $equipment = $this->equipment->handle($game);
+
             return [
                 'corporations' => count($this->corporations()),
                 'gangs' => count($this->gangs()),
                 'characters' => $characters,
                 'research_cards' => $decks['public'] + $decks['private'],
+                'equipment_copies' => $equipment['copies'],
                 'skipped' => false,
             ];
         });
@@ -122,7 +131,12 @@ class CreateDefaultRoster
         foreach ($this->gangs() as $attributes) {
             /** @var array<int, array<string, mixed>> $runners */
             $runners = $attributes['runners'] ?? [];
-            unset($attributes['runners']);
+
+            // Neither of these is a column on the gang: the roster is nested
+            // configuration, and what is left after they are dropped is what a
+            // Gang row actually is. SeedEquipmentHoldings reads the equipment
+            // back out of the configuration once the Runners exist.
+            unset($attributes['runners'], $attributes['equipment']);
 
             $gang = Gang::create([
                 'game_id' => $game->id,
@@ -130,6 +144,8 @@ class CreateDefaultRoster
             ]);
 
             foreach ($runners as $runner) {
+                unset($runner['equipment']);
+
                 Character::create([
                     'game_id' => $game->id,
                     'gang_id' => $gang->id,
