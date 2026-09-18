@@ -19,6 +19,13 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- Pinned so the suite does not need a .env. A clean checkout has
+             none, so every feature test died on "No application encryption key
+             has been specified" until someone ran composer setup - which reads
+             as the change under test having broken the application rather than
+             as a missing file. It encrypts nothing: the suite's sessions, cache
+             and database are all thrown away with the process. -->
+        <env name="APP_KEY" value="base64:hKWrwtdtL6pvT7X4+W3u35xxJFe4SNoZClTY3Pyo68k="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
