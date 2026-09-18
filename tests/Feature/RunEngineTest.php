@@ -1319,13 +1319,90 @@ class RunEngineTest extends TestCase
     }
 
     /**
+     * A card that has been face up can be asked for by name, and a card nobody
+     * has turned over cannot.
+     *
+     * That is the whole of the secrecy here: the draw exists to stop a Runner
+     * shopping the Facility without spending anything on finding out what is in
+     * it, and it has nothing left to protect about a card everybody has seen.
+     */
+    public function test_a_runner_may_go_back_for_a_card_already_turned_over(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id, ['brawn' => 2, 'hack' => 2]);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+
+        [$first, $second] = TechnologyHolding::factory()->count(2)->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run->refresh());
+
+        // Two unseen cards, so the draw rolls a d2 - take the first.
+        $this->dice->will([1]);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $this->engine()->resolveAccess($drawn, null);
+
+        $seen = $drawn->technology_holding_id;
+        $unseen = $seen === $first->id ? $second : $first;
+
+        // The one nobody has turned over cannot be named.
+        try {
+            $this->engine()->accessTechnology($run->refresh(), $mate, $unseen);
+            $this->fail('An unseen card should not be nameable.');
+        } catch (ValidationException) {
+            // Expected: that is what the blind draw is for.
+        }
+
+        // The one that has been face up can be.
+        $wanted = $seen === $first->id ? $first : $second;
+        $again = $this->engine()->accessTechnology($run->refresh(), $mate, $wanted);
+
+        $this->assertSame($seen, $again->technology_holding_id);
+    }
+
+    /**
+     * Once every card has been turned over there is nothing left to draw
+     * blind, and the refusal says to name one rather than claiming the racks
+     * are empty - because they are not.
+     */
+    public function test_a_blind_draw_runs_out_before_the_racks_do(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id, ['brawn' => 2, 'hack' => 2]);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+
+        TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run->refresh());
+
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $this->engine()->resolveAccess($drawn, null);
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->accessTechnology($run->refresh(), $mate);
+    }
+
+    /**
      * Having been at a card does not take it out of the racks.
      *
      * 3.4.3 says so twice: a failed check "goes back to the list of cards you
      * may access", and after a copy "no matter the outcome, the card is
      * returned to the list" - copying it twice is how you make two copies. So a
-     * second Runner can draw the only card in the building after the first has
-     * copied it.
+     * second Runner can still get at the only card in the building after the
+     * first has copied it, by name now that it has been seen.
      */
     public function test_a_card_that_was_copied_is_still_in_the_racks(): void
     {
@@ -1348,9 +1425,8 @@ class RunEngineTest extends TestCase
         $first = $this->engine()->accessTechnology($run, $leader);
         $this->engine()->resolveAccess($first, TechnologyAccessAction::Copy);
 
-        // The same card, to the second Runner.
-        $this->dice->will([1, 1, 1, 1, 1, 1]);
-        $second = $this->engine()->accessTechnology($run->refresh(), $mate);
+        // Still there, and reachable - by name, now that it has been seen.
+        $second = $this->engine()->accessTechnology($run->refresh(), $mate, $holding);
 
         $this->assertSame($holding->id, $second->technology_holding_id);
     }
@@ -1382,8 +1458,7 @@ class RunEngineTest extends TestCase
 
         $this->assertSame('failed', $missed->outcome);
 
-        $this->dice->will([1, 1, 1, 1, 1, 1]);
-        $second = $this->engine()->accessTechnology($run->refresh(), $mate);
+        $second = $this->engine()->accessTechnology($run->refresh(), $mate, $holding);
 
         $this->assertSame($holding->id, $second->technology_holding_id);
     }
@@ -1441,9 +1516,12 @@ class RunEngineTest extends TestCase
 
         $drawn = $this->engine()->accessTechnology($run, $leader);
 
+        /** @var TechnologyHolding $holding */
+        $holding = TechnologyHolding::query()->findOrFail($drawn->technology_holding_id);
+
         try {
-            $this->engine()->accessTechnology($run->refresh(), $mate);
-            $this->fail('A card being decided on should not be drawable.');
+            $this->engine()->accessTechnology($run->refresh(), $mate, $holding);
+            $this->fail('A card being decided on should not be reachable.');
         } catch (ValidationException) {
             // Expected.
         }
@@ -1451,8 +1529,9 @@ class RunEngineTest extends TestCase
         // Left alone, it goes straight back in the racks.
         $this->engine()->resolveAccess($drawn, null);
 
-        $this->assertNotNull(
-            $this->engine()->accessTechnology($run->refresh(), $mate)->technology_holding_id,
+        $this->assertSame(
+            $holding->id,
+            $this->engine()->accessTechnology($run->refresh(), $mate, $holding)->technology_holding_id,
         );
     }
 

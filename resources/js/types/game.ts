@@ -1087,6 +1087,11 @@ export type RunView = {
     /** The Facility type's own effect, as printed. Null where it has none. */
     access_effect: string | null;
     /**
+     * Cards this run has already turned over and could go back for. Named,
+     * because the Runners have seen them; the unseen ones stay a count.
+     */
+    known_technologies: { id: number; name: string }[];
+    /**
      * How many technologies are still there to be drawn from — a count and not
      * a list, because the card is drawn rather than chosen.
      */

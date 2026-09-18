@@ -13,6 +13,7 @@ use App\Models\Game;
 use App\Models\Run;
 use App\Models\RunAccess;
 use App\Models\RunEvent;
+use App\Models\TechnologyHolding;
 use App\Services\RunEngine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -374,6 +375,10 @@ class RunController extends Controller
         $validated = $request->validate([
             'character_id' => ['required', 'integer'],
             'kind' => ['required', Rule::enum(RunAccessKind::class)],
+            // A card access may name a technology this run has already turned
+            // over. Absent means draw blind from the ones nobody has seen,
+            // which is the only way to reach an unknown card.
+            'technology_holding_id' => ['nullable', 'integer'],
         ]);
 
         /** @var Character $runner */
@@ -393,6 +398,7 @@ class RunController extends Controller
             RunAccessKind::Technology => $this->runs->accessTechnology(
                 $run,
                 $runner,
+                $this->holding($validated['technology_holding_id'] ?? null),
                 $request->user(),
             ),
         };
@@ -437,6 +443,23 @@ class RunController extends Controller
             $run->refresh()->events()->where('type', RunEvent::TYPE_ACCESS)->latest('id')->value('description')
                 ?? 'Access resolved.',
         );
+    }
+
+    /**
+     * The technology an access named, if it named one.
+     *
+     * Whether it is a card this run may actually reach for is the engine's
+     * question, not this one's - all that happens here is turning an id into
+     * a row.
+     */
+    private function holding(mixed $id): ?TechnologyHolding
+    {
+        if ($id === null) {
+            return null;
+        }
+
+        /** @var TechnologyHolding */
+        return TechnologyHolding::query()->findOrFail($id);
     }
 
     /**

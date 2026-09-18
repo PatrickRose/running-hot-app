@@ -307,14 +307,28 @@ function AccessDesk({ run }: { run: RunView }) {
         (runner) => (run.accesses.left[String(runner.character_id)] ?? 0) > 0,
     );
 
-    const spend = (characterId: number, kind: string) => {
+    const spend = (
+        characterId: number,
+        kind: string,
+        holdingId: number | null = null,
+    ) => {
         setBusy(true);
         router.post(
             storeAccess(run.id),
-            { character_id: characterId, kind },
+            holdingId === null
+                ? { character_id: characterId, kind }
+                : {
+                      character_id: characterId,
+                      kind,
+                      technology_holding_id: holdingId,
+                  },
             { onFinish: () => setBusy(false), preserveScroll: true },
         );
     };
+
+    // Cards nobody has turned over yet. The blind draw only reaches these, so
+    // when it hits zero the only way to a card is by name.
+    const unseen = run.technologies_left - run.known_technologies.length;
 
     return (
         <section className="flex flex-col gap-3 rounded-md border p-3">
@@ -323,7 +337,7 @@ function AccessDesk({ run }: { run: RunView }) {
                 <p className="text-sm text-muted-foreground">
                     {run.technologies_left === 0
                         ? 'Nothing left in the racks.'
-                        : `${run.technologies_left} technolog${run.technologies_left === 1 ? 'y' : 'ies'} still in the racks`}
+                        : `${run.technologies_left} in the racks · ${unseen} not turned over yet`}
                 </p>
             </header>
 
@@ -403,13 +417,36 @@ function AccessDesk({ run }: { run: RunView }) {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                disabled={busy || run.technologies_left === 0}
+                                disabled={busy || unseen === 0}
                                 onClick={() =>
                                     spend(runner.character_id, 'technology')
                                 }
                             >
-                                Access a card
+                                {unseen === 0
+                                    ? 'Nothing new to draw'
+                                    : 'Draw an unseen card'}
                             </Button>
+                            {/* A card that has been face up can be asked for by
+                                name: the Runners have seen it, and going back
+                                for one is how 3.4.3 says you make a second
+                                copy. An unseen card can only ever be drawn. */}
+                            {run.known_technologies.map((known) => (
+                                <Button
+                                    key={known.id}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        spend(
+                                            runner.character_id,
+                                            'technology',
+                                            known.id,
+                                        )
+                                    }
+                                >
+                                    Go back for {known.name}
+                                </Button>
+                            ))}
                             <Button
                                 size="sm"
                                 variant="outline"
@@ -453,10 +490,12 @@ function AccessDesk({ run }: { run: RunView }) {
                             </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            The card you get is drawn, not chosen — one nobody
-                            has been at yet — and you decide what to do with it
-                            once it is face up. A plot access needs no reason
-                            here: tell Control what you are after.
+                            A card nobody has turned over is drawn, not chosen,
+                            and you decide what to do with it once it is face
+                            up. One that has been face up can be asked for by
+                            name — going back for it is how you make a second
+                            copy. A plot access needs no reason here: tell
+                            Control what you are after.
                         </p>
                     </div>
                 ))

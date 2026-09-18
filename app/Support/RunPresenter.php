@@ -142,6 +142,42 @@ class RunPresenter
     }
 
     /**
+     * Cards this run has turned face up and could be accessed again.
+     *
+     * A card is out of this list only for the reasons it is out of the draw:
+     * it left the building, or somebody is holding it face up and has not
+     * decided yet.
+     *
+     * @return array<int, array{id: int, name: string}>
+     */
+    private function knownTechnologies(Run $run): array
+    {
+        $seen = $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->pluck('technology_holding_id')
+            ->all();
+
+        $undecided = $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->whereNull('outcome')
+            ->pluck('technology_holding_id')
+            ->all();
+
+        return $run->facility->technologyHoldings()
+            ->with('technologyType')
+            ->get()
+            ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage()
+                && in_array($holding->id, $seen, true)
+                && ! in_array($holding->id, $undecided, true))
+            ->map(fn (TechnologyHolding $holding): array => [
+                'id' => $holding->id,
+                'name' => $holding->technologyType->name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * How many technologies are still there to be drawn from.
      *
      * A count and not a list, because the card a Runner gets is drawn rather
@@ -474,6 +510,12 @@ class RunPresenter
             'accesses' => $this->accesses($run),
             'access_effect' => $run->facility->facilityType->access_effect,
             'technologies_left' => $this->accessibleTechnologies($run),
+
+            // The cards this run has already turned over and could go back for.
+            // Named, because the Runners have seen them - there is nothing left
+            // to hide about a card that has been face up. The ones nobody has
+            // seen stay a count, which is what keeps the blind draw blind.
+            'known_technologies' => $this->knownTechnologies($run),
 
             'log' => $this->log($run, $privileged),
         ];

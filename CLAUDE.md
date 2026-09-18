@@ -769,13 +769,21 @@ Credits card". The first is a printed list with steps of 1, 2, 2, 3, 3 and then
 Facility effect in a building, so the second Runner to reach for either finds it
 gone — `RunAccessKind::onlyOncePerRun()` is where that lives.
 
-**The card is drawn, not chosen.** At the table that step is a person holding
-cards face down and fanning them out, so a draw is the same thing without
-somebody to hold them. `RunPresenter` therefore sends a *count* of what is left
-rather than a list: naming them would hand back the choice the draw takes away,
-and would tell the Runners what the Facility holds without their having spent
-anything on finding out. A Facility down to its last card hands it over rather
-than rolling a one-sided die.
+**An unseen card is drawn; a card that has been face up is chosen.** At the
+table the draw is a person holding cards face down and fanning them out, so the
+blind half is the same thing without somebody to hold them — and a Facility down
+to its last unseen card hands it over rather than rolling a one-sided die. But
+the secrecy has nothing left to protect once a card has been turned over, and
+3.4.3 says outright that making two copies means accessing the card twice. So a
+Runner may go back for anything this run has already revealed, by name.
+
+That is the line the payload draws: `known_technologies` names the revealed
+cards, `technologies_left` counts everything still in the racks, and the unseen
+ones are only ever the difference between the two. Naming an unseen card is
+refused — that is the choice the draw exists to take away, and it is what stops
+a Runner shopping the Facility without spending anything on finding out what is
+in it. When the blind draw runs out the refusal says to name one rather than
+claiming the racks are empty, because they are not.
 
 **Having been at a card does not take it out of the racks**, and getting this
 wrong is easy — it was wrong here first. 3.4.3 says so twice: a failed check

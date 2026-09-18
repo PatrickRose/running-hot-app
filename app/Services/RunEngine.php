@@ -1298,13 +1298,21 @@ class RunEngine
      * is a person holding cards face down and fanning them out, so the drawn
      * card is the same thing without somebody to hold them.
      *
+     * **A card that has been turned over can be asked for by name.** Once the
+     * Runners have seen it there is nothing left to hide, and going back for a
+     * card you already know is a real decision rather than a re-roll - 3.4.3
+     * says outright that making two copies means accessing the card twice. So
+     * a null $wanted draws blind from the cards nobody has turned over yet, and
+     * naming one reaches for something already face up. What cannot be named is
+     * a card nobody has seen: that is the choice the draw exists to take away.
+     *
      * **Having been at a card does not take it out of the racks.** 3.4.3 is
      * explicit twice over: a failed check "goes back to the list of cards you
      * may access", and after a copy "no matter the outcome, the card is
-     * returned to the list" - copying it twice is how you make two copies. So
-     * the only thing that takes a technology out of the draw is it leaving the
-     * building, which {@see storedTechnologies()} already reads off the
-     * holding's own status: stolen, or destroyed outright.
+     * returned to the list". So the only thing that takes a technology out of
+     * the draw is it leaving the building, which {@see storedTechnologies()}
+     * already reads off the holding's own status: stolen, or destroyed
+     * outright.
      *
      * The one exception is a card that is face up and still being decided
      * about. It is in somebody's hands, so a second Runner cannot draw it out
@@ -1319,6 +1327,7 @@ class RunEngine
     public function accessTechnology(
         Run $run,
         Character $runner,
+        ?TechnologyHolding $wanted = null,
         ?User $actor = null,
     ): RunAccess {
         $this->requireAccess($run, $runner, RunAccessKind::Technology);
@@ -1336,18 +1345,9 @@ class RunEngine
             ]);
         }
 
-        // A one-sided die is not a die, so a Facility down to its last card
-        // simply hands it over rather than being rolled for - the same rule the
-        // Run Leader handover follows.
-        $choices = $available->count();
-        $index = 0;
-
-        if ($choices > 1) {
-            $index = $this->dice->roll(1, $choices)[0] - 1;
-        }
-
-        /** @var TechnologyHolding $holding */
-        $holding = $available->values()->get($index);
+        $holding = $wanted === null
+            ? $this->drawUnseen($run, $available)
+            : $this->reachFor($run, $available, $wanted);
 
         return $this->recordAccess(
             $run,
@@ -1362,6 +1362,90 @@ class RunEngine
             ['technology_holding_id' => $holding->id],
             $actor,
         );
+    }
+
+    /**
+     * Take a card nobody has turned over yet, at random.
+     *
+     * A one-sided die is not a die, so a Facility down to its last unseen card
+     * simply hands it over rather than being rolled for - the same rule the Run
+     * Leader handover follows.
+     *
+     * @param  Collection<int, TechnologyHolding>  $available
+     */
+    protected function drawUnseen(Run $run, Collection $available): TechnologyHolding
+    {
+        $seen = $this->seenHoldingIds($run);
+
+        $unseen = $available
+            ->reject(fn (TechnologyHolding $holding): bool => in_array($holding->id, $seen, true))
+            ->values();
+
+        if ($unseen->isEmpty()) {
+            throw ValidationException::withMessages([
+                'access' => 'Every card in here has been turned over. Name the one you want.',
+            ]);
+        }
+
+        $choices = $unseen->count();
+        $index = 0;
+
+        if ($choices > 1) {
+            $index = $this->dice->roll(1, $choices)[0] - 1;
+        }
+
+        /** @var TechnologyHolding $holding */
+        $holding = $unseen->get($index);
+
+        return $holding;
+    }
+
+    /**
+     * Go back for a card the Runners have already seen.
+     *
+     * Only one they have seen: naming a card nobody has turned over would hand
+     * back the choice the blind draw exists to take away, and would let a
+     * Runner shop the Facility without spending anything on finding out what is
+     * in it.
+     *
+     * @param  Collection<int, TechnologyHolding>  $available
+     */
+    protected function reachFor(
+        Run $run,
+        Collection $available,
+        TechnologyHolding $wanted,
+    ): TechnologyHolding {
+        if (! in_array($wanted->id, $this->seenHoldingIds($run), true)) {
+            throw ValidationException::withMessages([
+                'access' => 'You can only go back for a card this run has already turned over.',
+            ]);
+        }
+
+        $holding = $available->firstWhere('id', $wanted->id);
+
+        if (! $holding instanceof TechnologyHolding) {
+            throw ValidationException::withMessages([
+                'access' => 'That card is not there to be accessed.',
+            ]);
+        }
+
+        return $holding;
+    }
+
+    /**
+     * Every technology this run has turned face up, decided on or not.
+     *
+     * @return array<int, int>
+     */
+    protected function seenHoldingIds(Run $run): array
+    {
+        /** @var array<int, int> */
+        return $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->pluck('technology_holding_id')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
