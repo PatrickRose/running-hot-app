@@ -125,6 +125,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // for all four kinds of access, because it is one act with one choice.
     Route::post('runs/{run}/accesses', [RunController::class, 'access'])->name('runs.accesses.store');
 
+    // What to do with the card an access turned up. Its own route because the
+    // rulebook makes it its own step: the card is revealed and then decided on.
+    Route::post('runs/{run}/accesses/{access}', [RunController::class, 'resolveAccess'])
+        ->name('runs.accesses.resolve');
+
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,
     // and who may chair, is the CouncilSessionPolicy's answer rather than a

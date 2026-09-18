@@ -31,13 +31,17 @@ import {
     ignoreEnd,
     leave,
 } from '@/routes/runs';
-import { store as storeAccess } from '@/routes/runs/accesses';
+import {
+    resolve as resolveAccess,
+    store as storeAccess,
+} from '@/routes/runs/accesses';
 import { trigger as triggerAlerts } from '@/routes/runs/alerts';
 import { store as storeConsequence } from '@/routes/runs/consequences';
 import type {
     RunCard,
     RunConsequenceEffect,
     RunParticipantView,
+    RunUndecidedAccess,
     RunView,
 } from '@/types/game';
 
@@ -299,16 +303,15 @@ function FinishedSummary({ run }: { run: RunView }) {
  */
 function AccessDesk({ run }: { run: RunView }) {
     const [busy, setBusy] = useState(false);
-    const [note, setNote] = useState('');
     const holders = run.participants.filter(
         (runner) => (run.accesses.left[String(runner.character_id)] ?? 0) > 0,
     );
 
-    const spend = (characterId: number, payload: RunPayload) => {
+    const spend = (characterId: number, kind: string) => {
         setBusy(true);
         router.post(
             storeAccess(run.id),
-            { character_id: characterId, ...payload },
+            { character_id: characterId, kind },
             { onFinish: () => setBusy(false), preserveScroll: true },
         );
     };
@@ -323,6 +326,19 @@ function AccessDesk({ run }: { run: RunView }) {
                         : `${run.technologies_left} technolog${run.technologies_left === 1 ? 'y' : 'ies'} still in the racks`}
                 </p>
             </header>
+
+            {/* What this Facility's own effect actually is, said once and in
+                full. It is one of the four things an access can be spent on, so
+                deciding between them means being able to read it - it used to
+                be a clause at the end of a paragraph of small print. */}
+            {run.access_effect !== null && (
+                <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">
+                        This Facility&rsquo;s effect:{' '}
+                    </span>
+                    {run.access_effect}
+                </p>
+            )}
 
             {run.accesses.taken.length > 0 && (
                 <ul className="flex flex-col gap-1 text-sm">
@@ -344,7 +360,7 @@ function AccessDesk({ run }: { run: RunView }) {
                                     : ''}
                                 {taken.outcome !== null
                                     ? ` · ${taken.outcome.replace(/_/g, ' ')}`
-                                    : ''}
+                                    : ' · face up, undecided'}
                                 {taken.discount_percent !== null
                                     ? ` (${taken.discount_percent}% off)`
                                     : ''}
@@ -353,6 +369,18 @@ function AccessDesk({ run }: { run: RunView }) {
                     ))}
                 </ul>
             )}
+
+            {/* A card that has been turned over and not yet decided on. The
+                choice comes after the reveal, which is the only order it makes
+                sense in: you cannot pick how to open a safe before you know
+                what is in it. */}
+            {run.accesses.undecided.map((undecided) => (
+                <UndecidedCard
+                    key={undecided.id}
+                    run={run}
+                    access={undecided}
+                />
+            ))}
 
             {holders.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
@@ -375,11 +403,19 @@ function AccessDesk({ run }: { run: RunView }) {
                             <Button
                                 size="sm"
                                 variant="outline"
+                                disabled={busy || run.technologies_left === 0}
+                                onClick={() =>
+                                    spend(runner.character_id, 'technology')
+                                }
+                            >
+                                Access a card
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
                                 disabled={busy || run.accesses.credits_taken}
                                 onClick={() =>
-                                    spend(runner.character_id, {
-                                        kind: 'credits',
-                                    })
+                                    spend(runner.character_id, 'credits')
                                 }
                             >
                                 {run.accesses.credits_taken
@@ -395,49 +431,22 @@ function AccessDesk({ run }: { run: RunView }) {
                                     run.access_effect === null
                                 }
                                 onClick={() =>
-                                    spend(runner.character_id, {
-                                        kind: 'facility_effect',
-                                    })
+                                    spend(
+                                        runner.character_id,
+                                        'facility_effect',
+                                    )
                                 }
-                                title={run.access_effect ?? undefined}
                             >
                                 {run.accesses.facility_effect_taken
                                     ? 'Facility effect gone'
                                     : 'Use the Facility effect'}
                             </Button>
-                            {(['copy', 'steal', 'destroy'] as const).map(
-                                (action) => (
-                                    <Button
-                                        key={action}
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={
-                                            busy || run.technologies_left === 0
-                                        }
-                                        onClick={() =>
-                                            spend(runner.character_id, {
-                                                kind: 'technology',
-                                                action,
-                                            })
-                                        }
-                                    >
-                                        {action === 'copy'
-                                            ? 'Copy a card'
-                                            : action === 'steal'
-                                              ? 'Steal a card (8+)'
-                                              : 'Destroy a card'}
-                                    </Button>
-                                ),
-                            )}
                             <Button
                                 size="sm"
                                 variant="secondary"
                                 disabled={busy}
                                 onClick={() =>
-                                    spend(runner.character_id, {
-                                        kind: 'plot',
-                                        notes: note === '' ? null : note,
-                                    })
+                                    spend(runner.character_id, 'plot')
                                 }
                             >
                                 Plot access
@@ -445,35 +454,94 @@ function AccessDesk({ run }: { run: RunView }) {
                         </div>
                         <p className="text-xs text-muted-foreground">
                             The card you get is drawn, not chosen — one nobody
-                            has been at yet. Copy leaves it where it is, Steal
-                            takes it, Destroy only removes it outright at twelve
-                            successes.
-                            {run.access_effect !== null && (
-                                <>
-                                    {' '}
-                                    This Facility&rsquo;s effect:{' '}
-                                    {run.access_effect}
-                                </>
-                            )}
+                            has been at yet — and you decide what to do with it
+                            once it is face up. A plot access needs no reason
+                            here: tell Control what you are after.
                         </p>
                     </div>
                 ))
             )}
-
-            {holders.length > 0 && (
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={`plot-${run.id}`}>
-                        What you are chasing (for a plot access)
-                    </Label>
-                    <Input
-                        id={`plot-${run.id}`}
-                        value={note}
-                        onChange={(event) => setNote(event.target.value)}
-                        placeholder="Control will read this"
-                    />
-                </div>
-            )}
         </section>
+    );
+}
+
+/**
+ * The card is face up. Copy it, steal it, break it, or leave it.
+ *
+ * Leaving it is a real answer rather than a way out, which is why it sits with
+ * the other three rather than being a cancel. The access is spent either way:
+ * what it bought was finding out what the Facility is holding, and a Runner who
+ * does not fancy their dice against this particular card has still learned
+ * that.
+ */
+function UndecidedCard({
+    run,
+    access,
+}: {
+    run: RunView;
+    access: RunUndecidedAccess;
+}) {
+    const [busy, setBusy] = useState(false);
+
+    const decide = (action: string | null) => {
+        setBusy(true);
+        router.post(
+            resolveAccess([run.id, access.id]).url,
+            action === null ? {} : { action },
+            { onFinish: () => setBusy(false), preserveScroll: true },
+        );
+    };
+
+    return (
+        <div className="flex flex-col gap-2 rounded-md border border-dashed p-2">
+            <p className="text-sm">
+                <span className="font-medium">{access.character}</span> turned
+                up{' '}
+                <span className="font-medium">
+                    {access.technology ?? 'a card'}
+                </span>
+                . What now?
+            </p>
+            <div className="flex flex-wrap gap-2">
+                <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => decide('copy')}
+                >
+                    Copy it
+                </Button>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => decide('steal')}
+                >
+                    Steal it (8+)
+                </Button>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => decide('destroy')}
+                >
+                    Destroy it
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => decide(null)}
+                >
+                    Leave it
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Copy leaves it where it is and is worth 25% off, or 50% on four
+                successes. Steal takes it on 8. Destroy only removes it outright
+                on twelve, and anything less leaves traces.
+            </p>
+        </div>
     );
 }
 

@@ -121,6 +121,23 @@ class RunPresenter
             // The two a Facility only has one of.
             'credits_taken' => $spent->contains('kind', RunAccessKind::Credits),
             'facility_effect_taken' => $spent->contains('kind', RunAccessKind::FacilityEffect),
+
+            // Cards that have been turned over and not yet decided on. The
+            // choice between copying, stealing and destroying is made with the
+            // card face up (3.4.3), so this is what the screen needs to ask
+            // about - and it names the technology, because by now the Runner
+            // is holding it.
+            'undecided' => $spent
+                ->filter(fn (RunAccess $access): bool => $access->kind === RunAccessKind::Technology
+                    && $access->outcome === null)
+                ->map(fn (RunAccess $access): array => [
+                    'id' => $access->id,
+                    'character_id' => $access->character_id,
+                    'character' => $access->character->name,
+                    'technology' => $access->technologyHolding?->technologyType->name,
+                ])
+                ->values()
+                ->all(),
         ];
     }
 

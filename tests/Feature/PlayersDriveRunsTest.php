@@ -10,6 +10,7 @@ use App\Enums\RunConsequence;
 use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Enums\RunStep;
+use App\Enums\TechnologyHoldingStatus;
 use App\Models\Character;
 use App\Models\ControlMember;
 use App\Models\Corporation;
@@ -20,6 +21,7 @@ use App\Models\Game;
 use App\Models\ProtectionCardType;
 use App\Models\Run;
 use App\Models\RunEvent;
+use App\Models\TechnologyHolding;
 use App\Models\Turn;
 use App\Models\User;
 use App\Services\Dice;
@@ -223,11 +225,51 @@ class PlayersDriveRunsTest extends TestCase
             ->post(route('runs.accesses.store', $run), [
                 'character_id' => $mate->id,
                 'kind' => RunAccessKind::Plot->value,
-                'notes' => 'Chasing the Gordon plot hook.',
             ])
             ->assertRedirect();
 
         $this->assertSame(2, $run->refresh()->accesses()->count());
+    }
+
+    /**
+     * A card access is two requests, and it has to be: the card is drawn and
+     * then decided on. Deciding before the draw would be picking how to open a
+     * safe before knowing what is in it.
+     */
+    public function test_a_card_is_drawn_first_and_decided_on_afterwards(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $run = $this->begun($leader);
+        $this->succeed($run);
+
+        TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        // No action is named here, and none is wanted.
+        $this->actingAs($leaderUser)
+            ->post(route('runs.accesses.store', $run), [
+                'character_id' => $leader->id,
+                'kind' => RunAccessKind::Technology->value,
+            ])
+            ->assertRedirect();
+
+        $access = $run->refresh()->accesses()->sole();
+        $this->assertNotNull($access->technology_holding_id);
+        $this->assertNull($access->outcome);
+
+        // And the board offers it back as undecided.
+        $board = $this->boardFor($leaderUser)['yours'][0];
+        $this->assertCount(1, $board['accesses']['undecided']);
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.accesses.resolve', [$run, $access]), [])
+            ->assertRedirect();
+
+        $this->assertSame('left', $access->refresh()->outcome);
+        $this->assertSame([], $this->boardFor($leaderUser)['yours'][0]['accesses']['undecided']);
     }
 
     /**

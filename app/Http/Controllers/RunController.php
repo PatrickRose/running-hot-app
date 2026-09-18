@@ -11,6 +11,7 @@ use App\Models\Character;
 use App\Models\Facility;
 use App\Models\Game;
 use App\Models\Run;
+use App\Models\RunAccess;
 use App\Models\RunEvent;
 use App\Services\RunEngine;
 use Illuminate\Http\RedirectResponse;
@@ -352,7 +353,13 @@ class RunController extends Controller
      *
      * One route for all four kinds, because they are one act with one choice -
      * the Runner picks what to spend their access on, and every one of them
-     * costs the same single access. Authorised as `act` and checked against the
+     * costs the same single access. A card access only draws the card here;
+     * what to do with it is decided once it is face up, on the route below.
+     *
+     * A plot access asks for no reason. A Runner tells Control what they are
+     * chasing in the channel they are already standing in, and a text box that
+     * has to be filled in before the button works is a worse version of a
+     * conversation. Authorised as `act` and checked against the
      * character named: a Runner spends their own, not their Leader's, and not
      * for somebody who has wandered off.
      *
@@ -367,15 +374,6 @@ class RunController extends Controller
         $validated = $request->validate([
             'character_id' => ['required', 'integer'],
             'kind' => ['required', Rule::enum(RunAccessKind::class)],
-            // Only a technology access has anything to choose after the kind,
-            // and it must choose: copy, steal and destroy are different acts
-            // with different dice, not a default with variations.
-            'action' => [
-                'nullable',
-                'required_if:kind,'.RunAccessKind::Technology->value,
-                Rule::enum(TechnologyAccessAction::class),
-            ],
-            'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
         /** @var Character $runner */
@@ -389,13 +387,12 @@ class RunController extends Controller
             RunAccessKind::Plot => $this->runs->takePlotAccess(
                 $run,
                 $runner,
-                $validated['notes'] ?? null,
+                null,
                 $request->user(),
             ),
             RunAccessKind::Technology => $this->runs->accessTechnology(
                 $run,
                 $runner,
-                TechnologyAccessAction::from((string) $validated['action']),
                 $request->user(),
             ),
         };
@@ -404,6 +401,41 @@ class RunController extends Controller
             'status',
             $run->refresh()->events()->where('type', RunEvent::TYPE_ACCESS)->latest('id')->value('description')
                 ?? sprintf('%s spent an access.', $runner->name),
+        );
+    }
+
+    /**
+     * Copy, steal, destroy or leave the card an access turned up (3.4.3).
+     *
+     * Its own act because the rulebook makes it one: the card is revealed and
+     * *then* the choice is made. Authorised exactly as taking the access was -
+     * the Runner whose access it is, or Control - so a gangmate cannot decide
+     * what happens to somebody else's card.
+     */
+    public function resolveAccess(Run $run, RunAccess $access, Request $request): RedirectResponse
+    {
+        Gate::authorize('act', $run);
+
+        abort_if($access->run_id !== $run->id, 404);
+
+        $validated = $request->validate([
+            // Absent is "leave it", which is a real answer rather than a
+            // missing one - so this is nullable rather than required.
+            'action' => ['nullable', Rule::enum(TechnologyAccessAction::class)],
+        ]);
+
+        $this->authoriseAccessFor($request, $run, $access->character);
+
+        $this->runs->resolveAccess(
+            $access,
+            isset($validated['action']) ? TechnologyAccessAction::from((string) $validated['action']) : null,
+            $request->user(),
+        );
+
+        return back()->with(
+            'status',
+            $run->refresh()->events()->where('type', RunEvent::TYPE_ACCESS)->latest('id')->value('description')
+                ?? 'Access resolved.',
         );
     }
 

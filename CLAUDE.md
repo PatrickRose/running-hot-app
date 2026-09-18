@@ -778,6 +778,19 @@ would tell the Runners what the Facility holds without their having spent
 anything on finding out. A Facility down to its last card hands it over rather
 than rolling a one-sided die.
 
+**Drawing it and deciding on it are two acts, and the order is the point.**
+`accessTechnology()` turns a card over and stops; `resolveAccess()` is Copy,
+Steal, Destroy — or nothing. Choosing before the draw would be picking how to
+open a safe before knowing what is in it, and it is not what 3.4.3 describes:
+the card is revealed and *then* the choice is made. Two routes for the same
+reason, and the log reads as two lines.
+
+**"Leave it" is a real answer rather than a way out.** The access is spent on
+the draw, not on the decision, so a Runner who does not fancy their dice against
+this particular card has still bought something: they know what the Facility is
+holding. `run_accesses.outcome` records `left` for it, which is why the column is
+null only while a card is face up and waiting.
+
 **The three things you can do to a card share a shape and nothing else.** All
 roll the group's *combined* Brawn and Hack — both, added, which is the whole
 difference from a Protection Card — and all read their successes off a printed
@@ -797,11 +810,21 @@ is Control's.
 technology leaves traces; a stolen one is intact in somebody else's hands.
 Neither row is deleted, and neither occupies the Facility's storage any more.
 
-**What a Facility's own effect *does* is still words.** Spying on a rival's
-stack, a blackmail file, a stock certificate: all conversations, so taking the
-effect records that it was taken and the conversation happens. That and a plot
-access are the two places Control is still wanted, and only to hand over what
-the Runner has already won.
+**What a Facility's own effect *does* is still words — but the players read
+them.** Spying on a rival's stack, a blackmail file, a stock certificate: all
+conversations, so taking the effect records that it was taken and the
+conversation happens. The text itself is on the run screen, on its own line
+above the buttons rather than in the small print, because it is one of the four
+things an access can be spent on and choosing between them means being able to
+read it.
+
+**A plot access asks for no reason.** A Runner tells Control what they are
+chasing in the channel they are already standing in, and a text box that has to
+be filled in before the button works is a worse version of a conversation. The
+`notes` column stays for Control's own use.
+
+That and the Facility effect are the two places Control is still wanted, and
+only to hand over what the Runner has already won.
 
 The Runners are also let into their target Facility's Discord channels for the
 length of the run, which is the Discord half above.

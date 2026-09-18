@@ -1011,8 +1011,17 @@ export type RunAccessTaken = {
 /**
  * What has been taken out of the Facility, and who still has an access left.
  */
+/** A card an access turned up that nobody has decided about yet. */
+export type RunUndecidedAccess = {
+    id: number;
+    character_id: number;
+    character: string;
+    technology: string | null;
+};
+
 export type RunAccesses = {
     taken: RunAccessTaken[];
+    undecided: RunUndecidedAccess[];
     /** Accesses remaining, keyed by character id. */
     left: Record<string, number | undefined>;
     credits_taken: boolean;

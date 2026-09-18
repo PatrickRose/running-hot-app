@@ -1308,7 +1308,6 @@ class RunEngine
     public function accessTechnology(
         Run $run,
         Character $runner,
-        TechnologyAccessAction $action,
         ?User $actor = null,
     ): RunAccess {
         $this->requireAccess($run, $runner, RunAccessKind::Technology);
@@ -1339,13 +1338,94 @@ class RunEngine
         /** @var TechnologyHolding $holding */
         $holding = $available->values()->get($index);
 
+        return $this->recordAccess(
+            $run,
+            $runner,
+            RunAccessKind::Technology,
+            sprintf(
+                '%s drew %s out of %s.',
+                $runner->name,
+                $holding->technologyType->name,
+                $run->facility->name,
+            ),
+            ['technology_holding_id' => $holding->id],
+            $actor,
+        );
+    }
+
+    /**
+     * Decide what to do with the card now it is face up (rulebook 3.4.3).
+     *
+     * The second half of an access, and it has to be second: the rulebook has
+     * the card revealed and *then* the Run Leader choosing between Copy, Steal
+     * and Destroy, which is the only order the choice makes sense in. Deciding
+     * before the draw would be picking how to open a safe before knowing what
+     * is in it.
+     *
+     * A null action is "nothing", which is a real answer rather than a way out.
+     * The access is spent either way - what it bought was finding out what the
+     * Facility is holding, and a Runner who does not fancy their dice against
+     * this particular card has still learned that.
+     */
+    public function resolveAccess(
+        RunAccess $access,
+        ?TechnologyAccessAction $action,
+        ?User $actor = null,
+    ): RunAccess {
+        $run = $access->run;
+
+        if ($access->kind !== RunAccessKind::Technology) {
+            throw ValidationException::withMessages([
+                'access' => 'Only a card access has anything left to decide.',
+            ]);
+        }
+
+        if ($access->outcome !== null) {
+            throw ValidationException::withMessages([
+                'access' => 'That card has already been dealt with.',
+            ]);
+        }
+
+        /** @var TechnologyHolding|null $holding */
+        $holding = $access->technologyHolding;
+
+        if ($holding === null) {
+            throw ValidationException::withMessages([
+                'access' => 'That access drew no card.',
+            ]);
+        }
+
+        $runner = $access->character;
+
+        if ($action === null) {
+            return DB::transaction(function () use ($run, $access, $runner, $holding, $actor): RunAccess {
+                $this->record(
+                    $run,
+                    RunEvent::TYPE_ACCESS,
+                    sprintf(
+                        '%s left %s where it was.',
+                        $runner->name,
+                        $holding->technologyType->name,
+                    ),
+                    actor: $actor,
+                    character: $runner,
+                    step: RunStep::Breather,
+                    payload: ['kind' => RunAccessKind::Technology->value, 'outcome' => 'left'],
+                );
+
+                $access->forceFill(['outcome' => 'left'])->save();
+
+                return $access->refresh();
+            });
+        }
+
         $pool = $this->accessPool($run, $runner);
 
-        return DB::transaction(function () use ($run, $runner, $action, $holding, $pool, $actor): RunAccess {
+        return DB::transaction(function () use ($run, $access, $runner, $action, $holding, $pool, $actor): RunAccess {
             $faces = $this->dice->roll($pool->total(), $pool->dieFaces);
             $successes = DicePool::countSuccesses($faces);
 
-            [$outcome, $description, $discount] = $this->resolveTechnologyAccess(
+            [$outcome, $description, $discount] = $this->outcomeOf(
                 $run,
                 $runner,
                 $action,
@@ -1353,21 +1433,27 @@ class RunEngine
                 $successes,
             );
 
-            $access = $this->recordAccess(
+            $event = $this->record(
                 $run,
-                $runner,
-                RunAccessKind::Technology,
+                RunEvent::TYPE_ACCESS,
                 $description,
-                [
-                    'technology_holding_id' => $holding->id,
-                    'action' => $action,
+                actor: $actor,
+                character: $runner,
+                step: RunStep::Breather,
+                payload: [
+                    'kind' => RunAccessKind::Technology->value,
+                    'action' => $action->value,
                     'successes' => $successes,
                     'outcome' => $outcome,
-                    'discount_percent' => $discount,
                 ],
-                $actor,
-                $event,
             );
+
+            $access->forceFill([
+                'action' => $action,
+                'successes' => $successes,
+                'outcome' => $outcome,
+                'discount_percent' => $discount,
+            ])->save();
 
             $this->recordRoll(
                 $run,
@@ -1380,12 +1466,12 @@ class RunEngine
                 sprintf('%s on %s', $action->label(), $holding->technologyType->name),
             );
 
-            return $access;
+            return $access->refresh();
         });
     }
 
     /**
-     * What one access did to one technology, and what to say about it.
+     * What one attempt did to one technology, and what to say about it.
      *
      * The three actions share a shape and nothing else: a copy leaves the card
      * where it is and produces a discount for whoever buys the copy off the
@@ -1396,7 +1482,7 @@ class RunEngine
      *
      * @return array{0: string, 1: string, 2: int|null}
      */
-    protected function resolveTechnologyAccess(
+    protected function outcomeOf(
         Run $run,
         Character $runner,
         TechnologyAccessAction $action,

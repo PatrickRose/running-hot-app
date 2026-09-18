@@ -1100,11 +1100,8 @@ class RunEngineTest extends TestCase
         // A solo Runner with Brawn 2 and Hack 2 rolls their combined 4.
         $this->dice->will([8, 8, 8, 8]);
 
-        $access = $this->engine()->accessTechnology(
-            $run,
-            $leader,
-            TechnologyAccessAction::Copy,
-        );
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $access = $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Copy);
 
         $this->assertSame('good_copy', $access->outcome);
         $this->assertSame(50, $access->discount_percent);
@@ -1136,7 +1133,8 @@ class RunEngineTest extends TestCase
 
         $this->dice->will([1, 1, 1, 1]);
 
-        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Copy);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $access = $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Copy);
 
         $this->assertSame('failed', $access->outcome);
         $this->assertNull($access->discount_percent);
@@ -1165,7 +1163,8 @@ class RunEngineTest extends TestCase
         // Twelve dice, eight of them successes.
         $this->dice->will([8, 8, 8, 8, 8, 8, 8, 8, 1, 1, 1, 1]);
 
-        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Steal);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $access = $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Steal);
 
         $this->assertSame('stolen', $access->outcome);
 
@@ -1194,7 +1193,8 @@ class RunEngineTest extends TestCase
 
         $this->dice->will([8, 8, 8, 8, 8, 8, 8, 1, 1, 1, 1, 1]);
 
-        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Steal);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $access = $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Steal);
 
         $this->assertSame('failed', $access->outcome);
         $this->assertSame(TechnologyHoldingStatus::Claimed, $holding->refresh()->status);
@@ -1225,7 +1225,8 @@ class RunEngineTest extends TestCase
         // Four successes out of eight dice: the moderate band, traces left.
         $this->dice->will([8, 8, 8, 8, 1, 1, 1, 1]);
 
-        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Destroy);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $access = $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Destroy);
 
         $this->assertSame('damaged_4', $access->outcome);
         $this->assertSame(TechnologyHoldingStatus::Claimed, $holding->refresh()->status);
@@ -1248,7 +1249,8 @@ class RunEngineTest extends TestCase
 
         $this->dice->will(array_fill(0, 12, 8));
 
-        $access = $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Destroy);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $access = $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Destroy);
 
         $this->assertSame('destroyed', $access->outcome);
 
@@ -1256,6 +1258,64 @@ class RunEngineTest extends TestCase
         $this->assertSame(TechnologyHoldingStatus::Destroyed, $holding->status);
         $this->assertNotNull($holding->destroyed_at);
         $this->assertFalse($holding->status->occupiesStorage());
+    }
+
+    /**
+     * "Leave it" is a real answer, not a way out. The access is spent either
+     * way: what it bought was finding out what the Facility is holding, and a
+     * Runner who does not fancy their dice has still learned that.
+     */
+    public function test_a_card_can_be_turned_over_and_left_alone(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+
+        // Drawing it is the access. It is spent before anything is decided.
+        $this->assertSame(0, $this->engine()->accessesLeft($run->refresh(), $leader));
+        $this->assertSame($holding->id, $drawn->technology_holding_id);
+        $this->assertNull($drawn->outcome);
+
+        $access = $this->engine()->resolveAccess($drawn, null);
+
+        $this->assertSame('left', $access->outcome);
+        $this->assertNull($access->action);
+
+        // Untouched, and no dice were thrown for it.
+        $holding->refresh();
+        $this->assertSame(TechnologyHoldingStatus::Claimed, $holding->status);
+        $this->assertSame($run->facility_id, $holding->facility_id);
+    }
+
+    public function test_a_card_cannot_be_decided_on_twice(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $this->assertNotNull($leader);
+
+        TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run);
+
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $this->engine()->resolveAccess($drawn, null);
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->resolveAccess($drawn->refresh(), TechnologyAccessAction::Copy);
     }
 
     /**
@@ -1280,10 +1340,11 @@ class RunEngineTest extends TestCase
         $run = $this->broke($run->refresh());
 
         $this->dice->will([1, 1, 1, 1, 1, 1]);
-        $this->engine()->accessTechnology($run, $leader, TechnologyAccessAction::Copy);
+        $drawn = $this->engine()->accessTechnology($run, $leader);
+        $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Copy);
 
         $this->expectException(ValidationException::class);
-        $this->engine()->accessTechnology($run->refresh(), $mate, TechnologyAccessAction::Copy);
+        $this->engine()->accessTechnology($run->refresh(), $mate);
     }
 
     /**
