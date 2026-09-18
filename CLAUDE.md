@@ -297,6 +297,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
 - **`->with('status', ...)` only arrives because `HandleInertiaRequests` shares it.** Ninety-odd controllers end a redirect that way and none of it reached the browser until it was: the message was written, flashed, and thrown away one redirect later, so an install, a reorder and a played equation all happened in silence. It is shared under `flash` rather than as a bare `status` because the auth pages take a `status` prop of their own and draw it in a panel, and `use-flash-toast` reads it off the *visit* rather than out of a render — two identical messages in a row are normal, and a toast keyed on a changed value would show the second one nothing. It has to be an `Inertia::always()` prop, and that is not tidiness: a partial reload does not carry an ordinary shared prop, so the client keeps the one it already had, and a listener firing on every successful visit then re-announced the same message on every five-second poll for as long as the page stayed open. Resolved on every response, it is null again the moment the flash has been read.
 - **A refusal has to be drawn somewhere.** A page posting with `router.post` gets no `errors` of its own the way an Inertia `<Form>` does, so it has to read them off `usePage()`. The research table is the one that had to learn this: `App\Support\Equation` reports every refusal against `equation`, nothing rendered that key, and an equation the rules would not take looked exactly like a dead button.
+- **...and on the run screen it has to be drawn *per panel*.** Same bug one layer along, and it made every refusal on a run silent: an unaffordable Boost, a Charge out of step, a top-up the Corporation could not cover. A page-level `errors` is no good there because several runs are on screen at once and all of them report against the same handful of keys, so one group's refusal would appear under every panel. `useRunAction()` in `run-panel.tsx` is the answer the research table's `ScoreForm` already uses — each desk posts through it and keeps its own message. Two things swallowed a refusal on the way to being found: an `<input type="number" max={...}>` on the top-up, whose browser-side constraint blocked the submit outright so no post was ever made, and `requirePurse` pinning an `s` on the end of "Credit of budget".
 - **`Collection::sortBy()` given an array reads closures as *comparators*, not key extractors.** So `sortBy([fn ($x) => $x->a, fn ($x) => $x->b])` calls each closure with two items, ignores the second, and sorts by nothing — silently. It cost an hour of a run meeting its cyber stack before its physical one. Either sort by one closure returning an array, or write the ordering out; `RunEngine::encounterOrder` does the latter on purpose.
 
 ## Commands
@@ -715,6 +716,17 @@ being paid, then the button that commits it.
 
 Everything else — Wounds, Tags, the 3.4.4 payment — goes through
 `TrackerService` like anything else.
+
+**A Charge is paid at the Consequence step and nowhere else.** It buys an
+*extra* consequence on top of one the Runners are already taking, so there is
+nothing to add it to until they have lost the roll — 3.4.2 introduces it after
+"if they do not, then the Runner(s) take the consequence", and the glossary
+makes it "if the runner(s) fail to break a Protection Card with a Charge
+effect". The Consequence step *is* that condition and nothing else, because
+`stepFor()` only reaches it when a challenge has happened and `runners_won` was
+false, so `charge()` checks the step and the screen draws the control only
+there. It used to sit beside Boost from the moment a card came on, which offered
+Security a purchase that could not mean anything yet.
 
 **Alerts do two jobs, and that is the decision Security is there to make.** They
 are temporary Credits *and* a point of strength on every card the Runners have

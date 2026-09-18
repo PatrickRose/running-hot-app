@@ -119,6 +119,70 @@ function describeParts(
 }
 
 /**
+ * Doing one thing to a run, and hearing back when the server says no.
+ *
+ * A page posting with `router.post` gets no `errors` of its own the way an
+ * Inertia `<Form>` does, and reading them off `usePage()` is no good here:
+ * several runs are on screen at once and every one of them reports against the
+ * same handful of keys, so a page-level `errors` would put one group's refusal
+ * under every panel on the page. Same bug the research table's `ScoreForm`
+ * had, and the same answer — each desk keeps its own.
+ *
+ * The first message is the one drawn, because every refusal in `RunEngine` is
+ * a single sentence about the one thing that was wrong: a Boost the budget
+ * cannot cover names the purse that came up short, and there is no second line
+ * waiting behind it.
+ */
+function useRunAction() {
+    const [busy, setBusy] = useState(false);
+    const [refusal, setRefusal] = useState<string | null>(null);
+
+    // A route definition or the plain url one of them resolves to: the access
+    // routes take two parameters and are called for their `.url`.
+    const post = (
+        url: ReturnType<typeof activate> | string,
+        data: RunPayload = {},
+    ): void => {
+        setBusy(true);
+        setRefusal(null);
+        router.post(url, data, {
+            preserveScroll: true,
+            onFinish: () => setBusy(false),
+            onError: (errors) =>
+                setRefusal(
+                    Object.values(errors)[0] ??
+                        'The server would not take that.',
+                ),
+        });
+    };
+
+    return { busy, refusal, post };
+}
+
+/**
+ * Why the last thing you tried did not happen.
+ *
+ * Drawn inside the desk that was refused rather than at the top of the run, so
+ * a Runner spending an access and a Security player who cannot afford a Boost
+ * each read the answer where they are looking. It is `role="alert"` because it
+ * appears in response to something you just did and nothing else moves.
+ */
+function Refusal({ message }: { message: string | null }) {
+    if (message === null) {
+        return null;
+    }
+
+    return (
+        <p
+            role="alert"
+            className="rounded-md border border-amber-500/40 bg-amber-50 px-2 py-1.5 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+            {message}
+        </p>
+    );
+}
+
+/**
  * One run, from whichever side of it the viewer is on.
  *
  * The same component for both, because the payload is what differs rather than
@@ -303,7 +367,7 @@ function FinishedSummary({ run }: { run: RunView }) {
  * plan — and the Corporation is entitled to know what left the building.
  */
 function AccessDesk({ run }: { run: RunView }) {
-    const [busy, setBusy] = useState(false);
+    const { busy, refusal, post } = useRunAction();
     const holders = run.participants.filter(
         (runner) => (run.accesses.left[String(runner.character_id)] ?? 0) > 0,
     );
@@ -313,8 +377,7 @@ function AccessDesk({ run }: { run: RunView }) {
         kind: string,
         holdingId: number | null = null,
     ) => {
-        setBusy(true);
-        router.post(
+        post(
             storeAccess(run.id),
             holdingId === null
                 ? { character_id: characterId, kind }
@@ -323,7 +386,6 @@ function AccessDesk({ run }: { run: RunView }) {
                       kind,
                       technology_holding_id: holdingId,
                   },
-            { onFinish: () => setBusy(false), preserveScroll: true },
         );
     };
 
@@ -341,6 +403,8 @@ function AccessDesk({ run }: { run: RunView }) {
                         : `${run.technologies_left} in the racks · ${unseen} not turned over yet`}
                 </p>
             </header>
+
+            <Refusal message={refusal} />
 
             {/* What this Facility's own effect actually is, said once and in
                 full. It is one of the four things an access can be spent on, so
@@ -521,14 +585,12 @@ function UndecidedCard({
     run: RunView;
     access: RunUndecidedAccess;
 }) {
-    const [busy, setBusy] = useState(false);
+    const { busy, refusal, post } = useRunAction();
 
     const decide = (action: string | null) => {
-        setBusy(true);
-        router.post(
+        post(
             resolveAccess([run.id, access.id]).url,
             action === null ? {} : { action },
-            { onFinish: () => setBusy(false), preserveScroll: true },
         );
     };
 
@@ -542,6 +604,7 @@ function UndecidedCard({
                 </span>
                 . What now?
             </p>
+            <Refusal message={refusal} />
             <div className="flex flex-wrap gap-2">
                 <Button
                     size="sm"
@@ -660,7 +723,7 @@ function Gauge({
  */
 function NotInYet({ run }: { run: RunView }) {
     const [override, setOverride] = useState('');
-    const [submitting, setSubmitting] = useState(false);
+    const { busy, refusal, post } = useRunAction();
     const big = run.participants.length > 6;
 
     if (!run.can_lead) {
@@ -676,19 +739,15 @@ function NotInYet({ run }: { run: RunView }) {
             className="flex flex-col gap-3 rounded-md border p-3"
             onSubmit={(event) => {
                 event.preventDefault();
-                setSubmitting(true);
-                router.post(
+                post(
                     begin(run.id),
                     override === ''
                         ? {}
                         : { group_alert_override: Number(override) },
-                    {
-                        onFinish: () => setSubmitting(false),
-                        preserveScroll: true,
-                    },
                 );
             }}
         >
+            <Refusal message={refusal} />
             <p className="text-sm">
                 Alerts are raised on the way in, from the Tags you are carrying
                 now and the size of the group. A Tag removed before you go in is
@@ -713,7 +772,7 @@ function NotInYet({ run }: { run: RunView }) {
                     </p>
                 </div>
             )}
-            <Button type="submit" disabled={submitting} className="self-start">
+            <Button type="submit" disabled={busy} className="self-start">
                 Go in
             </Button>
         </form>
@@ -870,7 +929,7 @@ function SecurityDesk({ run }: { run: RunView }) {
     const [chargeAlerts, setChargeAlerts] = useState(0);
     const [boosts, setBoosts] = useState('1');
     const [printed, setPrinted] = useState('');
-    const [busy, setBusy] = useState(false);
+    const { busy, refusal, post } = useRunAction();
 
     if (card === null) {
         return null;
@@ -900,13 +959,6 @@ function SecurityDesk({ run }: { run: RunView }) {
             budget_to_spend: cost - fromAlerts,
         };
     };
-    const post = (url: ReturnType<typeof activate>, data: RunPayload = {}) => {
-        setBusy(true);
-        router.post(url, data, {
-            onFinish: () => setBusy(false),
-            preserveScroll: true,
-        });
-    };
 
     return (
         <section className="flex flex-col gap-3 rounded-md border p-3">
@@ -918,6 +970,8 @@ function SecurityDesk({ run }: { run: RunView }) {
                     </p>
                 )}
             </header>
+
+            <Refusal message={refusal} />
 
             <BudgetTopUp run={run} />
 
@@ -1020,38 +1074,51 @@ function SecurityDesk({ run }: { run: RunView }) {
                             Boost (next costs {card.next_boost_cost})
                         </Button>
                     </div>
-
-                    {card.charge_cost !== null &&
-                        card.charge_cost !== undefined && (
-                            <div className="flex flex-col gap-2 border-t pt-3">
-                                <PaymentSlider
-                                    run={run}
-                                    id={`charge-${run.id}`}
-                                    cost={card.charge_cost}
-                                    alerts={chargeAlerts}
-                                    onAlerts={setChargeAlerts}
-                                />
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="self-start"
-                                    disabled={busy}
-                                    onClick={() =>
-                                        post(
-                                            charge(run.id),
-                                            spend(
-                                                card.charge_cost ?? 0,
-                                                chargeAlerts,
-                                            ),
-                                        )
-                                    }
-                                >
-                                    Charge for {card.charge_cost}
-                                </Button>
-                            </div>
-                        )}
                 </div>
             )}
+
+            {/*
+             * A Charge buys an *extra* consequence on top of one the Runners
+             * are already taking, so there is nothing to add it to until they
+             * have lost the roll (3.4.2, and the glossary's "if the runner(s)
+             * fail to break a Protection Card"). The Consequence step is
+             * exactly that, so the control only exists there — and the engine
+             * refuses it anywhere else rather than trusting this.
+             */}
+            {run.step === 'consequence' &&
+                card.charge_cost !== null &&
+                card.charge_cost !== undefined && (
+                    <div className="flex flex-col gap-2 border-t pt-3">
+                        <p className="text-sm">
+                            The Runners did not break it. Paying the Charge adds
+                            what the card prints:{' '}
+                            <span className="font-medium">
+                                {card.charge_consequence ?? 'see the card.'}
+                            </span>
+                        </p>
+                        <PaymentSlider
+                            run={run}
+                            id={`charge-${run.id}`}
+                            cost={card.charge_cost}
+                            alerts={chargeAlerts}
+                            onAlerts={setChargeAlerts}
+                        />
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="self-start"
+                            disabled={busy}
+                            onClick={() =>
+                                post(
+                                    charge(run.id),
+                                    spend(card.charge_cost ?? 0, chargeAlerts),
+                                )
+                            }
+                        >
+                            Charge for {card.charge_cost}
+                        </Button>
+                    </div>
+                )}
 
             {run.step === 'activate' && card.active && (
                 <form
@@ -1228,7 +1295,7 @@ function PaymentSlider({
 function BudgetTopUp({ run }: { run: RunView }) {
     const budget = run.budget;
     const [amount, setAmount] = useState('');
-    const [busy, setBusy] = useState(false);
+    const { busy, refusal, post } = useRunAction();
 
     if (budget === null) {
         return null;
@@ -1241,25 +1308,26 @@ function BudgetTopUp({ run }: { run: RunView }) {
             className="flex flex-wrap items-end gap-2 rounded-md bg-muted/40 p-2"
             onSubmit={(event) => {
                 event.preventDefault();
-                setBusy(true);
-                router.post(
-                    topUpBudget(run.facility.id),
-                    { security_budget: budget.placed + adding },
-                    {
-                        onFinish: () => setBusy(false),
-                        preserveScroll: true,
-                        onSuccess: () => setAmount(''),
-                    },
-                );
+                post(topUpBudget(run.facility.id), {
+                    security_budget: budget.placed + adding,
+                });
+                setAmount('');
             }}
         >
             <div className="flex flex-col gap-1">
                 <Label htmlFor={`top-up-${run.id}`}>Add to the budget</Label>
+                {/*
+                 * No `max`: the browser's own constraint blocked the submit
+                 * outright, so a top-up past what the company holds produced a
+                 * native tooltip and no post at all — and the figure it would
+                 * have been checking against is up to a poll out of date
+                 * anyway. The service is the one authority on affordability,
+                 * and its refusal names the Corporation.
+                 */}
                 <Input
                     id={`top-up-${run.id}`}
                     type="number"
                     min={1}
-                    max={budget.company}
                     className="w-24"
                     value={amount}
                     onChange={(event) => setAmount(event.target.value)}
@@ -1278,6 +1346,9 @@ function BudgetTopUp({ run }: { run: RunView }) {
                 company. It leaves the Corporation the moment it lands here, and
                 whatever is unspent goes home when the phase ends.
             </p>
+            <div className="w-full">
+                <Refusal message={refusal} />
+            </div>
         </form>
     );
 }
@@ -1401,7 +1472,7 @@ function LeaderDesk({ run }: { run: RunView }) {
     const [taker, setTaker] = useState('');
     const [counts, setCounts] = useState(NO_CONSEQUENCES);
     const [retrying, setRetrying] = useState(false);
-    const [busy, setBusy] = useState(false);
+    const { busy, refusal, post } = useRunAction();
 
     const active = run.participants.filter((runner) => !runner.left);
 
@@ -1420,17 +1491,12 @@ function LeaderDesk({ run }: { run: RunView }) {
             ? [{ effect: 'retry' as RunConsequenceEffect, times: 1 }]
             : []),
     ];
-    const post = (url: ReturnType<typeof advance>, data: RunPayload = {}) => {
-        setBusy(true);
-        router.post(url, data, {
-            onFinish: () => setBusy(false),
-            preserveScroll: true,
-        });
-    };
 
     return (
         <section className="flex flex-col gap-4 rounded-md border p-3">
             <h3 className="font-medium">Run Leader</h3>
+
+            <Refusal message={refusal} />
 
             {run.step === 'activate' && !run.card?.active && (
                 <p className="text-sm text-muted-foreground">
@@ -1626,7 +1692,7 @@ function Party({
     run: RunView;
     active: RunParticipantView[];
 }) {
-    const [busy, setBusy] = useState(false);
+    const { busy, refusal, post } = useRunAction();
     const [successor, setSuccessor] = useState('');
 
     return (
@@ -1641,6 +1707,8 @@ function Party({
                     )
                 </span>
             </h3>
+
+            <Refusal message={refusal} />
             <ul className="flex flex-col gap-2">
                 {run.participants.map((runner) => (
                     <li
@@ -1687,25 +1755,16 @@ function Party({
                                         size="sm"
                                         variant="ghost"
                                         disabled={busy}
-                                        onClick={() => {
-                                            setBusy(true);
-                                            router.post(
-                                                leave(run.id),
-                                                {
-                                                    character_id:
-                                                        runner.character_id,
-                                                    new_leader_character_id:
-                                                        successor === ''
-                                                            ? null
-                                                            : Number(successor),
-                                                },
-                                                {
-                                                    onFinish: () =>
-                                                        setBusy(false),
-                                                    preserveScroll: true,
-                                                },
-                                            );
-                                        }}
+                                        onClick={() =>
+                                            post(leave(run.id), {
+                                                character_id:
+                                                    runner.character_id,
+                                                new_leader_character_id:
+                                                    successor === ''
+                                                        ? null
+                                                        : Number(successor),
+                                            })
+                                        }
                                     >
                                         Leave
                                     </Button>

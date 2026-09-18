@@ -529,9 +529,22 @@ class RunEngine
     /**
      * Pay a card's Charge cost to add its extra consequences (rulebook 3.4.2).
      *
-     * Directing only. What the extra consequences *are* is the sentence the
-     * card prints, so this records the payment and whoever is running the card
-     * then applies them through {@see self::applyConsequence()} like any other.
+     * Only once the Runners have failed to break the card, which both places
+     * the rulebook describes a Charge say outright: 3.4.2 introduces it in the
+     * Consequences section, after "if they do not, then the Runner(s) take the
+     * consequence", and the glossary makes it "if the runner(s) fail to break a
+     * Protection Card with a Charge effect ... the Security player may pay the
+     * indicated cost to also give the Charge consequence". So it buys an
+     * *extra* consequence on top of one the Runners are already taking, and
+     * there is nothing to add it to until they have lost the roll.
+     *
+     * The Consequence step is exactly that condition and nothing else:
+     * {@see self::stepFor()} only reaches it when a challenge has happened and
+     * `runners_won` was false.
+     *
+     * What the extra consequences *are* is the sentence the card prints, so
+     * this records the payment and whoever is running the card then applies
+     * them through {@see self::applyConsequence()} like any other.
      */
     public function charge(Run $run, ?SecurityPayment $payment = null, ?User $actor = null): RunEvent
     {
@@ -543,6 +556,16 @@ class RunEngine
         if (! $card->cardType->hasCharge()) {
             throw ValidationException::withMessages([
                 'charge' => sprintf('%s has no Charge ability.', $card->cardType->name),
+            ]);
+        }
+
+        if ($cursor->step !== RunStep::Consequence) {
+            throw ValidationException::withMessages([
+                'charge' => sprintf(
+                    'A Charge is paid once the Runners have failed to break the card, and they have not: %s is at the %s step.',
+                    $card->cardType->name,
+                    $cursor->step->label(),
+                ),
             ]);
         }
 
@@ -2244,8 +2267,8 @@ class RunEngine
 
         $state = $run->facility->stateForTurn($run->turn);
 
-        $this->requirePurse($payment->alerts, $run->alertsAvailable(), 'Alert', $reason);
-        $this->requirePurse($payment->budget, $state->unspentBudget(), 'Credit of budget', $reason);
+        $this->requirePurse($payment->alerts, $run->alertsAvailable(), 'Alert', 'Alerts', $reason);
+        $this->requirePurse($payment->budget, $state->unspentBudget(), 'Credit of budget', 'Credits of budget', $reason);
 
         if ($payment->alerts > 0) {
             $run->forceFill(['alerts_spent' => $run->alerts_spent + $payment->alerts])->save();
@@ -2262,17 +2285,21 @@ class RunEngine
 
     /**
      * Refuse a purse that cannot cover what has been asked of it.
+     *
+     * Both spellings of the unit are passed rather than an 's' pinned on the
+     * end, because the noun to pluralise is not the last word: "Credit of
+     * budget" becomes "Credits of budget", and appending gave "Credit of
+     * budgets".
      */
-    protected function requirePurse(int $wanted, int $available, string $unit, string $reason): void
+    protected function requirePurse(int $wanted, int $available, string $unit, string $units, string $reason): void
     {
         if ($wanted > $available) {
             throw ValidationException::withMessages([
                 'payment' => sprintf(
-                    '%s wants %d %s%s and there %s only %d.',
+                    '%s wants %d %s and there %s only %d.',
                     $reason,
                     $wanted,
-                    $unit,
-                    $wanted === 1 ? '' : 's',
+                    $wanted === 1 ? $unit : $units,
                     $available === 1 ? 'is' : 'are',
                     $available,
                 ),

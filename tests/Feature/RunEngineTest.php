@@ -1117,9 +1117,9 @@ class RunEngineTest extends TestCase
     }
 
     /**
-     * A Charge needs Directing, and what the extra consequences *are* is the
-     * sentence the card prints - so this records the payment and leaves the
-     * words to whoever is running the card.
+     * A Charge is paid once the Runners have failed the check, and what the
+     * extra consequences *are* is the sentence the card prints - so this
+     * records the payment and leaves the words to whoever is running the card.
      */
     public function test_a_charge_is_paid_from_the_budget_and_recorded(): void
     {
@@ -1147,6 +1147,54 @@ class RunEngineTest extends TestCase
         $this->expectException(ValidationException::class);
 
         $this->engine()->charge($run);
+    }
+
+    /**
+     * A Charge buys an *extra* consequence on top of one the Runners are
+     * already taking, so there is nothing to add it to before the dice are
+     * thrown. 3.4.2 introduces it after "if they do not, then the Runner(s)
+     * take the consequence", and the glossary makes it "if the runner(s) fail
+     * to break a Protection Card".
+     */
+    public function test_a_charge_before_the_runners_have_failed_is_refused(): void
+    {
+        $run = $this->started(physical: 1, chargeCost: 2);
+        $this->budget($run, 4);
+
+        $this->engine()->activate($run);
+
+        try {
+            $this->engine()->charge($run->refresh());
+            $this->fail('A Charge at the Activate step should have been refused.');
+        } catch (ValidationException $refusal) {
+            $this->assertStringContainsString('failed to break the card', implode(' ', $refusal->errors()['charge']));
+        }
+
+        $this->assertSame(0, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
+    }
+
+    /**
+     * And nothing to add it to once they have won the roll either: they are at
+     * the Breather taking no consequence at all.
+     */
+    public function test_a_charge_after_the_runners_won_is_refused(): void
+    {
+        $run = $this->started(physical: 1, chargeCost: 2);
+        $this->budget($run, 4);
+
+        $this->engine()->activate($run);
+        $this->dice->will([1, 1]);
+        $this->engine()->defend($run->refresh(), 2);
+
+        $this->dice->will([8, 8, 8]);
+        $this->engine()->challenge($run->refresh(), RunnerSkill::Brawn);
+
+        try {
+            $this->engine()->charge($run->refresh());
+            $this->fail('A Charge after a won challenge should have been refused.');
+        } catch (ValidationException $refusal) {
+            $this->assertStringContainsString('Breather', implode(' ', $refusal->errors()['charge']));
+        }
     }
 
     // ------------------------------------------------------------------
