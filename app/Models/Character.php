@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Carbon;
 
@@ -89,6 +90,30 @@ class Character extends Model
      * A runner with Wounds equal to or greater than their Body is incapacitated
      * and instantly leaves a Run (rulebook 3.4.2).
      */
+    /**
+     * Equipment cards this Runner is carrying (rulebook 3.4.1).
+     *
+     * @return HasMany<EquipmentHolding, $this>
+     */
+    public function equipmentHoldings(): HasMany
+    {
+        return $this->hasMany(EquipmentHolding::class);
+    }
+
+    /**
+     * Copies of one Equipment card in hand, read from the database rather than
+     * from a loaded model - the same reason Corporation::researchPointsIn()
+     * exists. A service holding a Character loaded before the last spend would
+     * otherwise let a copy be played twice.
+     */
+    public function equipmentCopiesOf(int $equipmentCardTypeId): int
+    {
+        return (int) EquipmentHolding::query()
+            ->where('character_id', $this->id)
+            ->where('equipment_card_type_id', $equipmentCardTypeId)
+            ->value('copies');
+    }
+
     public function isIncapacitated(): bool
     {
         return $this->wounds >= $this->body;

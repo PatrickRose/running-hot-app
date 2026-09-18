@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\CharacterRole;
 use App\Enums\DiceRoller;
+use App\Enums\EquipmentCategory;
 use App\Enums\ProtectionKind;
 use App\Enums\RunAccessKind;
 use App\Enums\RunConsequence;
@@ -16,6 +18,8 @@ use App\Enums\TechnologyOrigin;
 use App\Enums\Tracker;
 use App\Jobs\SyncRunChannelAccess;
 use App\Models\Character;
+use App\Models\EquipmentCardType;
+use App\Models\EquipmentHolding;
 use App\Models\Facility;
 use App\Models\FacilityCardActivation;
 use App\Models\FacilityProtectionCard;
@@ -23,6 +27,7 @@ use App\Models\Gang;
 use App\Models\Run;
 use App\Models\RunAccess;
 use App\Models\RunDiceRoll;
+use App\Models\RunEquipment;
 use App\Models\RunEvent;
 use App\Models\RunParticipant;
 use App\Models\TechnologyHolding;
@@ -35,6 +40,7 @@ use App\Support\Runs\ChallengeOutcome;
 use App\Support\Runs\ChallengeStrength;
 use App\Support\Runs\ConsequenceSlip;
 use App\Support\Runs\DicePool;
+use App\Support\Runs\RollModifiers;
 use App\Support\Runs\RunCursor;
 use App\Support\Runs\RunGroup;
 use App\Support\Runs\RunOrdering;
@@ -79,6 +85,14 @@ use Illuminate\Validation\ValidationException;
  */
 class RunEngine
 {
+    /**
+     * How many Permanent items a Runner may equip (rulebook 3.4.1).
+     *
+     * "You may only equip 3 permanent items", printed directly under the
+     * category, alongside the one-copy-per-title limit beside it.
+     */
+    public const EQUIPPED_ITEMS = 3;
+
     public function __construct(
         private readonly TrackerService $trackers,
         private readonly Dice $dice,
@@ -186,6 +200,236 @@ class RunEngine
 
             return $run->refresh();
         });
+    }
+
+    /**
+     * Equip Permanent items before the run goes in (rulebook 3.4.1).
+     *
+     * "These items must be equipped before the run begins (during the Setup
+     * Phase) by placing them in front of you", with two limits printed right
+     * under it: at most three, and one copy of each card by title. Both are
+     * checked here rather than on the form, for the reason every other rule in
+     * this application is - a player-facing route must not grow its own copy.
+     *
+     * Setting the loadout **replaces** it, so a Runner changing their mind
+     * before the run goes in passes the corrected set rather than looking for
+     * an unequip. Nothing is spent: a Permanent item comes home with its owner
+     * unless they are carried out, which is what {@see self::incapacitate()}
+     * is for.
+     *
+     * By title, not by card, because that is what 3.4.1 says - and ANT's cards
+     * are the standing proof that two codes can print the same name.
+     *
+     * @param  array<int, int>  $equipmentCardTypeIds
+     * @return Collection<int, RunEquipment>
+     */
+    public function equip(
+        Run $run,
+        Character $runner,
+        array $equipmentCardTypeIds,
+        ?User $actor = null,
+    ): Collection {
+        if ($run->status !== RunStatus::Submitted) {
+            throw ValidationException::withMessages([
+                'equipment' => 'Permanent items are equipped before the run begins, and this one has gone in.',
+            ]);
+        }
+
+        $runner = $this->requireActiveRunner($run, $runner);
+
+        $ids = collect($equipmentCardTypeIds)
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($ids->count() > self::EQUIPPED_ITEMS) {
+            throw ValidationException::withMessages([
+                'equipment' => sprintf(
+                    'A Runner may equip %d permanent items, and that is %d.',
+                    self::EQUIPPED_ITEMS,
+                    $ids->count(),
+                ),
+            ]);
+        }
+
+        /** @var Collection<int, EquipmentCardType> $cards */
+        $cards = EquipmentCardType::query()
+            ->whereIn('id', $ids)
+            ->where('game_id', $run->game_id)
+            ->get();
+
+        if ($cards->count() !== $ids->count()) {
+            throw ValidationException::withMessages([
+                'equipment' => 'One of those Equipment cards is not in this game.',
+            ]);
+        }
+
+        foreach ($cards as $card) {
+            if ($card->category !== EquipmentCategory::Permanent) {
+                throw ValidationException::withMessages([
+                    'equipment' => sprintf(
+                        '%s is %s and is played during the run rather than equipped before it.',
+                        $card->name,
+                        $card->category->label(),
+                    ),
+                ]);
+            }
+
+            if ($runner->equipmentCopiesOf($card->id) < 1) {
+                throw ValidationException::withMessages([
+                    'equipment' => sprintf('%s is not carrying %s.', $runner->name, $card->name),
+                ]);
+            }
+        }
+
+        $duplicated = $cards->groupBy('name')->first(fn (Collection $group): bool => $group->count() > 1);
+
+        if ($duplicated !== null) {
+            throw ValidationException::withMessages([
+                'equipment' => sprintf(
+                    'Only one copy of each card by title, and that is two of %s.',
+                    $duplicated->first()?->name,
+                ),
+            ]);
+        }
+
+        return DB::transaction(function () use ($run, $runner, $cards, $actor): Collection {
+            $run->equipment()
+                ->where('character_id', $runner->id)
+                ->whereNull('pass')
+                ->delete();
+
+            $equipped = $cards->map(fn (EquipmentCardType $card): RunEquipment => RunEquipment::create([
+                'run_id' => $run->id,
+                'character_id' => $runner->id,
+                'equipment_card_type_id' => $card->id,
+            ]));
+
+            $this->record(
+                $run,
+                RunEvent::TYPE_EQUIPPED,
+                $cards->isEmpty()
+                    ? sprintf('%s is going in with nothing equipped.', $runner->name)
+                    : sprintf(
+                        '%s equipped %s.',
+                        $runner->name,
+                        $cards->pluck('name')->implode(', '),
+                    ),
+                actor: $actor,
+                character: $runner,
+                payload: ['equipment_card_type_ids' => $cards->pluck('id')->all()],
+            );
+
+            return $equipped;
+        });
+    }
+
+    /**
+     * Play a This-run or Single-use card during a step (rulebook 3.4.1, 3.4.2).
+     *
+     * "Each Runner in the Runner group may use one card (either a 'This run' or
+     * 'Single use') during these steps", and the worked examples make that per
+     * Runner per *step* rather than per run: Ryan uses a Boost card during the
+     * Activate step and "can not use another card until the next Activate
+     * step". So the cap is counted off this pass and this step, derived rather
+     * than stored, the way an access is.
+     *
+     * Both categories are "returned to Control" afterwards, so both spend the
+     * copy. The difference between them is how long the effect lasts, which is
+     * the player's to remember and Control's to rule on - nothing here reads
+     * the printed text.
+     */
+    public function playEquipment(
+        Run $run,
+        Character $runner,
+        EquipmentCardType $card,
+        ?User $actor = null,
+    ): RunEquipment {
+        $this->requireRunning($run);
+
+        $runner = $this->requireActiveRunner($run, $runner);
+
+        if ($card->game_id !== $run->game_id) {
+            throw ValidationException::withMessages([
+                'equipment' => 'That Equipment card is not in this game.',
+            ]);
+        }
+
+        if ($card->category === EquipmentCategory::Permanent) {
+            throw ValidationException::withMessages([
+                'equipment' => sprintf(
+                    '%s is Permanent: it is equipped before the run rather than played during it.',
+                    $card->name,
+                ),
+            ]);
+        }
+
+        if ($runner->equipmentCopiesOf($card->id) < 1) {
+            throw ValidationException::withMessages([
+                'equipment' => sprintf('%s is not carrying %s.', $runner->name, $card->name),
+            ]);
+        }
+
+        $cursor = $this->cursor($run);
+
+        $alreadyPlayed = $run->equipment()
+            ->where('character_id', $runner->id)
+            ->where('pass', $cursor->pass)
+            ->where('step', $cursor->step->value)
+            ->exists();
+
+        if ($alreadyPlayed) {
+            throw ValidationException::withMessages([
+                'equipment' => sprintf(
+                    '%s has already played a card during this %s step.',
+                    $runner->name,
+                    $cursor->step->label(),
+                ),
+            ]);
+        }
+
+        return DB::transaction(function () use ($run, $runner, $card, $cursor, $actor): RunEquipment {
+            $this->spendEquipment($runner, $card);
+
+            /** @var RunEquipment $played */
+            $played = RunEquipment::create([
+                'run_id' => $run->id,
+                'character_id' => $runner->id,
+                'equipment_card_type_id' => $card->id,
+                'pass' => $cursor->pass,
+                'step' => $cursor->step,
+            ]);
+
+            $this->record(
+                $run,
+                RunEvent::TYPE_EQUIPMENT_PLAYED,
+                sprintf(
+                    '%s played %s: %s',
+                    $runner->name,
+                    $card->name,
+                    $card->effect,
+                ),
+                actor: $actor,
+                character: $runner,
+                card: $cursor->card,
+                pass: $cursor->pass,
+                step: $cursor->step,
+                payload: ['equipment_card_type_id' => $card->id],
+            );
+
+            return $played;
+        });
+    }
+
+    /**
+     * Take one copy of an Equipment card out of a Runner's hand.
+     */
+    protected function spendEquipment(Character $runner, EquipmentCardType $card): void
+    {
+        EquipmentHolding::query()
+            ->where('character_id', $runner->id)
+            ->where('equipment_card_type_id', $card->id)
+            ->decrement('copies');
     }
 
     /**
@@ -721,6 +965,7 @@ class RunEngine
     public function challenge(
         Run $run,
         RunnerSkill $skill,
+        ?RollModifiers $modifiers = null,
         ?User $actor = null,
     ): ChallengeOutcome {
         $cursor = $this->requireCard($run);
@@ -792,8 +1037,37 @@ class RunEngine
         /** @var FacilityProtectionCard $card */
         $card = $cursor->card;
 
-        return DB::transaction(function () use ($run, $cursor, $card, $skill, $pool, $strength, $securitySuccesses, $securityRoll, $actor): ChallengeOutcome {
-            $runnerFaces = $this->dice->roll($pool->total(), $pool->dieFaces);
+        $modifiers ??= RollModifiers::none();
+
+        return DB::transaction(function () use ($run, $cursor, $card, $skill, $pool, $strength, $securitySuccesses, $securityRoll, $modifiers, $actor): ChallengeOutcome {
+            // Whatever Equipment the Runners say they are bringing to bear,
+            // applied to the pool the rules derived. The card itself is not
+            // read - see RollModifiers.
+            $count = $modifiers->diceFrom($pool->total());
+            $faces = $modifiers->facesFrom($pool->dieFaces);
+
+            $runnerFaces = $this->dice->roll($count, $faces);
+
+            // Mind jack, and nothing else on the sheet: "Retry any failed rolls
+            // once". The failures are thrown again and the new faces stand,
+            // which is what retrying a die means - a reroll that kept the
+            // better of the two would be a different card.
+            if ($modifiers->rerollFailures) {
+                $failed = count(array_filter(
+                    $runnerFaces,
+                    fn (int $face): bool => $face < DicePool::SUCCESS_ON,
+                ));
+
+                if ($failed > 0) {
+                    $runnerFaces = [
+                        ...array_values(array_filter(
+                            $runnerFaces,
+                            fn (int $face): bool => $face >= DicePool::SUCCESS_ON,
+                        )),
+                        ...$this->dice->roll($failed, $faces),
+                    ];
+                }
+            }
 
             $runnerSuccesses = DicePool::countSuccesses($runnerFaces);
             $won = DicePool::runnersWin($runnerSuccesses, $securitySuccesses);
@@ -818,21 +1092,33 @@ class RunEngine
                     'skill' => $skill->value,
                     'strength' => $strength->toArray(),
                     'pool' => $pool->toArray(),
+                    'modifiers' => $modifiers->toArray(),
                     'runner_successes' => $runnerSuccesses,
                     'security_successes' => $securitySuccesses,
                     'runners_won' => $won,
                 ],
             );
 
+            // The roll is recorded as what was actually thrown rather than as
+            // the pool the rules derived: a Runner reading their own log should
+            // see the six dice that hit the table, not the four the pool says
+            // and a footnote.
             $runnersRoll = $this->recordRoll(
                 $run,
                 $event,
                 DiceRoller::Runners,
-                $pool->total(),
-                $pool->dieFaces,
+                $count,
+                $faces,
                 $runnerFaces,
                 $runnerSuccesses,
-                sprintf('%s against %s', $skill->label(), $card->cardType->name),
+                $modifiers->isEmpty()
+                    ? sprintf('%s against %s', $skill->label(), $card->cardType->name)
+                    : sprintf(
+                        '%s against %s (%s)',
+                        $skill->label(),
+                        $card->cardType->name,
+                        $modifiers->explain(),
+                    ),
             );
 
             return new ChallengeOutcome(
@@ -2202,24 +2488,93 @@ class RunEngine
             'left_reason' => RunDeparture::Incapacitated,
         ])->save();
 
+        $surrendered = $this->surrenderEquipment($run, $character);
+        $security = $this->securitySeatOf($run);
+        $tookThem = $security === null
+            ? $run->facility->corporation->name."'s Security player"
+            : $security->name;
+
         $this->record(
             $run,
             RunEvent::TYPE_INCAPACITATED,
             sprintf(
-                '%s took %d Wound%s against a Body of %d and was carried out. Any permanent Equipment they played goes to %s\'s Security player.',
+                '%s took %d Wound%s against a Body of %d and was carried out.%s',
                 $character->name,
                 $character->wounds,
                 $character->wounds === 1 ? '' : 's',
                 $character->body,
-                $run->facility->corporation->name,
+                $surrendered === [] ? '' : sprintf(
+                    ' %s took %s off them.',
+                    $tookThem,
+                    implode(', ', $surrendered),
+                ),
             ),
             actor: $actor,
             character: $character,
             pass: $cursor->pass,
             step: $cursor->step,
+            payload: ['equipment_surrendered' => $surrendered],
         );
 
         return $this->afterDeparture($run->refresh(), $character, null, $actor);
+    }
+
+    /**
+     * Hand a carried-out Runner's permanent Equipment to Security (3.4.2).
+     *
+     * "Any permanent Equipment that you played on this run will be given to the
+     * Security player of the Corporation you are Running against" - so it is
+     * what they *equipped for this run*, not everything in their kit, and it
+     * really moves: a copy off the Runner and a copy onto the Security seat.
+     *
+     * A Corporation with no Security player is normal - nobody has claimed the
+     * seat, or the roster has none - and the cards are taken off the Runner
+     * either way. They lost them; where they ended up is then Control's to
+     * settle, and the event says who took them when there is somebody to name.
+     *
+     * @return array<int, string> the cards taken, by name
+     */
+    protected function surrenderEquipment(Run $run, Character $character): array
+    {
+        $equipped = $run->equipment()
+            ->where('character_id', $character->id)
+            ->whereNull('pass')
+            ->with('cardType')
+            ->get();
+
+        if ($equipped->isEmpty()) {
+            return [];
+        }
+
+        $security = $this->securitySeatOf($run);
+
+        foreach ($equipped as $item) {
+            $this->spendEquipment($character, $item->cardType);
+
+            if ($security !== null) {
+                EquipmentHolding::query()->updateOrCreate(
+                    [
+                        'character_id' => $security->id,
+                        'equipment_card_type_id' => $item->equipment_card_type_id,
+                    ],
+                    [],
+                )->increment('copies');
+            }
+        }
+
+        return $equipped->map(fn (RunEquipment $item): string => $item->cardType->name)->all();
+    }
+
+    /**
+     * The Security player of the Corporation being run against, if anybody
+     * holds that seat.
+     */
+    protected function securitySeatOf(Run $run): ?Character
+    {
+        return Character::query()
+            ->where('corporation_id', $run->facility->corporation_id)
+            ->where('role', CharacterRole::Security)
+            ->first();
     }
 
     /**

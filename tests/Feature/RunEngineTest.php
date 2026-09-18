@@ -1163,10 +1163,13 @@ class RunEngineTest extends TestCase
         // The run goes on, under a new Leader.
         $this->assertSame(RunStatus::Running, $run->status);
         $this->assertSame($mate->id, $run->run_leader_character_id);
-        $this->assertStringContainsString(
-            'permanent Equipment',
-            (string) $run->events->firstWhere('type', RunEvent::TYPE_INCAPACITATED)?->description,
-        );
+        // Nothing was equipped, so the event does not promise a handover that
+        // did not happen. What it says when there *was* equipment, and where
+        // the cards actually go, is RunnerEquipmentTest's.
+        $carried = $run->events->firstWhere('type', RunEvent::TYPE_INCAPACITATED);
+
+        $this->assertStringContainsString('was carried out', (string) $carried?->description);
+        $this->assertSame([], $carried?->payload['equipment_surrendered']);
     }
 
     // ------------------------------------------------------------------

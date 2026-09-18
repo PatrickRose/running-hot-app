@@ -16,6 +16,7 @@ use App\Models\RunEvent;
 use App\Models\TechnologyHolding;
 use App\Services\RunEngine;
 use App\Support\Runs\ConsequenceSlip;
+use App\Support\Runs\RollModifiers;
 use App\Support\Runs\SecurityPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -258,11 +259,23 @@ class RunController extends Controller
 
         $validated = $request->validate([
             'skill' => ['required', Rule::enum(RunnerSkill::class)],
+
+            // What Equipment is doing to this roll, as the Runner reading the
+            // card says. Nothing is parsed from the seventy-four printed
+            // effects - see App\Support\Runs\RollModifiers.
+            'extra_dice' => ['nullable', 'integer', 'min:-9', 'max:9'],
+            'die_faces' => ['nullable', 'integer', Rule::in(RollModifiers::ALLOWED_FACES)],
+            'reroll_failures' => ['nullable', 'boolean'],
         ]);
 
         $outcome = $this->runs->challenge(
             $run,
             RunnerSkill::from($validated['skill']),
+            new RollModifiers(
+                dice: (int) ($validated['extra_dice'] ?? 0),
+                dieFaces: isset($validated['die_faces']) ? (int) $validated['die_faces'] : null,
+                rerollFailures: (bool) ($validated['reroll_failures'] ?? false),
+            ),
             $request->user(),
         );
 
