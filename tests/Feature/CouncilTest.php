@@ -350,7 +350,7 @@ class CouncilTest extends TestCase
     }
 
     /**
-     * HM Government sits at the Council and votes with a bloc of five.
+     * HM Government sits at the Council and votes with a bloc of six.
      *
      * Control's ruling rather than a rule from 3.1, which seats only the
      * Corporations - so what is pinned here is that the seat behaves like a
@@ -362,7 +362,7 @@ class CouncilTest extends TestCase
 
         $government = $this->player(CharacterRole::Other, null, [
             'name' => 'HM Government',
-            'council_votes' => 5,
+            'council_votes' => 6,
         ]);
 
         $resolutions = $item->card->votableResolutions();
@@ -371,7 +371,7 @@ class CouncilTest extends TestCase
             ->post(route('council.ballots.store', ['item' => $item->id]), [
                 'allocations' => [
                     $resolutions[0]->id => 3,
-                    $resolutions[1]->id => 2,
+                    $resolutions[1]->id => 3,
                 ],
             ])
             ->assertRedirect();
@@ -381,7 +381,7 @@ class CouncilTest extends TestCase
         // The character is the voter, not a Corporation standing in for one.
         $this->assertSame('character', $ballot->voter_type);
         $this->assertSame('HM Government', $ballot->voterName());
-        $this->assertSame(5, $ballot->weight());
+        $this->assertSame(6, $ballot->weight());
 
         // And it weighs against the Corporations in the same tally.
         app(CouncilService::class)->castBallot($item->fresh(), $this->gordon, [$resolutions[1]->id => 4]);
@@ -389,7 +389,7 @@ class CouncilTest extends TestCase
         $tally = app(CouncilService::class)->tally($item->fresh());
 
         $this->assertSame(3, $tally['totals'][$resolutions[0]->id]);
-        $this->assertSame(6, $tally['totals'][$resolutions[1]->id]);
+        $this->assertSame(7, $tally['totals'][$resolutions[1]->id]);
     }
 
     public function test_the_government_cannot_vote_with_more_than_its_bloc(): void
@@ -398,12 +398,12 @@ class CouncilTest extends TestCase
 
         $government = $this->player(CharacterRole::Other, null, [
             'name' => 'HM Government',
-            'council_votes' => 5,
+            'council_votes' => 6,
         ]);
 
         $this->actingAs($government)
             ->post(route('council.ballots.store', ['item' => $item->id]), [
-                'allocations' => [$item->card->votableResolutions()[0]->id => 6],
+                'allocations' => [$item->card->votableResolutions()[0]->id => 7],
             ])
             ->assertSessionHasErrors('allocations');
 
@@ -433,7 +433,7 @@ class CouncilTest extends TestCase
 
         $government = $this->player(CharacterRole::Other, null, [
             'name' => 'HM Government',
-            'council_votes' => 5,
+            'council_votes' => 6,
         ]);
 
         $viewer = app(CouncilPresenter::class)->forPlayer($this->game, $government)['viewer'];
@@ -442,7 +442,7 @@ class CouncilTest extends TestCase
         $this->assertFalse($viewer['is_chair']);
         $this->assertFalse($viewer['can_chair']);
         $this->assertSame('HM Government', $viewer['voter']['name']);
-        $this->assertSame(5, $viewer['voter']['votes']);
+        $this->assertSame(6, $viewer['voter']['votes']);
         $this->assertSame('character', $viewer['voter']['type']);
     }
 
@@ -456,7 +456,7 @@ class CouncilTest extends TestCase
 
         $government = $this->player(CharacterRole::Other, null, [
             'name' => 'HM Government',
-            'council_votes' => 5,
+            'council_votes' => 6,
         ]);
 
         $this->actingAs($government)
@@ -502,7 +502,7 @@ class CouncilTest extends TestCase
     {
         $government = $this->player(CharacterRole::Other, null, [
             'name' => 'HM Government',
-            'council_votes' => 5,
+            'council_votes' => 6,
         ]);
 
         $character = $this->game->characters()->where('user_id', $government->id)->sole();
@@ -574,7 +574,7 @@ class CouncilTest extends TestCase
         $this->player(CharacterRole::Ceo, $this->gordon);
         $government = $this->player(CharacterRole::Other, null, [
             'name' => 'HM Government',
-            'council_votes' => 5,
+            'council_votes' => 6,
         ]);
         $this->player(CharacterRole::Runner, null, ['name' => 'Jack Scanton']);
 

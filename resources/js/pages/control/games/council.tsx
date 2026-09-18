@@ -278,7 +278,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             Rulebook 3.1 seats the five CEOs, who vote with
                             their Corporation&rsquo;s Political Will. Anybody
                             else is here because you put them here — HM
-                            Government and its bloc of five, or whoever a Runner
+                            Government and its bloc of six, or whoever a Runner
                             Representative turns out to be. A seat votes and
                             nothing else: it never takes the Chair.
                         </CardDescription>
@@ -563,7 +563,7 @@ function SeatSomebody({
     seatable: CouncilSeatCandidate[];
 }) {
     const [characterId, setCharacterId] = useState('');
-    const [votes, setVotes] = useState('5');
+    const [votes, setVotes] = useState('6');
 
     if (seatable.length === 0) {
         return null;

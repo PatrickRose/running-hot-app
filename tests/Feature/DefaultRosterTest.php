@@ -149,7 +149,7 @@ class DefaultRosterTest extends TestCase
     }
 
     /**
-     * HM Government sits at the Council with a bloc of five, and is the only
+     * HM Government sits at the Council with a bloc of six, and is the only
      * seat there that is not a Corporation.
      *
      * Control's ruling rather than a rule from 3.1 - hence a number in the
@@ -168,7 +168,7 @@ class DefaultRosterTest extends TestCase
             ->sole();
 
         $this->assertTrue($government->sitsOnCouncil());
-        $this->assertSame(5, $government->council_votes);
+        $this->assertSame(6, $government->council_votes);
 
         // Nobody else has one: a CEO votes with their Corporation's Political
         // Will, and everybody else does not vote at all.
