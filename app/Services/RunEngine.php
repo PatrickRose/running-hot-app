@@ -395,14 +395,6 @@ class RunEngine
             ]);
         }
 
-        $directing = $run->facility->stateForTurn($run->turn)->security_directed;
-
-        if ($activating === false && ! $directing) {
-            throw ValidationException::withMessages([
-                'activating' => 'Only a Security player Directing Security here may leave a card switched off.',
-            ]);
-        }
-
         /** @var FacilityProtectionCard $card */
         $card = $cursor->card;
         $cost = ActivationCost::for($card->kind, $this->activeCyberCards($run));
@@ -483,12 +475,6 @@ class RunEngine
             throw ValidationException::withMessages(['times' => 'Boost at least once.']);
         }
 
-        if (! $run->facility->stateForTurn($run->turn)->security_directed) {
-            throw ValidationException::withMessages([
-                'boost' => 'Boosting needs a Security player Directing Security from this Facility.',
-            ]);
-        }
-
         if (! $cursor->cardIsActive()) {
             throw ValidationException::withMessages([
                 'boost' => 'A card has to be Active before it can be Boosted.',
@@ -547,12 +533,6 @@ class RunEngine
     public function charge(Run $run, int $alertsToSpend = 0, ?User $actor = null): RunEvent
     {
         $cursor = $this->requireCard($run);
-
-        if (! $run->facility->stateForTurn($run->turn)->security_directed) {
-            throw ValidationException::withMessages([
-                'charge' => 'A Charge needs a Security player Directing Security from this Facility.',
-            ]);
-        }
 
         /** @var FacilityProtectionCard $card */
         $card = $cursor->card;

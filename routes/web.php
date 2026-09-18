@@ -51,6 +51,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Security arranging their own Facilities. Guarded by the FacilityPolicy
     // rather than by a role middleware, because the question is not "is this a
     // Security player" but "is this Facility theirs".
+    // The Credits a Facility is defended with (3.3.5). Security's own decision,
+    // so Security's own route - Control keeps its panel.
+    Route::post('facilities/{facility}/budget', [FacilityDefenceController::class, 'budget'])
+        ->name('facilities.budget');
+
     Route::post('facilities/{facility}/cards', [FacilityDefenceController::class, 'install'])
         ->name('facilities.cards.install');
     Route::post('facilities/{facility}/cards/order', [FacilityDefenceController::class, 'reorder'])

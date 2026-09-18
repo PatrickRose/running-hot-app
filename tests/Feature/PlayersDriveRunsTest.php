@@ -672,8 +672,6 @@ class PlayersDriveRunsTest extends TestCase
         $this->facility->protectionCards()->sole()
             ->cardType->forceFill(['name' => 'Roboscorpion'])->save();
 
-        $this->facility->stateForTurn($this->turn)->forceFill(['security_directed' => true])->save();
-
         $run = $this->begun($leader);
 
         $this->actingAs($security)

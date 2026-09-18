@@ -879,7 +879,6 @@ class GamePresenter
                 'voice' => isset($channelKeys[GuildBlueprint::facilityChannelKey($facility, 'voice')]),
             ],
             'security' => [
-                'directed' => $state !== null && $state->security_directed,
                 'budget' => $state === null ? 0 : $state->security_budget,
                 'budget_spent' => $state === null ? 0 : $state->security_budget_spent,
                 'budget_returned' => $state !== null && $state->budget_returned_at !== null,

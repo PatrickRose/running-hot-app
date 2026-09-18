@@ -431,7 +431,6 @@ class RunPresenter
             // read it would know exactly how much defence was left in the
             // Facility.
             'budget' => $privileged ? [
-                'directed' => $state->security_directed,
                 'placed' => $state->security_budget,
                 'spent' => $state->security_budget_spent,
                 'left' => $state->unspentBudget(),
@@ -698,7 +697,6 @@ class RunPresenter
                     'left_reason' => $participant->left_reason?->label(),
                 ])->all(),
             'budget' => [
-                'directed' => $state->security_directed,
                 'placed' => $state->security_budget,
                 'spent' => $state->security_budget_spent,
                 'left' => $state->unspentBudget(),

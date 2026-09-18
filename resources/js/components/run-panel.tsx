@@ -779,7 +779,6 @@ function SecurityDesk({ run }: { run: RunView }) {
                 {budget !== null && (
                     <p className="text-sm text-muted-foreground">
                         {budget.left} of {budget.placed} Credits left
-                        {budget.directed ? ' · Directing here' : ''}
                     </p>
                 )}
             </header>
@@ -804,40 +803,28 @@ function SecurityDesk({ run }: { run: RunView }) {
                         >
                             Activate
                         </Button>
-                        {budget?.directed && (
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy}
-                                onClick={() =>
-                                    post(activate(run.id), {
-                                        activating: false,
-                                    })
-                                }
-                            >
-                                Leave it off
-                            </Button>
-                        )}
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() =>
+                                post(activate(run.id), {
+                                    activating: false,
+                                })
+                            }
+                        >
+                            Leave it off
+                        </Button>
                     </div>
-                    {!budget?.directed && (
-                        <p className="text-xs text-muted-foreground">
-                            Only a Security player Directing Security here may
-                            leave a card off. Otherwise it comes on if the
-                            budget can cover it, and stays off if it cannot.
-                        </p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                        Leaving it off costs nothing and the Runners walk
+                        straight past — which also means it makes nothing after
+                        it harder.
+                    </p>
                 </div>
             )}
 
-            {card.active && !budget?.directed && (
-                <p className="text-xs text-muted-foreground">
-                    Boosting and paying a Charge both need a Security player
-                    Directing Security from this Facility. Control marks that on
-                    the Facility board.
-                </p>
-            )}
-
-            {card.active && budget?.directed && (
+            {card.active && (
                 <div className="flex flex-wrap items-end gap-2">
                     <div className="flex flex-col gap-1">
                         <Label htmlFor={`boosts-${run.id}`}>Boosts</Label>

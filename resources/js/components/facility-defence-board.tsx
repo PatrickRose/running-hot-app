@@ -42,6 +42,9 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { budget as budgetRoute } from '@/routes/facilities';
 import {
     install as installRoute,
     quote as quoteRoute,
@@ -697,6 +700,71 @@ function HandCardItem({ card }: { card: HandCard }) {
     );
 }
 
+/**
+ * The Credits a Facility is defended with this turn (rulebook 3.3.5).
+ *
+ * Security's own decision, and until now only Control could make it - so a
+ * Security player had to ask somebody else for the thing that decides what they
+ * can switch on, Boost and Charge. It is the half of 3.3.5 that survives:
+ * Directing Security is not modelled, because a Security player may move it
+ * freely during the Action phase and a constraint nobody is held to is
+ * ceremony.
+ *
+ * The write goes through FacilityDefenceService like every other write on this
+ * board, so the Credits are still escrowed the moment they are placed - which
+ * is what putting them on the Facility does at the table, and what stops the
+ * same Credits being promised twice - and the ledger carries the Security
+ * player's name rather than Control's.
+ */
+function SecurityBudget({ facility }: { facility: FacilitySummary }) {
+    const [budget, setBudget] = useState(String(facility.security.budget));
+    const [busy, setBusy] = useState(false);
+
+    return (
+        <div className="mt-3 flex flex-wrap items-end gap-2 rounded-md bg-muted/40 p-2">
+            <div className="flex flex-col gap-1">
+                <Label htmlFor={`budget-${facility.id}`} className="text-xs">
+                    Security budget
+                </Label>
+                <Input
+                    id={`budget-${facility.id}`}
+                    type="number"
+                    // Never below what has already gone: the service refuses it
+                    // anyway, and a box that lets you type a number it will not
+                    // take is a box that lies.
+                    min={facility.security.budget_spent}
+                    className="h-8 w-24"
+                    value={budget}
+                    onChange={(event) => setBudget(event.target.value)}
+                />
+            </div>
+            <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                    setBusy(true);
+                    router.post(
+                        budgetRoute(facility.id).url,
+                        { security_budget: Number(budget) || 0 },
+                        {
+                            onFinish: () => setBusy(false),
+                            preserveScroll: true,
+                        },
+                    );
+                }}
+            >
+                Place
+            </Button>
+            <p className="w-full text-xs text-muted-foreground">
+                Taken off the Corporation as soon as it is placed, and whatever
+                is unspent comes back when the Action phase ends. It pays for
+                switching cards on, Boosting them and any Charge.
+            </p>
+        </div>
+    );
+}
+
 function FacilityPanel({
     facility,
     orderFor,
@@ -732,9 +800,6 @@ function FacilityPanel({
                             {facility.available_from_turn}
                         </Badge>
                     )}
-                    {facility.security.directed && (
-                        <Badge>Security directed here</Badge>
-                    )}
                     {facility.security.budget > 0 && (
                         <Badge variant="outline">
                             {facility.security.budget -
@@ -744,6 +809,8 @@ function FacilityPanel({
                     )}
                 </div>
             </div>
+
+            <SecurityBudget facility={facility} />
 
             {/* What is stored in here, above the stacks that defend it: a
                 Runner is coming for the technologies, so the Facility reads as

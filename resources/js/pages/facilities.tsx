@@ -118,11 +118,6 @@ export default function Facilities({ game, board }: Props) {
                                                     }
                                                 </Badge>
                                             )}
-                                            {facility.security.directed && (
-                                                <Badge>
-                                                    Security directed here
-                                                </Badge>
-                                            )}
                                             {facility.security.budget > 0 && (
                                                 <Badge variant="outline">
                                                     {facility.security.budget -

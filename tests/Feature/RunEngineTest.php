@@ -223,24 +223,37 @@ class RunEngineTest extends TestCase
         );
     }
 
-    public function test_only_a_directing_security_player_may_leave_a_card_switched_off(): void
+    /**
+     * Security may leave a card switched off, and needs nobody's permission.
+     *
+     * This used to want a meeple at the Facility. Directing Security is not
+     * modelled any more - a Security player may move where they are directing
+     * freely during the Action phase, so it constrained nobody and the only
+     * thing it reliably did was stop somebody acting until a second person had
+     * ticked a box for them.
+     */
+    public function test_security_may_leave_a_card_switched_off(): void
     {
         $run = $this->started();
-
-        $this->expectException(ValidationException::class);
-
-        $this->engine()->activate($run, activating: false);
-    }
-
-    public function test_a_directing_security_player_may_leave_a_card_switched_off(): void
-    {
-        $run = $this->started();
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $activation = $this->engine()->activate($run, activating: false);
 
         $this->assertFalse($activation->isActive());
         $this->assertSame(RunEvent::TYPE_ACTIVATION_DECLINED, $run->refresh()->events->last()?->type);
+    }
+
+    /**
+     * And leaving one off costs nothing, which is the point of doing it: the
+     * budget is there for the cards Security does want on.
+     */
+    public function test_leaving_a_card_off_spends_nothing(): void
+    {
+        $run = $this->started(cyber: 1, physical: 0);
+        $this->budget($run, 5);
+
+        $this->engine()->activate($run, activating: false);
+
+        $this->assertSame(0, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
     }
 
     /**
@@ -250,7 +263,6 @@ class RunEngineTest extends TestCase
     public function test_an_inactive_card_skips_to_the_breather(): void
     {
         $run = $this->started();
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $this->engine()->activate($run, activating: false);
 
@@ -290,7 +302,23 @@ class RunEngineTest extends TestCase
         $this->engine()->activate($second);
     }
 
-    public function test_boosting_needs_directing_security(): void
+    /**
+     * Boosting is paid for and nothing else: the budget is the whole of what
+     * gates it now that Directing Security has gone.
+     */
+    public function test_boosting_needs_only_a_budget(): void
+    {
+        $run = $this->started();
+        $this->budget($run, 1);
+        $this->engine()->activate($run);
+
+        $activation = $this->engine()->boost($run->refresh());
+
+        $this->assertSame(1, $activation->boosts);
+        $this->assertSame(1, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
+    }
+
+    public function test_boosting_is_refused_when_the_budget_cannot_cover_it(): void
     {
         $run = $this->started();
         $this->engine()->activate($run);
@@ -304,7 +332,6 @@ class RunEngineTest extends TestCase
     {
         $run = $this->started();
         $this->budget($run, 10);
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $this->engine()->activate($run);
 
@@ -457,7 +484,6 @@ class RunEngineTest extends TestCase
     public function test_only_active_cards_passed_add_strength(): void
     {
         $run = $this->started(physical: 3);
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         // Two cards left switched off, and walked straight past.
         $this->engine()->activate($run, activating: false);
@@ -843,7 +869,6 @@ class RunEngineTest extends TestCase
     public function test_the_physical_stack_is_met_before_the_cyber_one(): void
     {
         $run = $this->started(physical: 2, cyber: 1);
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $kinds = [];
 
@@ -868,7 +893,6 @@ class RunEngineTest extends TestCase
     public function test_a_failed_run_pays_the_consolation_to_the_last_runner(): void
     {
         $run = $this->started(physical: 5);
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         // Four cards walked past, then the Runners give up.
         for ($card = 0; $card < 4; $card++) {
@@ -942,7 +966,6 @@ class RunEngineTest extends TestCase
     {
         $run = $this->started(physical: 1, chargeCost: 2);
         $this->budget($run, 4);
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $this->engine()->activate($run);
         $this->dice->will([8, 8]);
@@ -961,7 +984,6 @@ class RunEngineTest extends TestCase
     public function test_a_card_with_no_charge_cannot_be_charged(): void
     {
         $run = $this->started();
-        $run->facility->stateForTurn($run->turn)->forceFill(['security_directed' => true])->save();
 
         $this->expectException(ValidationException::class);
 

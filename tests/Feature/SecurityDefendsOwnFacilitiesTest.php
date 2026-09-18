@@ -318,6 +318,79 @@ class SecurityDefendsOwnFacilitiesTest extends TestCase
             ->assertForbidden();
     }
 
+    // -- The security budget (3.3.5) ----------------------------------------
+
+    /**
+     * The budget is the whole of 3.3.5 that survives - Directing Security is
+     * not modelled - and it was Control's alone to place, so a Security player
+     * had to ask somebody else for the thing that decides what they can switch
+     * on, Boost and Charge.
+     *
+     * Escrowed the moment it is placed, and the ledger carries the Security
+     * player's name rather than Control's, which is the whole reason this route
+     * exists rather than leaving it on the panel.
+     */
+    public function test_security_places_a_budget_and_it_leaves_the_corporation(): void
+    {
+        $turn = $this->game->currentTurn();
+        $this->assertNotNull($turn);
+
+        $before = $this->corporation->refresh()->credits;
+        $security = $this->security();
+
+        $this->actingAs($security)
+            ->post("/facilities/{$this->facility->id}/budget", ['security_budget' => 6])
+            ->assertRedirect();
+
+        $this->assertSame(6, $this->facility->stateForTurn($turn)->refresh()->security_budget);
+        $this->assertSame($before - 6, $this->corporation->refresh()->credits);
+
+        $this->assertDatabaseHas('tracker_adjustments', [
+            'tracker' => Tracker::CorporationCredits->value,
+            'delta' => -6,
+            'actor_id' => $security->id,
+        ]);
+    }
+
+    /**
+     * Security reacts after the attacks land, so a budget may be moved through
+     * the Action phase rather than being fixed in Setup. What it may not do is
+     * drop below what has already gone: those Credits are spent.
+     */
+    public function test_a_budget_cannot_be_cut_below_what_has_been_spent(): void
+    {
+        $turn = $this->game->currentTurn();
+        $this->assertNotNull($turn);
+
+        $security = $this->security();
+
+        $this->actingAs($security)
+            ->post("/facilities/{$this->facility->id}/budget", ['security_budget' => 8])
+            ->assertRedirect();
+
+        $this->facility->stateForTurn($turn)->forceFill(['security_budget_spent' => 5])->save();
+
+        $this->actingAs($security)
+            ->post("/facilities/{$this->facility->id}/budget", ['security_budget' => 2])
+            ->assertSessionHasErrors('security_budget');
+
+        // Raising it is fine, and the extra comes out of the Corporation now.
+        $this->actingAs($security)
+            ->post("/facilities/{$this->facility->id}/budget", ['security_budget' => 12])
+            ->assertRedirect();
+
+        $this->assertSame(12, $this->facility->stateForTurn($turn)->refresh()->security_budget);
+    }
+
+    public function test_a_rival_corporations_security_cannot_fund_this_facility(): void
+    {
+        $rival = Corporation::factory()->for($this->game)->create(['name' => 'Rival Combine']);
+
+        $this->actingAs($this->seat($rival, CharacterRole::Security))
+            ->post("/facilities/{$this->facility->id}/budget", ['security_budget' => 3])
+            ->assertForbidden();
+    }
+
     public function test_security_at_another_corporation_is_refused(): void
     {
         $rival = Corporation::factory()->for($this->game)->create(['name' => 'ANT']);

@@ -315,7 +315,6 @@ export type ProtectionStack = {
 };
 
 export type FacilitySecurityState = {
-    directed: boolean;
     budget: number;
     budget_spent: number;
     budget_returned: boolean;
@@ -986,7 +985,6 @@ export type RunParticipantView = {
 };
 
 export type RunBudget = {
-    directed: boolean;
     placed: number;
     spent: number;
     left: number;
