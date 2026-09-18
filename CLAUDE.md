@@ -408,7 +408,7 @@ card that is no longer in the hand was either kept or discarded and either way
 the discard of 3.1.1 has happened.
 
 **Not every seat at the Council is a Corporation.** Rulebook 3.1 seats only the
-CEOs; HM Government sitting there with a bloc of five is Control's ruling, and
+CEOs; HM Government sitting there with a bloc of six is Control's ruling, and
 the application holds it as `characters.council_votes` — a count on the
 character rather than a flag naming the Government, so a Press player or the
 Runner Representative of 3.1.3's own agenda card can be seated without new code.

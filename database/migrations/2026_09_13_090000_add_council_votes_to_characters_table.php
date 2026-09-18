@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * The rulebook's Council is the CEOs' (3.1), and HM Government is not in it.
  * This is Control's ruling rather than a rule off the page: the Government
- * player sits at the Council and votes with a bloc of five.
+ * player sits at the Council and votes with a bloc of six.
  *
  * Held as a count on the character rather than as a flag naming HM Government,
  * because the thing being described is "a seat worth this many votes" - so a

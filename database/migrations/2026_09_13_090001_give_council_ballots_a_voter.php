@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  * Not every seat at the Council is a Corporation.
  *
  * A ballot was bound to one, which was true right up until HM Government was
- * seated with a bloc of five (Control's ruling; rulebook 3.1 seats only the
+ * seated with a bloc of six (Control's ruling; rulebook 3.1 seats only the
  * CEOs). A CEO votes for their Corporation and the Government votes for itself,
  * so the voter becomes a morph rather than either of them getting a nullable
  * column the other never uses.

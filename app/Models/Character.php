@@ -104,7 +104,7 @@ class Character extends Model
      *
      * A CEO does not: their vote is their Corporation's, weighted by its
      * Political Will. This is for a seat that belongs to nobody's Corporation -
-     * HM Government's bloc of five, and anybody else Control seats. Control's
+     * HM Government's bloc of six, and anybody else Control seats. Control's
      * ruling rather than a rule from 3.1, which seats only the CEOs.
      */
     public function sitsOnCouncil(): bool

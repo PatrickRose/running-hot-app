@@ -787,7 +787,7 @@ class CouncilService
      *
      * A Corporation votes with its Political Will, which is the weight of the
      * vote and never its price (3.1.2). A character sitting in their own right
-     * votes with the bloc Control gave them - HM Government's five - which is
+     * votes with the bloc Control gave them - HM Government's six - which is
      * not Political Will and is not a tracker: nothing in the game spends it.
      */
     public function votesFor(Corporation|Character $voter): int
@@ -1038,7 +1038,7 @@ class CouncilService
      * away by passing null.
      *
      * Control's ruling rather than a rule: 3.1 seats only the Corporations, and
-     * HM Government's bloc of five is the reason this exists. It is not a
+     * HM Government's bloc of six is the reason this exists. It is not a
      * tracker and deliberately does not go through TrackerService - nothing in
      * the game spends a bloc, so there is no movement for a ledger to explain.
      */
