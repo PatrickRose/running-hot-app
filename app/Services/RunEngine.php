@@ -1296,8 +1296,19 @@ class RunEngine
      * **The card is drawn rather than chosen.** The rulebook has the Run Leader
      * pick from the list and the Security player reveal it; at the table that
      * is a person holding cards face down and fanning them out, so the drawn
-     * card is the same thing without somebody to hold them. A card another
-     * Runner has already been at this run is out of the draw.
+     * card is the same thing without somebody to hold them.
+     *
+     * **Having been at a card does not take it out of the racks.** 3.4.3 is
+     * explicit twice over: a failed check "goes back to the list of cards you
+     * may access", and after a copy "no matter the outcome, the card is
+     * returned to the list" - copying it twice is how you make two copies. So
+     * the only thing that takes a technology out of the draw is it leaving the
+     * building, which {@see storedTechnologies()} already reads off the
+     * holding's own status: stolen, or destroyed outright.
+     *
+     * The one exception is a card that is face up and still being decided
+     * about. It is in somebody's hands, so a second Runner cannot draw it out
+     * from under them.
      *
      * The dice are the group's: "the combination of your Brawn and Hack" in
      * full for whoever is spending the access, and the usual half or quarter
@@ -1315,7 +1326,7 @@ class RunEngine
         $available = $this->storedTechnologies($run)
             ->reject(fn (TechnologyHolding $holding): bool => in_array(
                 $holding->id,
-                $run->accesses()->whereNotNull('technology_holding_id')->pluck('technology_holding_id')->all(),
+                $this->undecidedHoldingIds($run),
                 true,
             ));
 
@@ -1636,6 +1647,25 @@ class RunEngine
                 ),
             ]);
         }
+    }
+
+    /**
+     * Cards that are face up and waiting on a decision.
+     *
+     * Out of the draw for as long as somebody is holding them, and back in the
+     * moment they are resolved - unless the resolution took them out of the
+     * building altogether, which their own status then says.
+     *
+     * @return array<int, int>
+     */
+    protected function undecidedHoldingIds(Run $run): array
+    {
+        /** @var array<int, int> */
+        return $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->whereNull('outcome')
+            ->pluck('technology_holding_id')
+            ->all();
     }
 
     /**

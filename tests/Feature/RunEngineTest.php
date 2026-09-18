@@ -1319,10 +1319,110 @@ class RunEngineTest extends TestCase
     }
 
     /**
-     * A card another Runner has already been at this run is out of the draw, so
-     * a Facility holding one technology has nothing left for the second Runner.
+     * Having been at a card does not take it out of the racks.
+     *
+     * 3.4.3 says so twice: a failed check "goes back to the list of cards you
+     * may access", and after a copy "no matter the outcome, the card is
+     * returned to the list" - copying it twice is how you make two copies. So a
+     * second Runner can draw the only card in the building after the first has
+     * copied it.
      */
-    public function test_a_card_already_accessed_is_out_of_the_draw(): void
+    public function test_a_card_that_was_copied_is_still_in_the_racks(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id, ['brawn' => 2, 'hack' => 2]);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run->refresh());
+
+        $this->dice->will([8, 8, 8, 8, 8, 8]);
+        $first = $this->engine()->accessTechnology($run, $leader);
+        $this->engine()->resolveAccess($first, TechnologyAccessAction::Copy);
+
+        // The same card, to the second Runner.
+        $this->dice->will([1, 1, 1, 1, 1, 1]);
+        $second = $this->engine()->accessTechnology($run->refresh(), $mate);
+
+        $this->assertSame($holding->id, $second->technology_holding_id);
+    }
+
+    /**
+     * Nor does failing to steal one: the attempt cost the access, not the card.
+     */
+    public function test_a_steal_that_missed_leaves_the_card_in_the_draw(): void
+    {
+        $run = $this->started();
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id, ['brawn' => 2, 'hack' => 2]);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+
+        $holding = TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run->refresh());
+
+        // Nowhere near the 8 a steal wants.
+        $this->dice->will([1, 1, 1, 1, 1, 1]);
+        $first = $this->engine()->accessTechnology($run, $leader);
+        $missed = $this->engine()->resolveAccess($first, TechnologyAccessAction::Steal);
+
+        $this->assertSame('failed', $missed->outcome);
+
+        $this->dice->will([1, 1, 1, 1, 1, 1]);
+        $second = $this->engine()->accessTechnology($run->refresh(), $mate);
+
+        $this->assertSame($holding->id, $second->technology_holding_id);
+    }
+
+    /**
+     * What *does* take a card out of the draw is it leaving the building, which
+     * is read off the holding's own status rather than off the access log.
+     */
+    public function test_a_stolen_card_is_gone_from_the_racks(): void
+    {
+        $run = $this->started(['brawn' => 6, 'hack' => 6]);
+        $leader = $run->leader;
+        $mate = $this->runner($run->game_id, ['brawn' => 2, 'hack' => 2]);
+        $this->assertNotNull($leader);
+
+        $run->participants()->create(['character_id' => $mate->id, 'position' => 2]);
+
+        TechnologyHolding::factory()->create([
+            'game_id' => $run->game_id,
+            'facility_id' => $run->facility_id,
+            'status' => TechnologyHoldingStatus::Claimed,
+        ]);
+
+        $run = $this->broke($run->refresh());
+
+        // Thirteen dice: the Leader's combined 12 plus half the mate's 4.
+        $this->dice->will(array_fill(0, 14, 8));
+        $first = $this->engine()->accessTechnology($run, $leader);
+        $this->assertSame('stolen', $this->engine()->resolveAccess($first, TechnologyAccessAction::Steal)->outcome);
+
+        $this->expectException(ValidationException::class);
+        $this->engine()->accessTechnology($run->refresh(), $mate);
+    }
+
+    /**
+     * And a card face up in somebody's hands is out of the draw while they are
+     * still deciding, so a second Runner cannot take it out from under them.
+     */
+    public function test_a_card_being_decided_on_cannot_be_drawn_again(): void
     {
         $run = $this->started();
         $leader = $run->leader;
@@ -1339,12 +1439,21 @@ class RunEngineTest extends TestCase
 
         $run = $this->broke($run->refresh());
 
-        $this->dice->will([1, 1, 1, 1, 1, 1]);
         $drawn = $this->engine()->accessTechnology($run, $leader);
-        $this->engine()->resolveAccess($drawn, TechnologyAccessAction::Copy);
 
-        $this->expectException(ValidationException::class);
-        $this->engine()->accessTechnology($run->refresh(), $mate);
+        try {
+            $this->engine()->accessTechnology($run->refresh(), $mate);
+            $this->fail('A card being decided on should not be drawable.');
+        } catch (ValidationException) {
+            // Expected.
+        }
+
+        // Left alone, it goes straight back in the racks.
+        $this->engine()->resolveAccess($drawn, null);
+
+        $this->assertNotNull(
+            $this->engine()->accessTechnology($run->refresh(), $mate)->technology_holding_id,
+        );
     }
 
     /**

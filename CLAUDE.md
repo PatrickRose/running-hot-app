@@ -771,12 +771,22 @@ gone — `RunAccessKind::onlyOncePerRun()` is where that lives.
 
 **The card is drawn, not chosen.** At the table that step is a person holding
 cards face down and fanning them out, so a draw is the same thing without
-somebody to hold them — and a card another Runner has already been at this run
-is out of it. `RunPresenter` therefore sends a *count* of what is left rather
-than a list: naming them would hand back the choice the draw takes away, and
-would tell the Runners what the Facility holds without their having spent
+somebody to hold them. `RunPresenter` therefore sends a *count* of what is left
+rather than a list: naming them would hand back the choice the draw takes away,
+and would tell the Runners what the Facility holds without their having spent
 anything on finding out. A Facility down to its last card hands it over rather
 than rolling a one-sided die.
+
+**Having been at a card does not take it out of the racks**, and getting this
+wrong is easy — it was wrong here first. 3.4.3 says so twice: a failed check
+"goes back to the list of cards you may access", and after a copy "no matter the
+outcome, the card is returned to the list", because copying it twice is how you
+make two copies. So the draw excludes nothing on the strength of the access log.
+What takes a technology out of the draw is it *leaving the building*, which
+`storedTechnologies()` already reads off the holding's own status — stolen, or
+destroyed outright. The one exception is a card that is face up and still being
+decided about: it is in somebody's hands, so a second Runner cannot draw it out
+from under them, and it goes back in the moment it is resolved.
 
 **Drawing it and deciding on it are two acts, and the order is the point.**
 `accessTechnology()` turns a card over and stops; `resolveAccess()` is Copy,

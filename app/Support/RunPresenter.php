@@ -148,18 +148,27 @@ class RunPresenter
      * than chosen - naming them would be handing over the choice the draw is
      * there to take away, and it would tell the Runners what the Facility is
      * holding without their having spent anything on finding out.
+     *
+     * A card somebody copied, failed to steal or left alone is still in here:
+     * it never left the building.
      */
     private function accessibleTechnologies(Run $run): int
     {
-        $accessed = $run->accesses()
+        // Only the cards that are face up and still being decided about are
+        // out of the draw. Having been at a card does not take it out of the
+        // racks - 3.4.3 returns it to the list whatever the outcome - so what
+        // is left is what the Facility is still holding, which the holding's
+        // own status says.
+        $undecided = $run->accesses()
             ->whereNotNull('technology_holding_id')
+            ->whereNull('outcome')
             ->pluck('technology_holding_id')
             ->all();
 
         return $run->facility->technologyHoldings()
             ->get()
             ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage()
-                && ! in_array($holding->id, $accessed, true))
+                && ! in_array($holding->id, $undecided, true))
             ->count();
     }
 
