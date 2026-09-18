@@ -15,6 +15,7 @@ use App\Models\RunAccess;
 use App\Models\RunEvent;
 use App\Models\TechnologyHolding;
 use App\Services\RunEngine;
+use App\Support\Runs\SecurityPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -136,13 +137,19 @@ class RunController extends Controller
 
         $validated = $request->validate([
             'activating' => ['nullable', 'boolean'],
+            // The three purses a cost may come out of, named rather than
+            // ordered: Alerts are the Runners' noise handed back as temporary
+            // Credits, the budget is the escrow already on the Facility, and
+            // company money is the Corporation's own, reached past it.
             'alerts_to_spend' => ['nullable', 'integer', 'min:0'],
+            'budget_to_spend' => ['nullable', 'integer', 'min:0'],
+            'company_to_spend' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $activation = $this->runs->activate(
             $run,
             $validated['activating'] ?? null,
-            (int) ($validated['alerts_to_spend'] ?? 0),
+            $this->payment($validated),
             $request->user(),
         );
 
@@ -160,13 +167,19 @@ class RunController extends Controller
 
         $validated = $request->validate([
             'times' => ['nullable', 'integer', 'min:1', 'max:9'],
+            // The three purses a cost may come out of, named rather than
+            // ordered: Alerts are the Runners' noise handed back as temporary
+            // Credits, the budget is the escrow already on the Facility, and
+            // company money is the Corporation's own, reached past it.
             'alerts_to_spend' => ['nullable', 'integer', 'min:0'],
+            'budget_to_spend' => ['nullable', 'integer', 'min:0'],
+            'company_to_spend' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $activation = $this->runs->boost(
             $run,
             (int) ($validated['times'] ?? 1),
-            (int) ($validated['alerts_to_spend'] ?? 0),
+            $this->payment($validated),
             $request->user(),
         );
 
@@ -184,12 +197,18 @@ class RunController extends Controller
         Gate::authorize('defend', $run);
 
         $validated = $request->validate([
+            // The three purses a cost may come out of, named rather than
+            // ordered: Alerts are the Runners' noise handed back as temporary
+            // Credits, the budget is the escrow already on the Facility, and
+            // company money is the Corporation's own, reached past it.
             'alerts_to_spend' => ['nullable', 'integer', 'min:0'],
+            'budget_to_spend' => ['nullable', 'integer', 'min:0'],
+            'company_to_spend' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $event = $this->runs->charge(
             $run,
-            (int) ($validated['alerts_to_spend'] ?? 0),
+            $this->payment($validated),
             $request->user(),
         );
 
@@ -460,6 +479,24 @@ class RunController extends Controller
 
         /** @var TechnologyHolding */
         return TechnologyHolding::query()->findOrFail($id);
+    }
+
+    /**
+     * How Security says it is paying.
+     *
+     * Naming nothing at all is how a caller says "the usual", which the engine
+     * reads as the Facility's budget - so a form that has not been touched
+     * behaves exactly as it did before the three purses existed.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function payment(array $validated): SecurityPayment
+    {
+        return SecurityPayment::of(
+            alerts: isset($validated['alerts_to_spend']) ? (int) $validated['alerts_to_spend'] : null,
+            budget: isset($validated['budget_to_spend']) ? (int) $validated['budget_to_spend'] : null,
+            company: isset($validated['company_to_spend']) ? (int) $validated['company_to_spend'] : null,
+        );
     }
 
     /**

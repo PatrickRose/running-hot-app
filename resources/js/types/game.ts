@@ -988,6 +988,8 @@ export type RunBudget = {
     placed: number;
     spent: number;
     left: number;
+    /** What the Corporation still holds behind the budget. */
+    company: number;
 };
 
 /**

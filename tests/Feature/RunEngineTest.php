@@ -25,6 +25,7 @@ use App\Services\Dice;
 use App\Services\RunEngine;
 use App\Support\Runs\ChallengeStrength;
 use App\Support\Runs\DicePool;
+use App\Support\Runs\SecurityPayment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\FakeDice;
@@ -356,6 +357,125 @@ class RunEngineTest extends TestCase
     }
 
     // ------------------------------------------------------------------
+    // Paying for it (3.3.5, 3.4.2)
+    // ------------------------------------------------------------------
+
+    /**
+     * A cost may be split across all three purses, and the split is the
+     * player's to name rather than an order the engine applies.
+     */
+    public function test_a_cost_splits_across_alerts_budget_and_company_money(): void
+    {
+        $run = $this->started(physical: 0, cyber: 2, tags: 3);
+        $this->budget($run, 1);
+        $this->engine()->activate($run);
+        $this->walkPast($run->refresh());
+
+        // Second cyber card, one Active cyber card behind it: 1 Credit.
+        $run = $run->refresh();
+        $before = $run->facility->corporation->refresh()->credits;
+        $spent = $run->alerts_spent;
+
+        $this->engine()->activate($run, payment: new SecurityPayment(
+            alerts: 1,
+            budget: 0,
+            company: 0,
+        ));
+
+        // Paid out of the Alerts, so no budget and no company money moved.
+        $this->assertSame($spent + 1, $run->refresh()->alerts_spent);
+        $this->assertSame($before, $run->facility->corporation->refresh()->credits);
+    }
+
+    /**
+     * Company money is the one of the three that really leaves the
+     * Corporation, so it lands in the ledger. The budget left when it was
+     * placed and Alerts were never the Corporation's at all.
+     */
+    public function test_company_money_lands_in_the_ledger_and_the_others_do_not(): void
+    {
+        $run = $this->started();
+        $this->budget($run, 2);
+
+        $this->engine()->activate($run);
+
+        // A starting position rather than a movement, so it is written
+        // directly - the same reasoning the seeders use.
+        $corporation = $run->facility->corporation;
+        $corporation->forceFill(['credits' => 20])->save();
+        $before = $corporation->refresh()->credits;
+
+        $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
+            alerts: 0,
+            budget: 0,
+            company: 1,
+        ));
+
+        $this->assertSame($before - 1, $corporation->refresh()->credits);
+        $this->assertDatabaseHas('tracker_adjustments', [
+            'tracker' => Tracker::CorporationCredits->value,
+            'delta' => -1,
+        ]);
+
+        // The budget is untouched: it was not what paid.
+        $this->assertSame(0, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
+    }
+
+    /**
+     * Reaching into a purse for more than it holds is refused, and the message
+     * names which one came up short.
+     */
+    public function test_a_purse_that_cannot_cover_its_share_is_refused(): void
+    {
+        $run = $this->started();
+        $this->budget($run, 1);
+        $this->engine()->activate($run);
+
+        $this->expectException(ValidationException::class);
+
+        $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
+            alerts: 99,
+            budget: 0,
+            company: 0,
+        ));
+    }
+
+    /**
+     * A split that does not add up to the cost is refused rather than quietly
+     * topped up from somewhere: naming the purses is the whole point.
+     */
+    public function test_a_split_that_does_not_add_up_is_refused(): void
+    {
+        $run = $this->started();
+        $this->budget($run, 10);
+        $this->engine()->activate($run);
+
+        $this->expectException(ValidationException::class);
+
+        // A single Boost costs 1, and this puts up 3.
+        $this->engine()->boost($run->refresh(), times: 1, payment: new SecurityPayment(
+            alerts: 0,
+            budget: 3,
+            company: 0,
+        ));
+    }
+
+    /**
+     * Naming nothing still means the budget, so every caller that never cared
+     * about the split behaves exactly as it did before there were three.
+     */
+    public function test_naming_no_purse_still_takes_it_from_the_budget(): void
+    {
+        $run = $this->started();
+        $this->budget($run, 5);
+        $this->engine()->activate($run);
+
+        $this->engine()->boost($run->refresh(), times: 1);
+
+        $this->assertSame(1, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
+    }
+
+    // ------------------------------------------------------------------
     // Challenge (3.4.2)
     // ------------------------------------------------------------------
 
@@ -594,7 +714,7 @@ class RunEngineTest extends TestCase
         $this->walkPast($run->refresh());
 
         // Paid out of the Alert pool, since the budget is empty.
-        $this->engine()->activate($run->refresh(), alertsToSpend: 1);
+        $this->engine()->activate($run->refresh(), payment: new SecurityPayment(alerts: 1, budget: 0, company: 0));
 
         $run = $run->refresh();
         $this->assertSame(1, $run->alerts_spent);

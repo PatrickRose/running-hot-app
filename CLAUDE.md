@@ -676,14 +676,31 @@ Leader's job) goes in the event payload instead of `run_dice_rolls`, because tha
 table's threshold and successes would be meaningless for it. And a single
 remaining candidate is not rolled for at all: a one-sided die is not a die.
 
-**Alerts are not a Tracker, and Credits spent from a budget move no tracker
-either.** Alerts are a pool for the duration of one run and then gone, so there
-is no ledger to write and nothing outside the run can see them. Budget Credits
-were already taken off the Corporation when the budget was placed
-(`FacilityDefenceService::setSecurityBudget`), so spending only records how much
-of that escrow has gone — the apparent exception to "never write a tracker
-directly" is not one. Everything else — Wounds, Tags, the 3.4.4 payment — goes
-through `TrackerService` like anything else.
+**Security pays from three purses, and which one matters.**
+`App\Support\Runs\SecurityPayment` is the split, named by the player rather
+than applied in an order the engine picked:
+- **Alerts** are a pool for one run and then gone, so there is no ledger to
+  write and nothing outside the run can see them. Spending them is free in
+  Credits and costs the Runners nothing — but it lowers the Alerts *standing*,
+  which makes every card they have left easier. That trade is the decision
+  Security is there to make, which is why the screen makes it a slider.
+- **Budget** Credits were already taken off the Corporation when the budget was
+  placed (`FacilityDefenceService::setSecurityBudget`), so spending only records
+  how much of that escrow has gone — the apparent exception to "never write a
+  tracker directly" is not one.
+- **Company money** is the Corporation's own Credits reached past the budget,
+  and it *is* a tracker movement, because Credits genuinely leave at that
+  moment. It is behind a switch on the screen rather than an automatic top-up: a
+  Facility whose budget has run dry should not quietly start spending the
+  company's money.
+
+Naming no purse at all means the budget, so any caller that never cared about
+the split behaves as it did before there were three. A split that does not add
+up to the cost is refused rather than topped up from somewhere, and a purse
+asked for more than it holds is refused naming which one came up short.
+
+Everything else — Wounds, Tags, the 3.4.4 payment — goes through
+`TrackerService` like anything else.
 
 **Alerts do two jobs, and that is the decision Security is there to make.** They
 are temporary Credits *and* a point of strength on every card the Runners have

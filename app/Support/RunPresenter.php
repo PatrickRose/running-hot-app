@@ -496,6 +496,10 @@ class RunPresenter
                 'placed' => $state->security_budget,
                 'spent' => $state->security_budget_spent,
                 'left' => $state->unspentBudget(),
+                // What the Corporation still has behind the budget, so the
+                // screen can offer to reach past it rather than only reporting
+                // that the Facility has run dry.
+                'company' => $run->facility->corporation->credits,
             ] : null,
 
             'can_lead' => $gate->allows('lead', $run),

@@ -860,7 +860,12 @@ function FaceDownCard({ card }: { card: RunCard }) {
 function SecurityDesk({ run }: { run: RunView }) {
     const card = run.card;
     const budget = run.budget;
-    const [alerts, setAlerts] = useState('');
+    // How this Security player is paying for whatever they do next. One
+    // control for all three acts, because only one of them happens at a time:
+    // the slider says how much of a cost the Alerts cover, and whatever is left
+    // comes off the budget - or past it, if the company is willing.
+    const [alerts, setAlerts] = useState(0);
+    const [useCompany, setUseCompany] = useState(false);
     const [boosts, setBoosts] = useState('1');
     const [printed, setPrinted] = useState('');
     const [busy, setBusy] = useState(false);
@@ -869,8 +874,45 @@ function SecurityDesk({ run }: { run: RunView }) {
         return null;
     }
 
-    const spend = (): RunPayload =>
-        alerts === '' ? {} : { alerts_to_spend: Number(alerts) };
+    /**
+     * Split one cost across the three purses.
+     *
+     * Alerts first because the slider is what the player just moved, then the
+     * budget, then the company if they have said it may be reached. The server
+     * checks every one of these against what is actually there - this only
+     * decides the allocation, which is the player's to make.
+     */
+    const split = (cost: number) => {
+        const fromAlerts = Math.min(alerts, cost, run.alerts_available);
+        const rest = cost - fromAlerts;
+        const fromBudget = Math.min(rest, budget?.left ?? 0);
+        const fromCompany = useCompany ? rest - fromBudget : 0;
+
+        return {
+            alerts: fromAlerts,
+            budget: fromBudget,
+            company: fromCompany,
+            short: rest - fromBudget - fromCompany,
+        };
+    };
+
+    // What N Boosts cost from here: the next one is next_boost_cost and each
+    // after it costs one more, which is the rule the engine applies.
+    const boostCost = (times: number) => {
+        const next = card?.next_boost_cost ?? 1;
+
+        return (times * (2 * next + times - 1)) / 2;
+    };
+
+    const spend = (cost: number): RunPayload => {
+        const parts = split(cost);
+
+        return {
+            alerts_to_spend: parts.alerts,
+            budget_to_spend: parts.budget,
+            company_to_spend: parts.company,
+        };
+    };
     const post = (url: ReturnType<typeof activate>, data: RunPayload = {}) => {
         setBusy(true);
         router.post(url, data, {
@@ -904,7 +946,7 @@ function SecurityDesk({ run }: { run: RunView }) {
                             onClick={() =>
                                 post(activate(run.id), {
                                     activating: true,
-                                    ...spend(),
+                                    ...spend(card.activation_cost ?? 0),
                                 })
                             }
                         >
@@ -952,7 +994,7 @@ function SecurityDesk({ run }: { run: RunView }) {
                         onClick={() =>
                             post(boost(run.id), {
                                 times: Number(boosts) || 1,
-                                ...spend(),
+                                ...spend(boostCost(Number(boosts) || 1)),
                             })
                         }
                     >
@@ -964,7 +1006,12 @@ function SecurityDesk({ run }: { run: RunView }) {
                                 size="sm"
                                 variant="outline"
                                 disabled={busy}
-                                onClick={() => post(charge(run.id), spend())}
+                                onClick={() =>
+                                    post(
+                                        charge(run.id),
+                                        spend(card.charge_cost ?? 0),
+                                    )
+                                }
                             >
                                 Charge for {card.charge_cost}
                             </Button>
@@ -1011,26 +1058,13 @@ function SecurityDesk({ run }: { run: RunView }) {
             )}
 
             <div className="flex flex-col gap-2 border-t pt-3">
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={`alerts-${run.id}`}>
-                        Alerts to spend as Credits
-                    </Label>
-                    <Input
-                        id={`alerts-${run.id}`}
-                        type="number"
-                        min={0}
-                        max={run.alerts_available}
-                        className="w-24"
-                        value={alerts}
-                        onChange={(event) => setAlerts(event.target.value)}
-                        placeholder="0"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        {run.alerts_available} in hand. Spending them makes
-                        everything the Runners have left easier — the next point
-                        of strength arrives at {run.next_alert_threshold}.
-                    </p>
-                </div>
+                <SecurityPurse
+                    run={run}
+                    alerts={alerts}
+                    onAlerts={setAlerts}
+                    useCompany={useCompany}
+                    onUseCompany={setUseCompany}
+                />
 
                 {run.step !== 'consequence' ? (
                     <p className="text-xs text-muted-foreground">
@@ -1063,6 +1097,94 @@ function SecurityDesk({ run }: { run: RunView }) {
                 )}
             </div>
         </section>
+    );
+}
+
+/**
+ * How Security is paying, as one control for all three things they pay for.
+ *
+ * Three purses, and which a Credit comes out of is a real decision rather than
+ * bookkeeping. Alerts are free in Credits but spending them lowers the Alerts
+ * standing, which makes every card the Runners have left *easier* — so the
+ * slider is the trade this desk exists to make, and it is a slider because the
+ * question is "how much of this", not "type a number".
+ *
+ * The budget takes whatever the Alerts do not, and company money is behind a
+ * switch rather than automatic: reaching past the Facility's budget into the
+ * Corporation's own Credits is the one of the three that actually moves a
+ * tracker, and it should be something Security chooses rather than something
+ * that happens to them when a budget runs dry.
+ *
+ * Every number here is checked again by the server against what is really
+ * there. What this decides is only the allocation, which is the player's.
+ */
+function SecurityPurse({
+    run,
+    alerts,
+    onAlerts,
+    useCompany,
+    onUseCompany,
+}: {
+    run: RunView;
+    alerts: number;
+    onAlerts: (value: number) => void;
+    useCompany: boolean;
+    onUseCompany: (value: boolean) => void;
+}) {
+    const budget = run.budget;
+    const most = run.alerts_available;
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1">
+                <Label htmlFor={`purse-${run.id}`}>
+                    Alerts to spend as Credits
+                    <span className="ml-2 font-normal text-muted-foreground tabular-nums">
+                        {alerts} of {most}
+                    </span>
+                </Label>
+                <input
+                    id={`purse-${run.id}`}
+                    type="range"
+                    min={0}
+                    max={most}
+                    step={1}
+                    value={Math.min(alerts, most)}
+                    disabled={most === 0}
+                    onChange={(event) => onAlerts(Number(event.target.value))}
+                    className="w-full accent-foreground disabled:opacity-50"
+                />
+                <p className="text-xs text-muted-foreground">
+                    {most === 0
+                        ? 'No Alerts in hand.'
+                        : `Spending them makes everything the Runners have left easier — the next point of strength arrives at ${run.next_alert_threshold}.`}
+                </p>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+                <input
+                    type="checkbox"
+                    checked={useCompany}
+                    onChange={(event) => onUseCompany(event.target.checked)}
+                />
+                Reach past the budget into company money
+                {budget !== null && (
+                    <span className="text-muted-foreground tabular-nums">
+                        ({budget.company} in the bank)
+                    </span>
+                )}
+            </label>
+
+            {budget !== null && (
+                <p className="text-xs text-muted-foreground">
+                    {budget.left} of {budget.placed} Credits of budget left.
+                    Whatever the Alerts do not cover comes off that
+                    {useCompany
+                        ? ', and past it out of the company — which is the one of the three that leaves the Corporation here and now.'
+                        : ', and a cost it cannot cover is refused.'}
+                </p>
+            )}
+        </div>
     );
 }
 

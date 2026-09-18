@@ -38,6 +38,7 @@ use App\Support\Runs\RunCursor;
 use App\Support\Runs\RunGroup;
 use App\Support\Runs\RunOrdering;
 use App\Support\Runs\RunRewards;
+use App\Support\Runs\SecurityPayment;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -379,12 +380,12 @@ class RunEngine
      * Runners unable to go anywhere until Security found money it did not have.
      *
      * @param  bool|null  $activating  false only where Security is Directing here
-     * @param  int  $alertsToSpend  Alerts to put towards the cost as temporary Credits
+     * @param  SecurityPayment|null  $payment  how the cost is split between Alerts, the budget and company money
      */
     public function activate(
         Run $run,
         ?bool $activating = null,
-        int $alertsToSpend = 0,
+        ?SecurityPayment $payment = null,
         ?User $actor = null,
     ): FacilityCardActivation {
         $cursor = $this->requireCard($run);
@@ -399,18 +400,20 @@ class RunEngine
         $card = $cursor->card;
         $cost = ActivationCost::for($card->kind, $this->activeCyberCards($run));
 
-        return DB::transaction(function () use ($run, $cursor, $card, $cost, $activating, $alertsToSpend, $actor): FacilityCardActivation {
+        $payment ??= new SecurityPayment(0, 0, 0);
+
+        return DB::transaction(function () use ($run, $cursor, $card, $cost, $activating, $payment, $actor): FacilityCardActivation {
             $declined = $activating === false;
-            $affordable = $this->affordable($run, $cost, $alertsToSpend);
+            $affordable = $this->affordable($run, $cost, $payment);
             $activated = ! $declined && $affordable;
 
-            $paid = ['alerts' => 0, 'budget' => 0];
+            $paid = ['alerts' => 0, 'budget' => 0, 'company' => 0];
 
             if ($activated) {
                 $paid = $this->pay(
                     $run,
                     $cost,
-                    $alertsToSpend,
+                    $payment,
                     sprintf('Activating %s', $card->cardType->name),
                     $actor,
                 );
@@ -467,7 +470,7 @@ class RunEngine
      *
      * @param  int  $times  how many Boosts to buy at once
      */
-    public function boost(Run $run, int $times = 1, int $alertsToSpend = 0, ?User $actor = null): FacilityCardActivation
+    public function boost(Run $run, int $times = 1, ?SecurityPayment $payment = null, ?User $actor = null): FacilityCardActivation
     {
         $cursor = $this->requireCard($run);
 
@@ -492,8 +495,8 @@ class RunEngine
             $cost += $activation->boosts + $boost + 1;
         }
 
-        return DB::transaction(function () use ($run, $cursor, $card, $activation, $times, $cost, $alertsToSpend, $actor): FacilityCardActivation {
-            $this->pay($run, $cost, $alertsToSpend, sprintf('Boosting %s', $card->cardType->name), $actor);
+        return DB::transaction(function () use ($run, $cursor, $card, $activation, $times, $cost, $payment, $actor): FacilityCardActivation {
+            $this->pay($run, $cost, $payment ?? new SecurityPayment(0, 0, 0), sprintf('Boosting %s', $card->cardType->name), $actor);
 
             $activation->forceFill([
                 'boosts' => $activation->boosts + $times,
@@ -530,7 +533,7 @@ class RunEngine
      * card prints, so this records the payment and whoever is running the card
      * then applies them through {@see self::applyConsequence()} like any other.
      */
-    public function charge(Run $run, int $alertsToSpend = 0, ?User $actor = null): RunEvent
+    public function charge(Run $run, ?SecurityPayment $payment = null, ?User $actor = null): RunEvent
     {
         $cursor = $this->requireCard($run);
 
@@ -545,8 +548,8 @@ class RunEngine
 
         $cost = (int) $card->cardType->charge_cost;
 
-        return DB::transaction(function () use ($run, $cursor, $card, $cost, $alertsToSpend, $actor): RunEvent {
-            $this->pay($run, $cost, $alertsToSpend, sprintf('Charging %s', $card->cardType->name), $actor);
+        return DB::transaction(function () use ($run, $cursor, $card, $cost, $payment, $actor): RunEvent {
+            $this->pay($run, $cost, $payment ?? new SecurityPayment(0, 0, 0), sprintf('Charging %s', $card->cardType->name), $actor);
 
             return $this->record(
                 $run,
@@ -2197,11 +2200,14 @@ class RunEngine
     /**
      * Whether Security can cover a cost from Alerts and the budget between them.
      */
-    protected function affordable(Run $run, int $amount, int $alertsToSpend): bool
+    protected function affordable(Run $run, int $amount, SecurityPayment $payment): bool
     {
-        $fromAlerts = min(max(0, $alertsToSpend), $run->alertsAvailable(), $amount);
+        $payment = $payment->isEmpty() ? SecurityPayment::fromBudget($amount) : $payment;
 
-        return $run->facility->stateForTurn($run->turn)->unspentBudget() >= $amount - $fromAlerts;
+        return $payment->total() >= $amount
+            && $payment->alerts <= $run->alertsAvailable()
+            && $payment->budget <= $run->facility->stateForTurn($run->turn)->unspentBudget()
+            && $payment->company <= $run->facility->corporation->credits;
     }
 
     /**
@@ -2212,44 +2218,82 @@ class RunEngine
      * only records how much of that escrow has gone. Whatever is left goes home
      * at the end of the Action phase.
      *
-     * @return array{alerts: int, budget: int}
+     * @return array{alerts: int, budget: int, company: int}
      */
-    protected function pay(Run $run, int $amount, int $alertsToSpend, string $reason, ?User $actor): array
+    protected function pay(Run $run, int $amount, SecurityPayment $payment, string $reason, ?User $actor): array
     {
         if ($amount < 0) {
             throw ValidationException::withMessages(['amount' => 'A cost cannot be negative.']);
         }
 
-        $fromAlerts = min(max(0, $alertsToSpend), $run->alertsAvailable(), $amount);
-        $fromBudget = $amount - $fromAlerts;
-        $state = $run->facility->stateForTurn($run->turn);
+        // Naming nothing means the budget, which is what a Facility is funded
+        // with: a Security player who has put Credits on a Facility and then
+        // switches a card on there means those unless they say otherwise.
+        $payment = $payment->isEmpty() ? SecurityPayment::fromBudget($amount) : $payment;
 
-        if ($state->unspentBudget() < $fromBudget) {
+        if ($payment->total() !== $amount) {
             throw ValidationException::withMessages([
-                'budget' => sprintf(
-                    '%s has %d Credit%s of budget left and %d Alert%s: %s costs %d.',
-                    $run->facility->name,
-                    $state->unspentBudget(),
-                    $state->unspentBudget() === 1 ? '' : 's',
-                    $run->alertsAvailable(),
-                    $run->alertsAvailable() === 1 ? '' : 's',
+                'payment' => sprintf(
+                    '%s costs %d and you have put up %d: %s.',
                     $reason,
                     $amount,
+                    $payment->total(),
+                    $payment->explain(),
                 ),
             ]);
         }
 
-        if ($fromAlerts > 0) {
-            $run->forceFill(['alerts_spent' => $run->alerts_spent + $fromAlerts])->save();
+        $state = $run->facility->stateForTurn($run->turn);
+        $corporation = $run->facility->corporation;
+
+        $this->requirePurse($payment->alerts, $run->alertsAvailable(), 'Alert', $reason);
+        $this->requirePurse($payment->budget, $state->unspentBudget(), 'Credit of budget', $reason);
+        $this->requirePurse($payment->company, $corporation->credits, 'Credit of company money', $reason);
+
+        if ($payment->alerts > 0) {
+            $run->forceFill(['alerts_spent' => $run->alerts_spent + $payment->alerts])->save();
         }
 
-        if ($fromBudget > 0) {
+        if ($payment->budget > 0) {
             $state->forceFill([
-                'security_budget_spent' => $state->security_budget_spent + $fromBudget,
+                'security_budget_spent' => $state->security_budget_spent + $payment->budget,
             ])->save();
         }
 
-        return ['alerts' => $fromAlerts, 'budget' => $fromBudget];
+        // The one of the three that is a real tracker movement: Credits leave
+        // the Corporation here and now, where the budget's left when it was
+        // placed and Alerts were never the Corporation's at all.
+        if ($payment->company > 0) {
+            $this->trackers->adjust(
+                $corporation,
+                Tracker::CorporationCredits,
+                -$payment->company,
+                $reason,
+                $actor,
+            );
+        }
+
+        return $payment->toArray();
+    }
+
+    /**
+     * Refuse a purse that cannot cover what has been asked of it.
+     */
+    protected function requirePurse(int $wanted, int $available, string $unit, string $reason): void
+    {
+        if ($wanted > $available) {
+            throw ValidationException::withMessages([
+                'payment' => sprintf(
+                    '%s wants %d %s%s and there %s only %d.',
+                    $reason,
+                    $wanted,
+                    $unit,
+                    $wanted === 1 ? '' : 's',
+                    $available === 1 ? 'is' : 'are',
+                    $available,
+                ),
+            ]);
+        }
     }
 
     /**
