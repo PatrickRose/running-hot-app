@@ -276,10 +276,11 @@ class RunController extends Controller
      * and at the Consequence step they are the only person who has certainly
      * seen it. What the Leader decides is who takes it, which is below.
      *
-     * The whole slip at once, because a card prints one consequence however
-     * many parts it has: "1 alert, 1 wound" is two counts on one card, and
-     * marking them a request at a time would be two cards as far as the log
-     * was concerned. Marking again replaces it.
+     * One request for both halves, because it is one decision: `effects` is
+     * what the card prints and `alerts` is what Security is paying to add to
+     * it. They are not the same kind of thing - the first replaces whatever
+     * was marked before, the second is spent and sticks - but they are settled
+     * together and handed over together.
      */
     public function markConsequence(Run $run, Request $request): RedirectResponse
     {
@@ -288,22 +289,37 @@ class RunController extends Controller
         $validated = $request->validate([
             'effects' => ['present', 'array'],
             'effects.*' => ['nullable', 'integer', 'min:0', 'max:9'],
+            'alerts' => ['nullable', 'array'],
+            'alerts.*' => ['nullable', 'integer', 'min:0', 'max:9'],
         ]);
-
-        /** @var array<string, int> $effects */
-        $effects = array_filter(
-            $validated['effects'],
-            fn (mixed $times, string $key): bool => RunConsequence::tryFrom($key) !== null && (int) $times > 0,
-            ARRAY_FILTER_USE_BOTH,
-        );
 
         $event = $this->runs->markConsequence(
             $run,
-            ConsequenceSlip::of($effects),
+            $this->slip($validated['effects']),
+            $this->slip($validated['alerts'] ?? []),
             $request->user(),
         );
 
         return back()->with('status', $event->description);
+    }
+
+    /**
+     * A posted set of counts as a slip, with anything that is not a
+     * consequence dropped rather than blowing up: the form sends a box per
+     * effect and an untouched one is a zero.
+     *
+     * @param  array<string, mixed>  $counts
+     */
+    private function slip(array $counts): ConsequenceSlip
+    {
+        /** @var array<string, int> $effects */
+        $effects = array_filter(
+            $counts,
+            fn (mixed $times, string $key): bool => RunConsequence::tryFrom($key) !== null && (int) $times > 0,
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        return ConsequenceSlip::of($effects);
     }
 
     /**
@@ -336,30 +352,6 @@ class RunController extends Controller
         );
 
         return back()->with('status', sprintf('Applied: %s.', $slip->describe()));
-    }
-
-    /**
-     * Spend Alerts to add a consequence Security's own way (rulebook 3.4.2).
-     *
-     * It lands on the slip rather than happening on its own, so the Leader
-     * still names who takes it and still answers for an End the Run bought
-     * this way. The Alerts leave the moment this is called.
-     */
-    public function triggerWithAlerts(Run $run, Request $request): RedirectResponse
-    {
-        Gate::authorize('defend', $run);
-
-        $validated = $request->validate([
-            'effect' => ['required', Rule::enum(RunConsequence::class)],
-        ]);
-
-        $event = $this->runs->buyConsequenceWithAlerts(
-            $run,
-            RunConsequence::from($validated['effect']),
-            $request->user(),
-        );
-
-        return back()->with('status', $event->description);
     }
 
     /**

@@ -117,8 +117,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('runs.consequences.mark');
     Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
         ->name('runs.consequences.store');
-    Route::post('runs/{run}/alerts', [RunController::class, 'triggerWithAlerts'])
-        ->name('runs.alerts.trigger');
     Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
     Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 

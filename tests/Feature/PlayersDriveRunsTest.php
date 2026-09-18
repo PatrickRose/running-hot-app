@@ -455,6 +455,39 @@ class PlayersDriveRunsTest extends TestCase
     }
 
     /**
+     * One request carries both halves: what the card prints and what Security
+     * is paying Alerts to add to it. The Alerts leave on the way through.
+     */
+    public function test_marking_buys_the_alert_extras_in_the_same_request(): void
+    {
+        [$leaderUser, $leader] = $this->runner();
+        $securityUser = $this->seat(CharacterRole::Security);
+        $run = $this->begun($leader);
+        $this->atConsequence($run);
+
+        $run->refresh()->forceFill(['alerts' => $run->alerts + 10])->save();
+
+        $this->actingAs($securityUser)
+            ->post(route('runs.consequences.mark', $run), [
+                'effects' => [RunConsequence::Wound->value => 1],
+                'alerts' => [RunConsequence::Tag->value => 2],
+            ])
+            ->assertRedirect();
+
+        // Two Tags at 2 Alerts each.
+        $this->assertSame(4, $run->refresh()->alerts_spent);
+
+        $this->actingAs($leaderUser)
+            ->post(route('runs.consequences.store', $run), [
+                'character_id' => $leader->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(1, $leader->refresh()->wounds);
+        $this->assertSame(2, $leader->refresh()->tags);
+    }
+
+    /**
      * The other answer to an End the Run: take Wounds, Tags and an Alert
      * instead and face the card again (3.4.2). The price is the number already
      * ignored plus this one, so the first costs 1 of each.

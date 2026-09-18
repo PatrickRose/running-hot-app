@@ -772,27 +772,75 @@ class RunEngineTest extends TestCase
     }
 
     /**
-     * Alerts buy a consequence onto the slip rather than applying one on their
-     * own: the Alerts are gone at once, and the Run Leader still decides who
-     * takes what Security has bought.
+     * Boosting belongs to the Activate step. 3.4.2 puts it there - it is the
+     * last line of that step, before the Challenge heading - and it is the only
+     * reading that means anything: Security names the printed strength and
+     * rolls the defence at the Challenge, so a Boost bought after that could
+     * not reach the roll it was meant to win.
      */
-    public function test_security_may_spend_alerts_to_add_to_the_consequence(): void
+    public function test_a_card_cannot_be_boosted_after_the_activate_step(): void
+    {
+        $run = $this->atConsequence();
+        $this->budget($run, 10);
+
+        try {
+            $this->engine()->boost($run->refresh(), times: 1);
+            $this->fail('A Boost at the Consequence step should have been refused.');
+        } catch (ValidationException $refusal) {
+            $this->assertStringContainsString('Activate step', implode(' ', $refusal->errors()['boost']));
+        }
+
+        $this->assertSame(0, $run->facility->stateForTurn($run->turn)->refresh()->security_budget_spent);
+    }
+
+    /**
+     * The card and what Alerts buy go over together, because it is one
+     * decision: read the card, decide whether to make it worse, hand the lot
+     * to the Leader. The Alerts leave at once; nobody has taken anything yet.
+     */
+    public function test_marking_can_buy_extra_consequences_with_alerts(): void
     {
         $run = $this->atConsequence(['body' => 9]);
-        $this->raiseAlerts($run, 6);
+        $this->raiseAlerts($run, 8);
 
-        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Wound);
+        $this->engine()->markConsequence(
+            $run->refresh(),
+            ConsequenceSlip::of(['wound' => 1]),
+            ConsequenceSlip::of(['tag' => 1]),
+        );
 
         $run = $run->refresh();
-        $this->assertSame(5, $run->alerts_spent);
+        $this->assertSame(2, $run->alerts_spent);
+
+        $slip = $this->engine()->markedConsequence($run);
+        $this->assertSame(1, $slip->timesOf(RunConsequence::Wound));
+        $this->assertSame(1, $slip->timesOf(RunConsequence::Tag));
 
         // On the slip, and nobody has taken it yet.
-        $this->assertSame(1, $this->engine()->markedConsequence($run)->timesOf(RunConsequence::Wound));
         $this->assertSame(0, $run->leader?->refresh()->wounds);
 
         $this->engine()->applyMarkedConsequence($run, $run->leader);
 
         $this->assertSame(1, $run->leader?->refresh()->wounds);
+        $this->assertSame(1, $run->leader?->refresh()->tags);
+    }
+
+    /**
+     * Priced per effect and per copy, so two Tags cost twice what one does.
+     */
+    public function test_alerts_are_priced_by_what_they_buy(): void
+    {
+        $run = $this->atConsequence(['body' => 9]);
+        $this->raiseAlerts($run, 20);
+
+        $this->engine()->markConsequence(
+            $run->refresh(),
+            ConsequenceSlip::empty(),
+            ConsequenceSlip::of(['tag' => 2, 'wound' => 1]),
+        );
+
+        // 2 Alerts a Tag and 5 a Wound.
+        $this->assertSame(9, $run->refresh()->alerts_spent);
     }
 
     public function test_alerts_cannot_buy_more_alerts(): void
@@ -802,16 +850,33 @@ class RunEngineTest extends TestCase
 
         $this->expectException(ValidationException::class);
 
-        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Alert);
+        $this->engine()->markConsequence(
+            $run->refresh(),
+            ConsequenceSlip::empty(),
+            ConsequenceSlip::of(['alert' => 1]),
+        );
     }
 
+    /**
+     * And a purchase Security cannot afford takes the mark down with it,
+     * rather than leaving the card marked and the extras quietly missing.
+     */
     public function test_an_effect_security_cannot_afford_is_refused(): void
     {
         $run = $this->atConsequence();
 
-        $this->expectException(ValidationException::class);
+        try {
+            $this->engine()->markConsequence(
+                $run,
+                ConsequenceSlip::of(['wound' => 1]),
+                ConsequenceSlip::of(['end_the_run' => 1]),
+            );
+            $this->fail('15 Alerts Security does not have should have been refused.');
+        } catch (ValidationException $refusal) {
+            $this->assertStringContainsString('costs 15 Alerts', implode(' ', $refusal->errors()['alerts']));
+        }
 
-        $this->engine()->buyConsequenceWithAlerts($run, RunConsequence::EndTheRun);
+        $this->assertFalse($this->engine()->consequenceIsMarked($run->refresh()));
     }
 
     /**
@@ -819,14 +884,14 @@ class RunEngineTest extends TestCase
      * Alerts is added to the one the card prints, so there is nothing to add
      * it to before the Runners have failed the check.
      */
-    public function test_alerts_cannot_buy_a_consequence_before_there_is_one(): void
+    public function test_a_consequence_cannot_be_marked_before_there_is_one(): void
     {
         $run = $this->started();
-        $this->engine()->applyConsequence($run, RunConsequence::Alert, times: 20);
+        $this->raiseAlerts($run, 20);
 
         $this->expectException(ValidationException::class);
 
-        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Wound);
+        $this->engine()->markConsequence($run->refresh(), ConsequenceSlip::of(['wound' => 1]));
     }
 
     /**
@@ -839,14 +904,18 @@ class RunEngineTest extends TestCase
         $run = $this->atConsequence(['body' => 9]);
         $this->raiseAlerts($run, 6);
 
-        $this->engine()->markConsequence($run->refresh(), ConsequenceSlip::of(['wound' => 3]));
-        $this->engine()->buyConsequenceWithAlerts($run->refresh(), RunConsequence::Tag);
+        $this->engine()->markConsequence(
+            $run->refresh(),
+            ConsequenceSlip::of(['wound' => 3]),
+            ConsequenceSlip::of(['tag' => 1]),
+        );
         $this->engine()->markConsequence($run->refresh(), ConsequenceSlip::of(['wound' => 1]));
 
         $slip = $this->engine()->markedConsequence($run->refresh());
 
         $this->assertSame(1, $slip->timesOf(RunConsequence::Wound));
         $this->assertSame(1, $slip->timesOf(RunConsequence::Tag));
+        $this->assertSame(2, $run->refresh()->alerts_spent);
     }
 
     /**

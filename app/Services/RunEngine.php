@@ -485,6 +485,22 @@ class RunEngine
             ]);
         }
 
+        // The Activate step and no later. 3.4.2 puts Boosting inside that step
+        // - it is the last line of it, before the Challenge heading - and the
+        // worked example says so outright: "During the Activate step, Ryan
+        // uses a 'Boost' card." Which is also the only reading that means
+        // anything, because Security names the printed strength and rolls the
+        // defence at the Challenge: a Boost bought after that could not reach
+        // the roll it was meant to win.
+        if ($cursor->step !== RunStep::Activate) {
+            throw ValidationException::withMessages([
+                'boost' => sprintf(
+                    'A card is Boosted during the Activate step, and the run is at the %s step.',
+                    $cursor->step->label(),
+                ),
+            ]);
+        }
+
         /** @var FacilityCardActivation $activation */
         $activation = $cursor->activation;
         /** @var FacilityProtectionCard $card */
@@ -909,14 +925,29 @@ class RunEngine
      * is where a consequence enters the run. What the Run Leader then decides
      * is who takes it, which is the only part of it the rulebook gives them.
      *
-     * Marking again **replaces** the card half rather than adding to it, for
-     * the reason handing cards to the Chair sets the Council's hand: a count
-     * typed wrong is corrected by marking the right one, not by finding an
-     * undo. Alerts already spent survive it, because they are gone - they are
-     * their own events and {@see self::markedConsequence()} adds them back on.
+     * **One act, both halves.** What the card prints and what Security buys
+     * with Alerts go over together, because they are one decision made once:
+     * Security reads the card, decides whether to make it worse, and hands the
+     * lot to the Leader. Buying each Alert effect as its own request meant
+     * committing to it before knowing what the finished consequence looked
+     * like, and handed the Leader a slip that grew under them.
+     *
+     * The two halves still behave differently, because they are not the same
+     * kind of thing. Marking **replaces** what the card does, for the reason
+     * handing cards to the Chair sets the Council's hand: a count typed wrong
+     * is corrected by marking the right one. Alerts are **spent**, so what they
+     * bought is added to the pile and survives every later mark - they are
+     * gone, and no amount of re-reading the card brings them back.
+     *
+     * @param  ConsequenceSlip  $card  what the card itself does
+     * @param  ConsequenceSlip|null  $bought  what Security is paying Alerts to add now
      */
-    public function markConsequence(Run $run, ConsequenceSlip $slip, ?User $actor = null): RunEvent
-    {
+    public function markConsequence(
+        Run $run,
+        ConsequenceSlip $card,
+        ?ConsequenceSlip $bought = null,
+        ?User $actor = null,
+    ): RunEvent {
         $this->requireRunning($run);
 
         $cursor = $this->cursor($run);
@@ -930,22 +961,32 @@ class RunEngine
             ]);
         }
 
-        return $this->record(
-            $run,
-            RunEvent::TYPE_CONSEQUENCE_MARKED,
-            $slip->isEmpty()
-                ? 'Security marked the card as doing nothing.'
-                : sprintf('Security marked the card: %s.', $slip->describe()),
-            actor: $actor,
-            card: $cursor->card,
-            pass: $cursor->pass,
-            step: RunStep::Consequence,
-            payload: ['effects' => $slip->toArray()],
-        );
+        $bought ??= ConsequenceSlip::empty();
+
+        // One transaction, so Alerts Security cannot afford take the mark down
+        // with them rather than leaving the card marked and the extras missing.
+        return DB::transaction(function () use ($run, $cursor, $card, $bought, $actor): RunEvent {
+            if (! $bought->isEmpty()) {
+                $this->spendAlertsOn($run, $bought, $cursor, $actor);
+            }
+
+            return $this->record(
+                $run->refresh(),
+                RunEvent::TYPE_CONSEQUENCE_MARKED,
+                $card->isEmpty()
+                    ? 'Security marked the card as doing nothing.'
+                    : sprintf('Security marked the card: %s.', $card->describe()),
+                actor: $actor,
+                card: $cursor->card,
+                pass: $cursor->pass,
+                step: RunStep::Consequence,
+                payload: ['effects' => $card->toArray()],
+            );
+        });
     }
 
     /**
-     * Spend Alerts to add a consequence Security's own way (rulebook 3.4.2).
+     * Spend Alerts to add consequences Security's own way (rulebook 3.4.2).
      *
      * The other thing Alerts are for. The prices are steep - 2 for a Tag, 5 for
      * a Wound, 12 for a Retry, 15 to end a run - and they compete with the same
@@ -953,68 +994,64 @@ class RunEngine
      * Security player is there to make. Spending them also lowers the strength
      * every remaining card is getting from the Alert curve.
      *
-     * It *adds to the slip* rather than happening on its own: "Security players
-     * may also use any alerts to trigger one of the other effects as well"
-     * reads as one more thing on the pile the Runners are about to take, so the
-     * Run Leader still decides who takes it and still answers for an End the
-     * Run bought this way. The Alerts leave here and now, which is why this is
-     * an event of its own rather than a re-mark.
+     * What they buy is *added to the slip* rather than happening on its own:
+     * "Security players may also use any alerts to trigger one of the other
+     * effects as well" reads as one more thing on the pile the Runners are
+     * about to take, so the Run Leader still decides who takes it and still
+     * answers for an End the Run bought this way.
      */
-    public function buyConsequenceWithAlerts(
+    protected function spendAlertsOn(
         Run $run,
-        RunConsequence $effect,
-        ?User $actor = null,
+        ConsequenceSlip $bought,
+        RunCursor $cursor,
+        ?User $actor,
     ): RunEvent {
-        $this->requireRunning($run);
+        $cost = 0;
 
-        $cost = $effect->alertCost();
+        foreach ($bought->damage() as $part) {
+            $each = $part['effect']->alertCost();
 
-        if ($cost === null) {
-            throw ValidationException::withMessages([
-                'effect' => 'Alerts cannot buy more Alerts.',
-            ]);
+            if ($each === null) {
+                throw ValidationException::withMessages([
+                    'alerts' => 'Alerts cannot buy more Alerts.',
+                ]);
+            }
+
+            $cost += $each * $part['times'];
+        }
+
+        if ($bought->endsTheRun()) {
+            $cost += (int) RunConsequence::EndTheRun->alertCost();
         }
 
         if ($run->alertsAvailable() < $cost) {
             throw ValidationException::withMessages([
                 'alerts' => sprintf(
-                    'That costs %d Alerts and Security has %d.',
+                    'That costs %d Alert%s and Security has %d.',
                     $cost,
+                    $cost === 1 ? '' : 's',
                     $run->alertsAvailable(),
                 ),
             ]);
         }
 
-        $cursor = $this->cursor($run);
+        $run->forceFill(['alerts_spent' => $run->alerts_spent + $cost])->save();
 
-        if ($cursor->step !== RunStep::Consequence) {
-            throw ValidationException::withMessages([
-                'alerts' => sprintf(
-                    'A consequence bought with Alerts is added to the one the card prints, so it waits for the Consequence step: the run is at the %s step.',
-                    $cursor->step->label(),
-                ),
-            ]);
-        }
-
-        return DB::transaction(function () use ($run, $cursor, $effect, $cost, $actor): RunEvent {
-            $run->forceFill(['alerts_spent' => $run->alerts_spent + $cost])->save();
-
-            return $this->record(
-                $run->refresh(),
-                RunEvent::TYPE_CONSEQUENCE_BOUGHT,
-                sprintf(
-                    'Security spent %d Alert%s to add %s to the consequence.',
-                    $cost,
-                    $cost === 1 ? '' : 's',
-                    $effect->label(),
-                ),
-                actor: $actor,
-                card: $cursor->card,
-                pass: $cursor->pass,
-                step: RunStep::Consequence,
-                payload: ['effect' => $effect->value, 'cost' => $cost],
-            );
-        });
+        return $this->record(
+            $run->refresh(),
+            RunEvent::TYPE_CONSEQUENCE_BOUGHT,
+            sprintf(
+                'Security spent %d Alert%s to add %s to the consequence.',
+                $cost,
+                $cost === 1 ? '' : 's',
+                $bought->describe(),
+            ),
+            actor: $actor,
+            card: $cursor->card,
+            pass: $cursor->pass,
+            step: RunStep::Consequence,
+            payload: ['effects' => $bought->toArray(), 'cost' => $cost],
+        );
     }
 
     /**
@@ -1044,10 +1081,11 @@ class RunEngine
         $slip = ConsequenceSlip::of($effects);
 
         foreach ($events->where('type', RunEvent::TYPE_CONSEQUENCE_BOUGHT) as $bought) {
-            $effect = RunConsequence::tryFrom((string) ($bought->payload['effect'] ?? ''));
+            /** @var array<string, int> $extras */
+            $extras = $bought->payload['effects'] ?? [];
 
-            if ($effect !== null) {
-                $slip = $slip->plus($effect);
+            foreach (ConsequenceSlip::of($extras)->toArray() as $value => $times) {
+                $slip = $slip->plus(RunConsequence::from($value), $times);
             }
         }
 

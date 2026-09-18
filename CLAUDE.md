@@ -717,6 +717,14 @@ being paid, then the button that commits it.
 Everything else — Wounds, Tags, the 3.4.4 payment — goes through
 `TrackerService` like anything else.
 
+**A Boost is bought during the Activate step and nowhere else.** 3.4.2 puts it
+there — it is the last line of that step, before the Challenge heading — and the
+worked example says so outright: "During the Activate step, Ryan uses a 'Boost'
+card." It is also the only reading that means anything, because Security names
+the printed strength and rolls the defence at the Challenge, so a Boost bought
+after that could not reach the roll it was meant to win. `boost()` checks the
+step and the screen draws the control only there.
+
 **A Charge is paid at the Consequence step and nowhere else.** It buys an
 *extra* consequence on top of one the Runners are already taking, so there is
 nothing to add it to until they have lost the roll — 3.4.2 introduces it after
@@ -744,13 +752,25 @@ the side that cannot see the card to read it out.
 
 So there is a **slip**, `App\Support\Runs\ConsequenceSlip`, derived off the
 pass's own events rather than stored — same reason the cursor is, and it matters
-more here because both sides read it at once. Its two halves behave differently
-on purpose: `markConsequence()` *replaces* the card half, because a count typed
-wrong is corrected by marking the right one, while `buyConsequenceWithAlerts()`
-appends and survives a re-mark, because those Alerts are already gone. Marking
-an empty slip is a real answer — "the card does nothing" — so
-`consequenceIsMarked()` reads the event rather than the slip, and nothing can be
-taken before Security has written something down.
+more here because both sides read it at once. Marking an empty slip is a real
+answer — "the card does nothing" — so `consequenceIsMarked()` reads the event
+rather than the slip, and nothing can be taken before Security has written
+something down.
+
+**One act, both halves.** `markConsequence()` takes what the card prints *and*
+what Security is paying Alerts to add, because it is one decision made once:
+read the card, decide whether to make it worse, hand the lot to the Leader.
+Buying each Alert effect as its own request meant committing to it before seeing
+what the finished consequence looked like, and handed the Leader a slip that grew
+under them. One transaction, so Alerts Security cannot afford take the mark down
+with them rather than leaving the card marked and the extras missing.
+
+The two halves still behave differently, because they are not the same kind of
+thing. Marking **replaces** what the card does, for the reason handing cards to
+the Chair sets the Council's hand: a count typed wrong is corrected by marking
+the right one. Alerts are **spent**, so what they bought is added to the pile and
+survives every later mark — they are gone, and no amount of re-reading the card
+brings them back.
 
 **An Alert-bought consequence lands on the slip rather than happening on its
 own.** "Security players may also use any alerts to trigger one of the other
@@ -758,6 +778,12 @@ effects as well" reads as one more thing on the pile the Runners are about to
 take, so the Leader still names who takes it and still answers for an End the
 Run bought that way. It used to apply immediately, which took the choice off the
 Leader and moved the cursor to the Breather underneath them.
+
+**The rest of the group reads the slip too.** A Runner who is not the Leader is
+as likely as anybody to be the one taking two Wounds, and used to be told only
+"Watching" while that was decided. At the table the card is face up and they can
+read it, so `Watching` in `run-panel.tsx` draws what Security marked and who is
+deciding. Read-only: the Leader decides.
 
 **An End the Run is a question, not a consequence, so it is answered last.**
 Everything else on the slip lands first — the Runners take what the card does to
