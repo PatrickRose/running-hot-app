@@ -75,9 +75,6 @@ export function FacilityPanel({
                             {facility.available_from_turn}
                         </Badge>
                     )}
-                    {facility.security.directed && (
-                        <Badge>Security directed here</Badge>
-                    )}
                     {discordReady && channelState !== null && (
                         <>
                             {channelsReady ? (
@@ -369,18 +366,6 @@ function SecurityOrders({
 
     return (
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-3">
-            <Button
-                size="sm"
-                variant={facility.security.directed ? 'default' : 'outline'}
-                onClick={() =>
-                    post({ security_directed: !facility.security.directed })
-                }
-            >
-                {facility.security.directed
-                    ? 'Lift the meeple'
-                    : 'Direct Security here'}
-            </Button>
-
             <div className="grid gap-1">
                 <Label
                     htmlFor={`budget-${facility.id}`}

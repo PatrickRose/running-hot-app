@@ -10,7 +10,7 @@ use App\Http\Requests\Control\InstallProtectionCardRequest;
 use App\Http\Requests\Control\ReorderProtectionCardsRequest;
 use App\Http\Requests\Control\StoreFacilityRequest;
 use App\Http\Requests\Control\UpdateFacilityRequest;
-use App\Http\Requests\Control\UpdateSecurityDirectionRequest;
+use App\Http\Requests\Control\UpdateSecurityBudgetRequest;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
@@ -225,13 +225,16 @@ class FacilityController extends Controller
     }
 
     /**
-     * Direct Security at this Facility, and set the budget on it
-     * (rulebook 3.3.5).
+     * Set the budget on this Facility (rulebook 3.3.5).
+     *
+     * Directing Security is not modelled: a Security player may move it freely
+     * during the Action phase, so a constraint nobody is held to was ceremony.
+     * What Credits are on a Facility is the decision that survives.
      */
     public function updateSecurity(
         Game $game,
         Facility $facility,
-        UpdateSecurityDirectionRequest $request,
+        UpdateSecurityBudgetRequest $request,
     ): RedirectResponse {
         abort_if($facility->game_id !== $game->id, 404);
 
@@ -239,7 +242,7 @@ class FacilityController extends Controller
 
         if ($turn === null) {
             throw ValidationException::withMessages([
-                'security_directed' => 'The game has not started, so there is no turn to direct Security in.',
+                'security_budget' => 'The game has not started, so there is no turn to fund.',
             ]);
         }
 
@@ -258,10 +261,6 @@ class FacilityController extends Controller
             ])->save();
         }
 
-        if ($request->has('security_directed')) {
-            $this->defence->directSecurity($facility, $request->boolean('security_directed'), $turn);
-        }
-
-        return back()->with('status', 'Security orders updated for '.$facility->name.'.');
+        return back()->with('status', 'Security budget updated for '.$facility->name.'.');
     }
 }

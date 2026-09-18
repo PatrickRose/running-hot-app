@@ -604,14 +604,14 @@ class ProtectionCardBlueprint
                 challenge: 'Hack (3)',
                 consequence: '2 wound, 1 tag',
             ),
+            // ANT's own cards carry no Charge, which is where they differ from
+            // the cards the other four Corporations hold. See the note above.
             self::card(
                 code: 'PS015',
                 name: 'Öryggissveit',
                 kind: ProtectionKind::Physical,
                 challenge: 'Brute (2)',
                 consequence: '1 alert, 1 wound',
-                chargeCost: 1,
-                chargeConsequence: '2 alert, 1 wound',
             ),
             self::card(
                 code: 'PS016',
@@ -635,8 +635,6 @@ class ProtectionCardBlueprint
                 kind: ProtectionKind::Cyber,
                 challenge: 'Hack (3)',
                 consequence: '2 wounds',
-                chargeCost: 1,
-                chargeConsequence: '2 wounds, end the run',
             ),
             self::card(
                 code: 'PS019',

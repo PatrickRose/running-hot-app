@@ -30,6 +30,8 @@ use App\Http\Controllers\FacilityDefenceController;
 use App\Http\Controllers\ResearchBoardController;
 use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
+use App\Http\Controllers\RunBoardController;
+use App\Http\Controllers\RunController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -49,6 +51,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Security arranging their own Facilities. Guarded by the FacilityPolicy
     // rather than by a role middleware, because the question is not "is this a
     // Security player" but "is this Facility theirs".
+    // The Credits a Facility is defended with (3.3.5). Security's own decision,
+    // so Security's own route - Control keeps its panel.
+    Route::post('facilities/{facility}/budget', [FacilityDefenceController::class, 'budget'])
+        ->name('facilities.budget');
+
     Route::post('facilities/{facility}/cards', [FacilityDefenceController::class, 'install'])
         ->name('facilities.cards.install');
     Route::post('facilities/{facility}/cards/order', [FacilityDefenceController::class, 'reorder'])
@@ -80,6 +87,47 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('research.deck.store');
     Route::post('research/points', [ResearchTreeController::class, 'transferPoints'])
         ->name('research.points.transfer');
+    // Runs (rulebook 3.4). One page for both sides of the Facility game,
+    // because plenty of people are on both at once - and what each of them may
+    // see is the RunPresenter's answer, since a run keeps two secrets: which
+    // Facility a group named, and how deep the stack is.
+    Route::get('runs', RunBoardController::class)->name('runs');
+
+    // Putting in for one. Guarded by the RunPolicy rather than a role
+    // middleware: the question is whether this player holds a character who
+    // could go on a run, which a Freelancer does as much as a Runner.
+    Route::post('runs', [RunController::class, 'store'])->name('runs.store');
+
+    // The queue at a Facility, which is Control's to settle (3.4.1) - a group
+    // that could order it could put itself first.
+    Route::post('facilities/{facility}/runs/order', [RunController::class, 'order'])
+        ->name('runs.order');
+
+    // One route per act of the loop, each authorised as its own thing: the
+    // Leader rolls and moves the group on, any Runner may walk away, and
+    // Security works the cards. Control reaches all of them through the same
+    // routes, because a run must not stall on somebody being at their laptop.
+    Route::post('runs/{run}/begin', [RunController::class, 'begin'])->name('runs.begin');
+    Route::post('runs/{run}/activate', [RunController::class, 'activate'])->name('runs.activate');
+    Route::post('runs/{run}/boost', [RunController::class, 'boost'])->name('runs.boost');
+    Route::post('runs/{run}/charge', [RunController::class, 'charge'])->name('runs.charge');
+    Route::post('runs/{run}/defend', [RunController::class, 'defend'])->name('runs.defend');
+    Route::post('runs/{run}/challenge', [RunController::class, 'challenge'])->name('runs.challenge');
+    Route::post('runs/{run}/consequences/mark', [RunController::class, 'markConsequence'])
+        ->name('runs.consequences.mark');
+    Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
+        ->name('runs.consequences.store');
+    Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
+    Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
+
+    // What the Runners take out of a Facility they got into (3.4.3). One route
+    // for all four kinds of access, because it is one act with one choice.
+    Route::post('runs/{run}/accesses', [RunController::class, 'access'])->name('runs.accesses.store');
+
+    // What to do with the card an access turned up. Its own route because the
+    // rulebook makes it its own step: the card is revealed and then decided on.
+    Route::post('runs/{run}/accesses/{access}', [RunController::class, 'resolveAccess'])
+        ->name('runs.accesses.resolve');
 
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,

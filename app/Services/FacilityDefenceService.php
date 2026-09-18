@@ -298,33 +298,6 @@ class FacilityDefenceService
     }
 
     /**
-     * Place (or lift) Security's meeple at a Facility for this turn
-     * (rulebook 3.3.5).
-     *
-     * One meeple, so directing at a Facility lifts it from wherever it was.
-     */
-    public function directSecurity(Facility $facility, bool $directed, Turn $turn): FacilityTurnState
-    {
-        return DB::transaction(function () use ($facility, $directed, $turn): FacilityTurnState {
-            if ($directed) {
-                $siblings = Facility::query()
-                    ->where('corporation_id', $facility->corporation_id)
-                    ->pluck('id');
-
-                FacilityTurnState::query()
-                    ->where('turn_id', $turn->id)
-                    ->whereIn('facility_id', $siblings)
-                    ->update(['security_directed' => false]);
-            }
-
-            $state = $facility->stateForTurn($turn);
-            $state->forceFill(['security_directed' => $directed])->save();
-
-            return $state;
-        });
-    }
-
-    /**
      * Set the budget placed on a Facility for this turn (rulebook 3.3.5).
      *
      * The budget is escrowed: raising it moves Credits out of the Corporation

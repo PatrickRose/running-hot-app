@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Security arranging their own Corporation's defences (rulebook 3.3.4).
@@ -50,6 +51,54 @@ class FacilityDefenceController extends Controller
             '%s installed at the outermost %s slot of %s.',
             $cardType->name,
             $cardType->kind->label(),
+            $facility->name,
+        ));
+    }
+
+    /**
+     * Put Credits on a Facility for this turn (rulebook 3.3.5).
+     *
+     * The budget is the half of 3.3.5 that survives: Directing Security is no
+     * longer modelled, because a Security player may move it freely during the
+     * Action phase and a constraint nobody is held to is ceremony. What Credits
+     * are on a Facility still decides what Security can switch on, Boost and
+     * Charge, so it is a real decision and it is Security's.
+     *
+     * Escrowed the moment it is placed, because that is what putting Credits on
+     * the Facility does at the table and it stops the same Credits being
+     * promised to two Facilities. Whatever is unspent comes back when the
+     * Action phase ends, which TurnEngine already does.
+     *
+     * The Security player's name goes in the ledger against it rather than
+     * Control's, which is the whole reason this route exists.
+     */
+    public function budget(Facility $facility, Request $request): RedirectResponse
+    {
+        Gate::authorize('defend', $facility);
+
+        $validated = $request->validate([
+            'security_budget' => ['required', 'integer', 'min:0', 'max:9999'],
+        ]);
+
+        $turn = $facility->game->currentTurn();
+
+        if ($turn === null) {
+            throw ValidationException::withMessages([
+                'security_budget' => 'The game has not started.',
+            ]);
+        }
+
+        $state = $this->defence->setSecurityBudget(
+            $facility,
+            (int) $validated['security_budget'],
+            $turn,
+            $request->user(),
+        );
+
+        return back()->with('status', sprintf(
+            '%d Credit%s on %s for this turn.',
+            $state->security_budget,
+            $state->security_budget === 1 ? '' : 's',
             $facility->name,
         ));
     }

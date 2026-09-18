@@ -254,6 +254,12 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Finding a faction's logo from its name | `App\Support\LogoImage` |
 | A faction's logo and colour in one payload | `App\Support\FactionBadge`, `resources/js/components/faction-badge.tsx` |
 | What each icon in the game's font means | `App\Support\IconFont` |
+| The Run loop, and every consequence of it | `App\Services\RunEngine` |
+| What each side of a run may see | `App\Support\RunPresenter` |
+| Who may do what on a run | `App\Policies\RunPolicy` |
+| The run screen players work from | `App\Http\Controllers\RunController`, `resources/js/pages/runs.tsx` |
+| Run arithmetic: ordering, alerts, strength, dice | `App\Support\Runs\*` |
+| What a successful run takes out of a Facility | `App\Enums\RunAccessKind`, `TechnologyAccessAction`, `App\Support\Runs\AccessCheck` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
 | The Council's agenda, voting and attendance | `App\Services\CouncilService` |
 | A Council seat that is not a Corporation | `characters.council_votes`, `App\Models\Character::sitsOnCouncil()` |
@@ -273,6 +279,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | The `#facility-list` embed, and posting it | `App\Support\Discord\FacilityListEmbed`, `App\Actions\PublishFacilityList` |
 | Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
 | A Facility's own channels | `App\Actions\ProvisionFacilityChannels`, `App\Jobs\SyncFacilityChannels` |
+| Letting the Runners into the Facility they are hitting | `App\Actions\GrantRunChannelAccess`, `App\Jobs\SyncRunChannelAccess` |
 | Handing a player their Discord roles | `App\Actions\SyncDiscordRolesForUser` |
 | Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
 | Inertia payload shaping | `App\Support\GamePresenter` |
@@ -290,6 +297,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 - **Freshly created models may not have every column hydrated.** Cast defensively when reading a boolean straight after `create()`.
 - **`->with('status', ...)` only arrives because `HandleInertiaRequests` shares it.** Ninety-odd controllers end a redirect that way and none of it reached the browser until it was: the message was written, flashed, and thrown away one redirect later, so an install, a reorder and a played equation all happened in silence. It is shared under `flash` rather than as a bare `status` because the auth pages take a `status` prop of their own and draw it in a panel, and `use-flash-toast` reads it off the *visit* rather than out of a render — two identical messages in a row are normal, and a toast keyed on a changed value would show the second one nothing. It has to be an `Inertia::always()` prop, and that is not tidiness: a partial reload does not carry an ordinary shared prop, so the client keeps the one it already had, and a listener firing on every successful visit then re-announced the same message on every five-second poll for as long as the page stayed open. Resolved on every response, it is null again the moment the flash has been read.
 - **A refusal has to be drawn somewhere.** A page posting with `router.post` gets no `errors` of its own the way an Inertia `<Form>` does, so it has to read them off `usePage()`. The research table is the one that had to learn this: `App\Support\Equation` reports every refusal against `equation`, nothing rendered that key, and an equation the rules would not take looked exactly like a dead button.
+- **...and on the run screen it has to be drawn *per panel*.** Same bug one layer along, and it made every refusal on a run silent: an unaffordable Boost, a Charge out of step, a top-up the Corporation could not cover. A page-level `errors` is no good there because several runs are on screen at once and all of them report against the same handful of keys, so one group's refusal would appear under every panel. `useRunAction()` in `run-panel.tsx` is the answer the research table's `ScoreForm` already uses — each desk posts through it and keeps its own message. Two things swallowed a refusal on the way to being found: an `<input type="number" max={...}>` on the top-up, whose browser-side constraint blocked the submit outright so no post was ever made, and `requirePurse` pinning an `s` on the end of "Credit of budget".
+- **`Collection::sortBy()` given an array reads closures as *comparators*, not key extractors.** So `sortBy([fn ($x) => $x->a, fn ($x) => $x->b])` calls each closure with two items, ignores the second, and sorts by nothing — silently. It cost an hour of a run meeting its cyber stack before its physical one. Either sort by one closure returning an array, or write the ordering out; `RunEngine::encounterOrder` does the latter on purpose.
 
 ## Commands
 
@@ -334,7 +343,11 @@ Three independent mechanisms, and it is worth keeping them straight:
 
 **The bot holds the Control role, and takes it before making any channel.** Discord drops every permission in a channel its caller cannot view, and `@everyone` is the bot's only source of View Channel — so a category locked to one team locks the bot out of it too, and it then cannot create the channels that belong inside it. Every private channel in the blueprint already grants Control, so holding that role is all the access the bot needs. The role carries `permissions: 0` and only ever opens channels, so this grants the bot nothing at guild level. Do not reorder `giveBotTheControlRole` after `reconcileChannels`: provisioning dies on the first private category.
 
-**Every Facility gets a private text and voice channel**, which is where its Runs will happen. They sit in the Corporation's own category, beside the two channels its players talk in, so everything a Corporation owns is in one place. Locked to Control and the owning Corporation; the Runners attacking a Facility are added when a Run starts, because they choose their target in Secret (3.4.1) and access any earlier would leak who is hitting what.
+**Every Facility gets a private text and voice channel**, which is where its Runs will happen. They sit in the Corporation's own category, beside the two channels its players talk in, so everything a Corporation owns is in one place. Locked to Control and the owning Corporation; the Runners attacking a Facility are added when a Run starts, because they choose their target in Secret (3.4.1) and access any earlier would leak who is hitting what. `App\Actions\GrantRunChannelAccess` is that half, through `App\Jobs\SyncRunChannelAccess`.
+
+**A Runner's key to a Facility is a per-member overwrite, not a role.** It is something that happens to those four people for the next ten minutes rather than a standing fact about the guild, and a "currently running" role would have to be created, granted, revoked and cleaned up after a crash. They may read, write, connect and speak, because a Run is a conversation under time pressure and the voice channel is the point of having one. A Runner who walks away at the Breather keeps their access until the run ends: they already know the target, so nothing leaks, and the rulebook is neutral about leaving. A character nobody has claimed simply has no snowflake to grant anything to, which is normal.
+
+**Which is why a reconcile now carries member overwrites through.** `ProvisionDiscordGuild` re-sends every channel's whole permission table on every run, and the blueprint knows nothing about the Runners currently inside a Facility — so re-sending only the roles would lock a group out halfway down a stack. That is a reset rather than a reconcile, and `ChannelPayload::for()` takes a `$keep` list for exactly it.
 
 **A missing pair is visible and fixable.** Because the job is fail-soft, a Discord outage during a requisition leaves a Facility with no channels and nothing retrying, so the Control panel badges each Facility with whether its channels are on record and offers to build just that pair. A full provision run recovers them too — they are in the blueprint — but at the cost of re-PATCHing every channel and role in the guild, which is a heavy hammer for one missing channel mid-game.
 
@@ -611,7 +624,11 @@ defend is looking at the Facility board.
 
 **Dragging is `@dnd-kit`, and that is a deliberate dependency.** The game is played live and people are on phones: native HTML5 drag never fires on touch, and has no keyboard path at all. dnd-kit covers pointer, touch and keyboard, and `FacilityDefenceBoard` gives it its own announcements because the default ones talk about sortable positions when the same gesture here installs, arranges or removes depending on where the card lands. Every installed card also carries a plain Remove button: the hand can be scrolled off screen, and "drag it somewhere else to delete it" is a poor way to ask for the one gesture that costs Credits.
 
-**Directing Security is not secret.** The rulebook has Security committing simultaneously with Runners choosing targets, but that has since changed: Security decides what to protect after the attacks land, so there is deliberately no commit-then-reveal machinery here.
+**Directing Security is not modelled at all, and that is a design decision rather than an omission.** The rulebook (3.3.5) has a Security player place a meeple at one Facility during Setup and makes that the price of Boosting a card, paying a Charge and choosing to leave one switched off. It was built that way and then taken out: a Security player may move where they are directing freely during the Action phase, so the meeple constrained nobody, and the only thing it reliably did was stop somebody Boosting until a second person had ticked a box for them. The `security_directed` column, its service method, Control's toggle and `SecurityDirectionTest` all went with it — a flag nothing reads is worse than no flag, because it looks mechanical on the panel and does nothing.
+
+**The budget is the half that survives, and it is Security's own.** What Credits are on a Facility decides what Security can switch on, Boost and Charge, so it is the decision that was always doing the work. It is placed at `/facilities` by the Security player through `FacilityDefenceController::budget`, not only by Control: escrowed the moment it lands, movable through the Action phase because Security reacts after the attacks do, and refused only where it would drop below what has already been spent. The ledger carries the Security player's name rather than Control's, which is the whole reason the route exists. The run screen posts to that same route to top a budget up mid-run, which is the only way the Corporation's own Credits reach a Run at all.
+
+Anything still printed on a card that mentions directing security — the Internet link technology, the Boost and Charge glossary entries — is left exactly as printed. Those are the game's own words for Control to read, not code.
 
 **A new game opens with Facilities already standing.** `CreateDefaultFacilities` runs after `CreateDefaultRoster`, because Facilities belong to Corporations, and both are governed by the same "start empty" choice on the create form. It writes a starting position rather than a change, so the Facilities are built free and the basic cards installed free — nothing goes through `TrackerService`, because there is no before state. Re-running is a no-op: a second Armoury would silently widen every stack in the game.
 
@@ -619,13 +636,329 @@ defend is looking at the Facility board.
 
 **Starting Facilities are per Corporation and the differences are mechanical**, not decorative. They live beside each Corporation in `config/running_hot.php`, from the briefing documents: DTC's second Security Facility widens every one of its stacks, Gordon's three Corporate Facilities make it the only Corporation storing six technologies per Facility, and Genetic Equity's three Research Facilities are its whole strategy. A Corporation the config says nothing about opens with none rather than a guessed set.
 
+## Runs
+
+The Runners' primary conflict (rulebook 3.4), and the loop the rest of the
+Facility game exists to feed. Four steps — **Activate → Challenge → Consequence
+→ Breather** — repeated until the stacks run out or the Runners back out.
+`App\Services\RunEngine` owns all of it; each of its public methods is one *act*,
+and who may perform which act is a policy question that lives elsewhere.
+
+**Failing a challenge does not stop the Runners.** This is the reading that
+shapes everything else, and it surprises everyone: 3.4.2 sends the Runners to
+the Breather "unless a Protection Card has an 'End the Run' consequence", so
+losing a check costs you the consequence and you *still get past the card*. A
+Facility is attrition, not a wall. Which is why Retry is one of the worst things
+a card can do to you — the same card again, with more Alerts standing — and why
+Alerts matter so much, since they make everything still ahead of you harder.
+
+**Two counts of cards passed, and they are not the same question.** The strength
+bonus is "for each 2 **Active** Protection Cards already passed"; the
+consolation payment of 3.4.4 is for "each 3 Protection Cards you managed to get
+past". A card Security could not afford to switch on is one the Runners walked
+straight past: it counts towards what they got through and makes nothing that
+follows it harder. `runs.cards_passed` and `runs.active_cards_passed` therefore
+both exist, and they only ever differ when Security ran out of budget.
+
+**The cursor is derived, never stored.** Which card, which pass, which step all
+come off the append-only event log — a pass ends when the Runners move on from a
+card or consume a Retry, so counting `card_passed` and `retried` events counts
+the passes that have finished. Same instinct as the Council reading the Chair's
+choice off the cards rather than a flag: a cursor kept beside the log is a second
+source of truth that can disagree with the thing players are shown.
+
+**Every roll is server-side and kept, with its faces.** A browser that rolls its
+own dice is a browser that can decide it won. `App\Services\Dice` is injected so
+tests can say what the dice did, and `tests/Support/FakeDice.php` throws when it
+runs dry rather than falling back to random — a test that quietly started rolling
+real dice would fail intermittently for a reason nobody would look for. A roll
+that decides a *choice* rather than a check (which Runner inherits the Run
+Leader's job) goes in the event payload instead of `run_dice_rolls`, because that
+table's threshold and successes would be meaningless for it. And a single
+remaining candidate is not rolled for at all: a one-sided die is not a die.
+
+**Security pays from two purses, and which one matters.**
+`App\Support\Runs\SecurityPayment` is the split, named by the player rather
+than applied in an order the engine picked:
+- **Alerts** are a pool for one run and then gone, so there is no ledger to
+  write and nothing outside the run can see them. Spending them is free in
+  Credits and costs the Runners nothing — but it lowers the Alerts *standing*,
+  which makes every card they have left easier. That trade is the decision
+  Security is there to make, which is why the screen makes it a slider.
+- **Budget** Credits were already taken off the Corporation when the budget was
+  placed (`FacilityDefenceService::setSecurityBudget`), so spending only records
+  how much of that escrow has gone — the apparent exception to "never write a
+  tracker directly" is not one.
+
+**There is deliberately no third purse.** A payment reaching past the budget
+into the Corporation's own Credits was built and taken out, for the reason
+Directing Security was: it put the same Credits in two places at once, spent on
+this card and still promised to whatever else the Facility was funded for. A
+Facility is defended out of what has been put on it, so company money reaches a
+run by *raising the budget* — one button on the run screen, posting to the
+budget route the Facility board already has, which escrows the Credits in the
+open and writes the ledger row there. Do not give `SecurityPayment` a third
+field back.
+
+Naming no purse at all means the budget, so any caller that never cared about
+the split behaves as it did before there was one. A split that does not add up
+to the cost is refused rather than topped up from somewhere, and a purse asked
+for more than it holds is refused naming which one came up short.
+
+**A slider belongs to a cost, not to the desk.** One shared slider had to say
+how many Alerts to spend before knowing what on, so it ran to the Alerts in hand
+and read as a setting rather than a decision. Each payable act draws its own
+instead — Activate, Boost and Charge — running from 0 to *that* cost and saying
+underneath what each purse is covering, because "1 required" is half of what the
+control is for. A Boost's slider re-reads itself as the count changes. Each
+reads down the column the way the act happens: what sets the cost, how it is
+being paid, then the button that commits it.
+
+Everything else — Wounds, Tags, the 3.4.4 payment — goes through
+`TrackerService` like anything else.
+
+**A Boost is bought during the Activate step and nowhere else.** 3.4.2 puts it
+there — it is the last line of that step, before the Challenge heading — and the
+worked example says so outright: "During the Activate step, Ryan uses a 'Boost'
+card." It is also the only reading that means anything, because Security names
+the printed strength and rolls the defence at the Challenge, so a Boost bought
+after that could not reach the roll it was meant to win. `boost()` checks the
+step and the screen draws the control only there.
+
+**A Charge is paid at the Consequence step and nowhere else.** It buys an
+*extra* consequence on top of one the Runners are already taking, so there is
+nothing to add it to until they have lost the roll — 3.4.2 introduces it after
+"if they do not, then the Runner(s) take the consequence", and the glossary
+makes it "if the runner(s) fail to break a Protection Card with a Charge
+effect". The Consequence step *is* that condition and nothing else, because
+`stepFor()` only reaches it when a challenge has happened and `runners_won` was
+false, so `charge()` checks the step and the screen draws the control only
+there. It used to sit beside Boost from the moment a card came on, which offered
+Security a purchase that could not mean anything yet.
+
+**Alerts do two jobs, and that is the decision Security is there to make.** They
+are temporary Credits *and* a point of strength on every card the Runners have
+left, so spending them buys something now and makes the rest of the Facility
+easier. Which means the strength curve reads the Alerts *standing*, not the
+Alerts generated.
+
+**The Consequence step is a handshake, and the two halves are different
+jobs.** Security marks what the card does and the Run Leader takes it. That is
+3.4.2's own division: the consequence comes off the card, which Security is
+holding and has certainly read, and the one thing the rulebook gives the Leader
+is that "the consequence must be taken by a single player, decided by the Run
+Leader". The Leader used to type the card's numbers in themselves, which asked
+the side that cannot see the card to read it out.
+
+So there is a **slip**, `App\Support\Runs\ConsequenceSlip`, derived off the
+pass's own events rather than stored — same reason the cursor is, and it matters
+more here because both sides read it at once. Marking an empty slip is a real
+answer — "the card does nothing" — so `consequenceIsMarked()` reads the event
+rather than the slip, and nothing can be taken before Security has written
+something down.
+
+**One act, both halves.** `markConsequence()` takes what the card prints *and*
+what Security is paying Alerts to add, because it is one decision made once:
+read the card, decide whether to make it worse, hand the lot to the Leader.
+Buying each Alert effect as its own request meant committing to it before seeing
+what the finished consequence looked like, and handed the Leader a slip that grew
+under them. One transaction, so Alerts Security cannot afford take the mark down
+with them rather than leaving the card marked and the extras missing.
+
+The two halves still behave differently, because they are not the same kind of
+thing. Marking **replaces** what the card does, for the reason handing cards to
+the Chair sets the Council's hand: a count typed wrong is corrected by marking
+the right one. Alerts are **spent**, so what they bought is added to the pile and
+survives every later mark — they are gone, and no amount of re-reading the card
+brings them back.
+
+**An Alert-bought consequence lands on the slip rather than happening on its
+own.** "Security players may also use any alerts to trigger one of the other
+effects as well" reads as one more thing on the pile the Runners are about to
+take, so the Leader still names who takes it and still answers for an End the
+Run bought that way. It used to apply immediately, which took the choice off the
+Leader and moved the cursor to the Breather underneath them.
+
+**The rest of the group reads the slip too.** A Runner who is not the Leader is
+as likely as anybody to be the one taking two Wounds, and used to be told only
+"Watching" while that was decided. At the table the card is face up and they can
+read it, so `Watching` in `run-panel.tsx` draws what Security marked and who is
+deciding. Read-only: the Leader decides.
+
+**An End the Run is a question, not a consequence, so it is answered last.**
+Everything else on the slip lands first — the Runners take what the card does to
+them either way — and then the run either stops or does not.
+`applyMarkedConsequence()` is the one act that does all of it, so a card
+printing "1 tag, End the run" can no longer pay half of itself.
+
+**Ignoring one is priced on the count, not as a flag.** "For each
+'End the Run' that you have ignored (including this one), you take 1 Wound, 1
+Tag and 1 Alert" — so the first costs 1 of each and the second 2 of each, and it
+converts into a Retry. The screen says that number before the button is pressed,
+quoted by the server as `ignore_cost`. There is deliberately no separate
+`ignore-end` route any more: it was a second way to reach `ignoreEndTheRun()`
+that skipped Security's marking entirely.
+
+**Where the rulebook says "may", nothing moves.** Walking away at the Breather
+"may have an effect on your gang's Notoriety", so no Notoriety moves and the
+event says it is Control's call. Being incapacitated hands your permanent
+Equipment to the Security player, and since who owns which Equipment card is not
+modelled, the event says that too rather than the application guessing.
+
+**Ordering is a starting position, not the last word.** The seven tiebreakers of
+3.4.1 are run once and the deciding rule is written down, because the seventh is
+a d8 and the order cannot be recomputed afterwards. Groups may cede their place
+or be "otherwise monetarily convinced" and footnote 10 sends anything unusual to
+Control, so `order_index` stays editable.
+
+**Players drive it and Control steps in, on the same routes.** `RunPolicy` is
+the whole boundary: `lead` for the Run Leader (roll, decide who takes a
+consequence, move the group on), `act` for any Runner still in (walking away is
+each Runner's own decision, not the Leader's), `defend` for the Corporation's
+own Security seat, and `submit` for anybody holding a Runner *or Freelancer* —
+3.4 hands the Facility game to a side rather than to one role. `order` is the
+one ability no player has, because a group that could order the queue could put
+itself at the front of it. `before()` gives Control every one of them, so a run
+never stalls on somebody being away from their laptop.
+
+**A run keeps two secrets, and `RunPresenter` is where they are kept.** Same
+shape of problem as `CouncilPresenter`, and the same answer: the two sides get
+views built separately rather than one payload with things taken out of it.
+- **The stack depth is Secret** (footnote 11), so `cards_remaining` is null for
+  the Runners. They find out by running out, which is what makes the Breather a
+  real decision — leaving costs you what you have already paid for, and you
+  cannot know whether you were one card from the end.
+- **A card is face down until it is Active.** Security reads their own stack
+  (3.4.2 keeps it Secret from everyone else, not from them) and so sees the card
+  they are deciding whether to pay for; the Runners get the kind and nothing
+  else until it is flipped. A card Security leaves off is one they get past
+  without ever learning the name of — which the *log* has to respect too, so
+  those lines read as the card being left off without naming it.
+- **Security cannot see a run that has not gone in yet**, because budgets are
+  set in Secret at the same moment targets are chosen (3.3.5, 3.4.1).
+
+**The challenge form asks for the skill and the printed strength.** It does not
+parse them, for the reason there is no parsed strength column: `Brute/Hack (2)`
+is the Runners' choice and `Hack (4+N) - where N is the number of cards
+underneath this` is not knowable from a column. The sentence is shown beside the
+form and the table converts it, which is what it does with the card in hand
+anyway.
+
+### Getting inside (3.4.3)
+
+**Every Runner who walked in gets one access, and spends their own.** The
+rulebook has the Run Leader choosing the cards; this application gives the
+choice to each Runner, which is what makes a group of four worth more than a
+group of one. `RunPolicy::act` is the boundary and the controller adds the
+second half of it: `act` only asks whether you are on the run, and every Runner
+on it passes that, so without a check against the character named a Runner could
+spend a gangmate's access out from under them. Control spends anybody's, through
+`before()` — Control is not in the way of an access, only available for the one
+that needs them.
+
+**Spending is the whole of what you get.** A failed copy or a steal that missed
+still costs the access: 3.4.3 puts the card back on the list and says "you may
+attempt to access it again", which only means anything if the first attempt was
+spent. Equipment may buy a Runner more accesses (footnote 13) and nobody's
+Equipment is modelled, so that arrives with the Equipment holdings.
+
+**The Credits card is read off the building, not set anywhere.** Two printed
+sums added together: the Protection Cards *installed* in the Facility — not
+activated, because a card Security could not afford to switch on is still a card
+in the building — and the technologies stored there, counted "including the
+Credits card". The first is a printed list with steps of 1, 2, 2, 3, 3 and then
++3 a card past ten, so it is written out; the second is the triangular numbers.
+`App\Support\Runs\RunRewards` holds both. There is one Credits card and one
+Facility effect in a building, so the second Runner to reach for either finds it
+gone — `RunAccessKind::onlyOncePerRun()` is where that lives.
+
+**An unseen card is drawn; a card that has been face up is chosen.** At the
+table the draw is a person holding cards face down and fanning them out, so the
+blind half is the same thing without somebody to hold them — and a Facility down
+to its last unseen card hands it over rather than rolling a one-sided die. But
+the secrecy has nothing left to protect once a card has been turned over, and
+3.4.3 says outright that making two copies means accessing the card twice. So a
+Runner may go back for anything this run has already revealed, by name.
+
+That is the line the payload draws: `known_technologies` names the revealed
+cards, `technologies_left` counts everything still in the racks, and the unseen
+ones are only ever the difference between the two. Naming an unseen card is
+refused — that is the choice the draw exists to take away, and it is what stops
+a Runner shopping the Facility without spending anything on finding out what is
+in it. When the blind draw runs out the refusal says to name one rather than
+claiming the racks are empty, because they are not.
+
+**Having been at a card does not take it out of the racks**, and getting this
+wrong is easy — it was wrong here first. 3.4.3 says so twice: a failed check
+"goes back to the list of cards you may access", and after a copy "no matter the
+outcome, the card is returned to the list", because copying it twice is how you
+make two copies. So the draw excludes nothing on the strength of the access log.
+What takes a technology out of the draw is it *leaving the building*, which
+`storedTechnologies()` already reads off the holding's own status — stolen, or
+destroyed outright. The one exception is a card that is face up and still being
+decided about: it is in somebody's hands, so a second Runner cannot draw it out
+from under them, and it goes back in the moment it is resolved.
+
+**Drawing it and deciding on it are two acts, and the order is the point.**
+`accessTechnology()` turns a card over and stops; `resolveAccess()` is Copy,
+Steal, Destroy — or nothing. Choosing before the draw would be picking how to
+open a safe before knowing what is in it, and it is not what 3.4.3 describes:
+the card is revealed and *then* the choice is made. Two routes for the same
+reason, and the log reads as two lines.
+
+**"Leave it" is a real answer rather than a way out.** The access is spent on
+the draw, not on the decision, so a Runner who does not fancy their dice against
+this particular card has still bought something: they know what the Facility is
+holding. `run_accesses.outcome` records `left` for it, which is why the column is
+null only while a card is face up and waiting.
+
+**The three things you can do to a card share a shape and nothing else.** All
+roll the group's *combined* Brawn and Hack — both, added, which is the whole
+difference from a Protection Card — and all read their successes off a printed
+band with no opposing roll and no consequence for failing.
+`App\Support\Runs\AccessCheck` owns the bands. A copy leaves the card where it
+is and produces a discount for whoever buys the copy, so nothing is written on
+the holding: what the Runner carries out becomes somebody's
+`technology_holdings` row when they sell it, which is the same conversation
+3.2.5 already has. A theft takes the card at 8 successes — flat for every
+technology, because the card sheet has copy and destroy strengths and no Steal
+column at all. A destroy only removes the technology at the last of its four
+bands; everything below leaves traces the Corporation can research again at a
+discount the rulebook never prints, so the band is recorded and the percentage
+is Control's.
+
+**Destroyed and Stolen are different losses and are kept apart.** A destroyed
+technology leaves traces; a stolen one is intact in somebody else's hands.
+Neither row is deleted, and neither occupies the Facility's storage any more.
+
+**What a Facility's own effect *does* is still words — but the players read
+them.** Spying on a rival's stack, a blackmail file, a stock certificate: all
+conversations, so taking the effect records that it was taken and the
+conversation happens. The text itself is on the run screen, on its own line
+above the buttons rather than in the small print, because it is one of the four
+things an access can be spent on and choosing between them means being able to
+read it.
+
+**A plot access asks for no reason.** A Runner tells Control what they are
+chasing in the channel they are already standing in, and a text box that has to
+be filled in before the button works is a worse version of a conversation. The
+`notes` column stays for Control's own use.
+
+That and the Facility effect are the two places Control is still wanted, and
+only to hand over what the Runner has already won.
+
+The Runners are also let into their target Facility's Discord channels for the
+length of the run, which is the Discord half above.
+
 ## The card lists
 
 Three card families, all real data from the game's own card sheet, all seeded per game and all editable by Control. They live in `App\Support` beside the Facility type sheet rather than in `config/running_hot.php`, because three hundred cards do not read comfortably in a config file: `ProtectionCardBlueprint` (83), `EquipmentCardBlueprint` (74) and `TechnologyBlueprint` (144). `Game::booted` seeds all three when a game is created — none of them depends on the roster, so they arrive before it does.
 
 **The code printed on a card is what identifies it, not its title.** Doppleganger is two cards, `PX011` in the physical stack and `PX012` in the cyber one, so `protection_card_types` is unique on `(game_id, code)` and titles may repeat. The one-copy-per-Facility rule of 3.3.4 keys on the card type rather than the title, so a Facility can hold both Dopplegangers and still only one of each.
 
-**ANT's five cards are distinct cards, not its own names for the other five.** Öryggissveit, Takkaborðið, Öryggisluggari, Vélfærafræði sporðdreka and Engill (`PS015`–`PS020`) are ANT's own, and the four other Corporations hold Security team, Keypad, Security shutter, Roboscorpion and Angel instead. Everyone holds Orc. Their printed stats are identical pair for pair, which is exactly why it is worth writing down: they are still separate rows, and merging them would be wrong.
+**ANT's five cards are distinct cards, not its own names for the other five.** Öryggissveit, Takkaborðið, Öryggisluggari, Vélfærafræði sporðdreka and Engill (`PS015`–`PS020`) are ANT's own, and the four other Corporations hold Security team, Keypad, Security shutter, Roboscorpion and Angel instead. Everyone holds Orc.
+
+**They are *not* identical pair for pair, and believing they were put a rule in the game that is not on the card.** The Challenges and Consequences do match, so the blueprint was filled in from the counterparts — and that handed Öryggissveit and Vélfærafræði sporðdreka a Charge neither printed card carries, which let ANT's Security buy an extra consequence nobody else at the table could see on the card. The committed artwork is the check: `PS003` prints a CHARGE panel under its two columns and `PS015` prints only the two. `CardCatalogueTest::test_ants_own_cards_carry_no_charge` pins the correction. Read the card before copying a row from the one beside it.
 
 **A challenge is the sentence the card prints, not a skill and a number.** Most cards are a plain `Brute (6)`, but `Brute/Hack (2)` lets the Runners choose, `Hack (4+N) - where N is the number of cards underneath this` is not known until the card is met, and `Hack (4), followed by Brute (4)` is two challenges on one card. There is no parsed skill or strength column: the words are stored and shown, and the table converts them, which is what it does with the card in hand anyway. Runs will need to read the text.
 
@@ -1115,6 +1448,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and Directing Security — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — and the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and the security budget — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the accesses a successful one buys, the screen players work it from, and the Runners being let into the Facility's own Discord channels for the length of it.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece and the last of the sub-games, and everything a Run operates on is now built: the Facilities, their Protection Card stacks, and the technologies stored in them. `#facility-list` now carries the Facility list once Control publishes it.

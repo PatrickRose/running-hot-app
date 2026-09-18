@@ -14,7 +14,6 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $turn_id
  * @property int $facility_id
- * @property bool $security_directed
  * @property int $security_budget
  * @property int $security_budget_spent
  * @property Carbon|null $budget_returned_at
@@ -25,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property-read Turn $turn
  */
 #[Fillable([
-    'turn_id', 'facility_id', 'security_directed',
+    'turn_id', 'facility_id',
     'security_budget', 'security_budget_spent', 'budget_returned_at', 'cards_removed',
 ])]
 class FacilityTurnState extends Model
@@ -36,7 +35,6 @@ class FacilityTurnState extends Model
     protected function casts(): array
     {
         return [
-            'security_directed' => 'boolean',
             'budget_returned_at' => 'datetime',
         ];
     }

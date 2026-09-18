@@ -1,0 +1,818 @@
+<?php
+
+namespace App\Support;
+
+use App\Enums\CharacterRole;
+use App\Enums\GameStatus;
+use App\Enums\PhaseType;
+use App\Enums\RunAccessKind;
+use App\Enums\RunnerSkill;
+use App\Enums\RunStatus;
+use App\Models\Character;
+use App\Models\Corporation;
+use App\Models\Facility;
+use App\Models\FacilityProtectionCard;
+use App\Models\Game;
+use App\Models\Run;
+use App\Models\RunAccess;
+use App\Models\RunDiceRoll;
+use App\Models\RunEvent;
+use App\Models\RunParticipant;
+use App\Models\TechnologyHolding;
+use App\Models\Turn;
+use App\Models\User;
+use App\Services\RunEngine;
+use App\Support\Runs\AlertSchedule;
+use App\Support\Runs\ChallengeStrength;
+use App\Support\Runs\DicePool;
+use App\Support\Runs\RunCursor;
+use Illuminate\Support\Facades\Gate;
+
+/**
+ * A run as each side of it may see it (rulebook 3.4).
+ *
+ * Like the Council, almost all of this class is about who sees what - and a run
+ * keeps two secrets rather than one, which is why the two sides get views built
+ * separately instead of one payload with things taken out of it.
+ *
+ * **A Facility's stack depth is Secret** (3.4.1, footnote 11). So the Runners
+ * are never told how many cards are left. They find out by running out of
+ * cards, which is the whole tension of the Breather: leaving now costs you what
+ * you have already paid for, and you cannot know whether you were one card from
+ * the end.
+ *
+ * **A card is face down until it is Active.** Security is reading their own
+ * stack, which 3.4.2 keeps Secret from everyone else and not from them, so they
+ * see the card they are deciding whether to switch on. The Runners see it when
+ * it is flipped - and if Security leaves it off, they get past a card they
+ * never learn the name of.
+ *
+ * Control sees what Security sees, everywhere, because a ruling must not wait
+ * on somebody being at their laptop.
+ */
+class RunPresenter
+{
+    public function __construct(private readonly RunEngine $engine) {}
+
+    /**
+     * The Alerts a group raises on the way in, by size (rulebook 3.4.1).
+     *
+     * Every size a group could actually be in this game, so the form can say
+     * the number for whatever is ticked rather than keeping a table of its own.
+     *
+     * @return array<int, int>
+     */
+    private function groupAlerts(Game $game): array
+    {
+        $most = max(
+            AlertSchedule::PRINTED_UP_TO,
+            $game->characters()
+                ->whereIn('role', [CharacterRole::Runner, CharacterRole::Freelancer])
+                ->count(),
+        );
+
+        $alerts = [];
+
+        for ($size = 1; $size <= $most; $size++) {
+            $alerts[$size] = AlertSchedule::forGroupSize($size);
+        }
+
+        return $alerts;
+    }
+
+    /**
+     * Every access spent on this run, and who has one left.
+     *
+     * @return array<string, mixed>
+     */
+    private function accesses(Run $run): array
+    {
+        $spent = $run->accesses()->with('character', 'technologyHolding.technologyType')->get();
+
+        return [
+            'taken' => $spent
+                ->map(fn (RunAccess $access): array => [
+                    'id' => $access->id,
+                    'character_id' => $access->character_id,
+                    'character' => $access->character->name,
+                    'kind' => $access->kind->value,
+                    'kind_label' => $access->kind->label(),
+                    'action' => $access->action?->value,
+                    'action_label' => $access->action?->label(),
+                    'technology' => $access->technologyHolding?->technologyType->name,
+                    'successes' => $access->successes,
+                    'outcome' => $access->outcome,
+                    'discount_percent' => $access->discount_percent,
+                    'credits' => $access->credits,
+                ])
+                ->all(),
+
+            // Who still has one, so the page can offer it to them rather than
+            // offering it to everybody and refusing most of them.
+            'left' => $run->activeParticipants()
+                ->mapWithKeys(fn (RunParticipant $participant): array => [
+                    $participant->character_id => $this->engine->accessesLeft(
+                        $run,
+                        $participant->character,
+                    ),
+                ])
+                ->all(),
+
+            // The two a Facility only has one of.
+            'credits_taken' => $spent->contains('kind', RunAccessKind::Credits),
+            'facility_effect_taken' => $spent->contains('kind', RunAccessKind::FacilityEffect),
+
+            // Cards that have been turned over and not yet decided on. The
+            // choice between copying, stealing and destroying is made with the
+            // card face up (3.4.3), so this is what the screen needs to ask
+            // about - and it names the technology, because by now the Runner
+            // is holding it.
+            'undecided' => $spent
+                ->filter(fn (RunAccess $access): bool => $access->kind === RunAccessKind::Technology
+                    && $access->outcome === null)
+                ->map(fn (RunAccess $access): array => [
+                    'id' => $access->id,
+                    'character_id' => $access->character_id,
+                    'character' => $access->character->name,
+                    'technology' => $access->technologyHolding?->technologyType->name,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * Cards this run has turned face up and could be accessed again.
+     *
+     * A card is out of this list only for the reasons it is out of the draw:
+     * it left the building, or somebody is holding it face up and has not
+     * decided yet.
+     *
+     * @return array<int, array{id: int, name: string}>
+     */
+    private function knownTechnologies(Run $run): array
+    {
+        $seen = $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->pluck('technology_holding_id')
+            ->all();
+
+        $undecided = $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->whereNull('outcome')
+            ->pluck('technology_holding_id')
+            ->all();
+
+        return $run->facility->technologyHoldings()
+            ->with('technologyType')
+            ->get()
+            ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage()
+                && in_array($holding->id, $seen, true)
+                && ! in_array($holding->id, $undecided, true))
+            ->map(fn (TechnologyHolding $holding): array => [
+                'id' => $holding->id,
+                'name' => $holding->technologyType->name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * How many technologies are still there to be drawn from.
+     *
+     * A count and not a list, because the card a Runner gets is drawn rather
+     * than chosen - naming them would be handing over the choice the draw is
+     * there to take away, and it would tell the Runners what the Facility is
+     * holding without their having spent anything on finding out.
+     *
+     * A card somebody copied, failed to steal or left alone is still in here:
+     * it never left the building.
+     */
+    private function accessibleTechnologies(Run $run): int
+    {
+        // Only the cards that are face up and still being decided about are
+        // out of the draw. Having been at a card does not take it out of the
+        // racks - 3.4.3 returns it to the list whatever the outcome - so what
+        // is left is what the Facility is still holding, which the holding's
+        // own status says.
+        $undecided = $run->accesses()
+            ->whereNotNull('technology_holding_id')
+            ->whereNull('outcome')
+            ->pluck('technology_holding_id')
+            ->all();
+
+        return $run->facility->technologyHoldings()
+            ->get()
+            ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage()
+                && ! in_array($holding->id, $undecided, true))
+            ->count();
+    }
+
+    /**
+     * The pool the Runners have in hand, for each skill a card might ask for.
+     *
+     * Both skills rather than the one the card names, because plenty of cards
+     * offer the choice ("Brute/Hack (2)") and the Leader is picking between
+     * them - and because the card's own sentence is not parsed into a column,
+     * so the application does not know which one will be asked for until the
+     * Leader says.
+     *
+     * Empty when there is no Leader on the run: there is nothing to roll and
+     * handing back a pool of zero would read as a group with no dice rather
+     * than a group with no Leader.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function dicePool(Run $run): array
+    {
+        $runners = $run->activeParticipants();
+        $leader = $run->leader;
+
+        if ($leader === null || ! $runners->contains('character_id', $leader->id)) {
+            return [];
+        }
+
+        $others = $runners->reject(
+            fn (RunParticipant $participant): bool => $participant->character_id === $leader->id,
+        );
+
+        $pools = [];
+
+        foreach (RunnerSkill::cases() as $skill) {
+            $pools[$skill->value] = DicePool::for(
+                leaderSkill: (int) $leader->getAttribute($skill->column()),
+                leaderWounded: $leader->wounds > 0,
+                others: $others
+                    ->mapWithKeys(fn (RunParticipant $participant): array => [
+                        $participant->character_id => [
+                            'skill' => (int) $participant->character->getAttribute($skill->column()),
+                            'wounded' => $participant->character->wounds > 0,
+                        ],
+                    ])
+                    ->all(),
+            )->toArray();
+        }
+
+        return $pools;
+    }
+
+    /**
+     * The Facility game as this player sees it.
+     *
+     * @return array<string, mixed>
+     */
+    public function forPlayer(Game $game, ?User $user): array
+    {
+        $turn = $game->currentTurn();
+        $phase = $game->currentPhase();
+        $isControl = $user?->isControlFor($game) ?? false;
+
+        return [
+            'turn' => $turn?->number,
+            'is_action_phase' => $phase?->type === PhaseType::Action,
+            'is_control' => $isControl,
+            'can_submit' => $user !== null && Gate::forUser($user)->allows('submit', [Run::class, $game]),
+            'targets' => $this->targets($game, $turn),
+            'party' => $user === null ? [] : $this->party($game, $user),
+            // What a group of each size raises just for being that size,
+            // quoted rather than tabulated in the browser: the printed list and
+            // then the triangular numbers, and a copy of that in TypeScript is
+            // a rule written twice.
+            'group_alerts' => $this->groupAlerts($game),
+            // The runs this player is on, seen from inside the Facility.
+            'yours' => $this->runsFor($game, $turn, $user, defending: false),
+            // The runs coming at this player's own Facilities, seen from the
+            // Security desk. Control gets every run in the game here, because
+            // Control is the one seat that has to be able to run either side.
+            'defending' => $this->runsFor($game, $turn, $user, defending: true),
+        ];
+    }
+
+    /**
+     * Every Facility a group could name, which is the public list and nothing
+     * more.
+     *
+     * A Runner choosing a target knows what the `#facility-list` embed knows:
+     * the Corporation, the Facility and its type. Not the stack, not its depth,
+     * and not whether Security is Directing there - reconnaissance is supposed
+     * to cost something.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function targets(Game $game, ?Turn $turn): array
+    {
+        return $game->corporations()
+            ->with(['facilities' => fn ($query) => $query->orderBy('name'), 'facilities.facilityType'])
+            ->orderBy('name')
+            ->get()
+            ->flatMap(fn (Corporation $corporation): array => $corporation->facilities
+                ->filter(fn (Facility $facility): bool => $facility->isAvailableOnTurn($turn?->number))
+                ->map(fn (Facility $facility): array => [
+                    'id' => $facility->id,
+                    'name' => $facility->name,
+                    'facility_type' => $facility->facilityType->name,
+                    'corporation' => FactionBadge::for($corporation->name),
+                ])
+                ->values()
+                ->all())
+            ->all();
+    }
+
+    /**
+     * The Runners this player could take with them.
+     *
+     * Their own claimed characters first, then everybody else who could run,
+     * because a group is assembled at the table out of whoever is up for it and
+     * nothing says they share a gang. Anyone already out on a run this turn is
+     * left out rather than shown and refused.
+     *
+     * The numbers travel with the names because 3.4.5 asks the group to work
+     * out its dice pool in advance, and this is where they would do it.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function party(Game $game, User $user): array
+    {
+        $turn = $game->currentTurn();
+
+        $onRunThisTurn = $turn === null
+            ? []
+            : RunParticipant::query()
+                ->whereHas('run', fn ($query) => $query->where('turn_id', $turn->id))
+                ->pluck('character_id')
+                ->all();
+
+        return $game->characters()
+            ->whereIn('role', [CharacterRole::Runner, CharacterRole::Freelancer])
+            ->with('gang')
+            ->orderBy('name')
+            ->get()
+            ->reject(fn (Character $character): bool => in_array($character->id, $onRunThisTurn, true))
+            ->map(fn (Character $character): array => [
+                'id' => $character->id,
+                'name' => $character->name,
+                'is_yours' => $character->user_id === $user->id,
+                'gang' => $character->gang === null ? null : FactionBadge::for($character->gang->name),
+                'brawn' => $character->brawn,
+                'hack' => $character->hack,
+                'body' => $character->body,
+                'wounds' => $character->wounds,
+                'tags' => $character->tags,
+                'incapacitated' => $character->isIncapacitated(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * This turn's runs, from one side or the other.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function runsFor(Game $game, ?Turn $turn, ?User $user, bool $defending): array
+    {
+        if ($user === null || $turn === null) {
+            return [];
+        }
+
+        $runs = Run::query()
+            ->where('turn_id', $turn->id)
+            ->with([
+                'facility.corporation',
+                'facility.facilityType',
+                'participants.character.gang',
+                'leader',
+                'events.character',
+                'events.card.cardType',
+                'diceRolls',
+            ])
+            ->orderBy('order_index')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (Run $run): bool => Gate::forUser($user)->allows('view', $run));
+
+        $gate = Gate::forUser($user);
+
+        return $runs
+            ->filter(fn (Run $run): bool => $defending
+                ? ! $this->isOnRun($run, $user)
+                : $this->isOnRun($run, $user))
+            ->map(fn (Run $run): array => $this->run(
+                $run,
+                $user,
+                // Control reads a run from the Security side even when nobody
+                // on their Control team is defending it, because the side that
+                // sees everything is the side Control has to be able to sit on.
+                privileged: $gate->allows('defend', $run) || ($user->isControlFor($game)),
+            ))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One run.
+     *
+     * @return array<string, mixed>
+     */
+    private function run(Run $run, User $user, bool $privileged): array
+    {
+        $cursor = $this->engine->cursor($run);
+        $gate = Gate::forUser($user);
+        $state = $run->facility->stateForTurn($run->turn);
+
+        return [
+            'id' => $run->id,
+            'status' => $run->status->value,
+            'status_label' => $run->status->label(),
+            'facility' => [
+                'id' => $run->facility->id,
+                'name' => $run->facility->name,
+                'facility_type' => $run->facility->facilityType->name,
+                'corporation' => FactionBadge::for($run->facility->corporation->name),
+            ],
+            'order_index' => $run->order_index,
+            'order_reason' => $run->order_reason,
+
+            // Alerts are the Runners' own doing - their Tags, their group size -
+            // so both sides see the pool. What Security has spent it on is
+            // visible too: at the table the Alert tokens physically move.
+            'alerts' => $run->alerts,
+            'alerts_spent' => $run->alerts_spent,
+            'alerts_available' => $run->alertsAvailable(),
+            'alert_strength_bonus' => AlertSchedule::strengthBonus($run->alertsAvailable()),
+            'next_alert_threshold' => AlertSchedule::nextStrengthThreshold($run->alertsAvailable()),
+
+            'cards_passed' => $run->cards_passed,
+            'active_cards_passed' => $run->active_cards_passed,
+            'ignored_end_the_run' => $run->ignored_end_the_run,
+            'retry_pending' => $run->retry_pending,
+
+            'pass' => $cursor->pass,
+            'step' => $cursor->step->value,
+            'step_label' => $cursor->step->label(),
+
+            // What Security has written down that the Runners are about to
+            // take. Both sides read it, and that is the point of it: Security
+            // fills it in and the Run Leader decides who takes it, so it has to
+            // be the same slip in front of both of them. Nothing is given away
+            // - by the Consequence step the card is Active and face up, so the
+            // Runners could read the same sentence off it themselves.
+            'consequence' => $this->consequence($run),
+
+            // Footnote 11 makes the depth of a stack Secret, so this is the one
+            // number that is withheld from the Runners outright rather than
+            // shown in less detail.
+            'cards_remaining' => $privileged ? $cursor->cardsRemaining : null,
+
+            'card' => $this->card($run, $cursor, $privileged),
+
+            // What the Runners would throw at this card, both ways round.
+            // Quoted by the server for the reason a reorder cost is: the
+            // contribution rule is half rounded *down* while healthy and a
+            // quarter rounded *up* while Wounded, and a second implementation
+            // of that in the browser is one rule written twice to disagree
+            // about a die. 3.4.5 asks players to work their contribution out in
+            // advance because the Action phase is fifteen minutes long; this is
+            // that, done for them and kept honest.
+            'dice_pool' => $this->dicePool($run),
+
+            'leader_character_id' => $run->run_leader_character_id,
+            'participants' => $run->participants
+                ->map(fn (RunParticipant $participant): array => [
+                    'id' => $participant->id,
+                    'character_id' => $participant->character_id,
+                    'name' => $participant->character->name,
+                    'position' => $participant->position,
+                    'is_leader' => $participant->character_id === $run->run_leader_character_id,
+                    'is_yours' => $participant->character->user_id === $user->id,
+                    'gang' => $participant->character->gang === null
+                        ? null
+                        : FactionBadge::for($participant->character->gang->name),
+                    'brawn' => $participant->character->brawn,
+                    'hack' => $participant->character->hack,
+                    'body' => $participant->character->body,
+                    'wounds' => $participant->character->wounds,
+                    'tags' => $participant->character->tags,
+                    'left' => ! $participant->isActive(),
+                    'left_reason' => $participant->left_reason?->label(),
+                ])->all(),
+
+            // The budget is the Corporation's business, and a Runner who could
+            // read it would know exactly how much defence was left in the
+            // Facility.
+            'budget' => $privileged ? [
+                'placed' => $state->security_budget,
+                'spent' => $state->security_budget_spent,
+                'left' => $state->unspentBudget(),
+                // What the Corporation still has behind the budget. No payment
+                // may reach it - it is what the screen's top-up button draws
+                // on, so Security can see whether raising the budget is even
+                // an option before the Facility runs dry.
+                'company' => $run->facility->corporation->credits,
+            ] : null,
+
+            'can_lead' => $gate->allows('lead', $run),
+            'can_act' => $gate->allows('act', $run),
+            'can_defend' => $gate->allows('defend', $run),
+
+            // What the Runners took, and what each of them has left to spend.
+            // Both sides see it: 3.4.3 keeps the *choices* Secret from Security
+            // "unless they are Directing Security from this Facility", and by
+            // the time an access has happened it is a thing that was done to
+            // the Corporation rather than a plan.
+            'accesses' => $this->accesses($run),
+            'access_effect' => $run->facility->facilityType->access_effect,
+            'technologies_left' => $this->accessibleTechnologies($run),
+
+            // The cards this run has already turned over and could go back for.
+            // Named, because the Runners have seen them - there is nothing left
+            // to hide about a card that has been face up. The ones nobody has
+            // seen stay a count, which is what keeps the blind draw blind.
+            'known_technologies' => $this->knownTechnologies($run),
+
+            'log' => $this->log($run, $privileged),
+        ];
+    }
+
+    /**
+     * The slip Security has written down, and what answering it would cost.
+     *
+     * Not secret from either side: at the Consequence step the card is Active
+     * and face up, so the Runners can read the same sentence off it. What this
+     * saves them is disagreeing about it - Security marks the card, the Run
+     * Leader takes what is marked, and neither is retyping the other's numbers.
+     *
+     * `ignore_cost` is the escalating price of shrugging off an End the Run:
+     * "for each 'End the Run' that you have ignored (including this one), you
+     * take 1 Wound, 1 Tag and 1 Alert", so the number on offer now is one more
+     * than the number already ignored (3.4.2). Quoted here rather than added up
+     * in the browser, for the reason every other number on this page is.
+     *
+     * @return array<string, mixed>
+     */
+    private function consequence(Run $run): array
+    {
+        $slip = $this->engine->markedConsequence($run);
+
+        return [
+            'marked' => $this->engine->consequenceIsMarked($run),
+            'effects' => $slip->toArray(),
+            'description' => $slip->describe(),
+            'is_empty' => $slip->isEmpty(),
+            'ends_the_run' => $slip->endsTheRun(),
+            'ignore_cost' => $run->ignored_end_the_run + 1,
+        ];
+    }
+
+    /**
+     * The card in front of the Runners, as much of it as this side may see.
+     *
+     * An Inactive card is a card face down on the table: the Runners are told
+     * there is something there and nothing else. Once it is flipped they get
+     * the whole of it, because they have to read the challenge to roll against
+     * it - and because whoever is running the card names the printed strength
+     * from the sentence rather than from a column, so the sentence has to be on
+     * screen.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function card(Run $run, RunCursor $cursor, bool $privileged): ?array
+    {
+        if (! $cursor->hasCard()) {
+            return null;
+        }
+
+        /** @var FacilityProtectionCard $card */
+        $card = $cursor->card;
+        $active = $cursor->cardIsActive();
+        $activation = $cursor->activation;
+
+        $shell = [
+            'id' => $card->id,
+            'kind' => $card->kind->value,
+            'kind_label' => $card->kind->label(),
+            'position' => $card->position,
+            'active' => $active,
+            'settled' => $cursor->activationSettled(),
+            'boosts' => $activation === null ? 0 : $activation->boosts,
+            'next_boost_cost' => $activation === null ? 1 : $activation->nextBoostCost(),
+            'activation_cost' => $activation?->activation_cost,
+
+            // What the card gains before its printed strength is even named,
+            // so Security can see the bonuses while typing the number off the
+            // card rather than after rolling. Quoted by the server: this is the
+            // same sum ChallengeStrength does at the roll, and a second copy of
+            // it in the browser would disagree the moment an Alert moved.
+            'strength_bonuses' => [
+                'cards_passed' => ChallengeStrength::fromCardsPassed($run->active_cards_passed),
+                'alerts' => AlertSchedule::strengthBonus($run->alertsAvailable()),
+                'boosts' => $activation === null ? 0 : $activation->boosts,
+            ],
+        ];
+
+        if (! $active && ! $privileged) {
+            // Face down. Even the kind is fair game - the Runners know they are
+            // through the physical stack and into the cyber one, because they
+            // can see where they are standing.
+            return $shell;
+        }
+
+        return [
+            ...$shell,
+            'name' => $card->cardType->name,
+            'code' => $card->cardType->code,
+            'challenge' => $card->cardType->challenge,
+            'consequence' => $card->cardType->consequence,
+            'charge_cost' => $card->cardType->charge_cost,
+            'charge_consequence' => $card->cardType->charge_consequence,
+            'image_path' => $card->cardType->imagePath(),
+        ];
+    }
+
+    /**
+     * The log, with the rolls that decided each line.
+     *
+     * Shown to both sides in full, and that is deliberate: this is the record
+     * that settles an argument, and a log one side could not read would settle
+     * nothing. It cannot leak the stack depth, because it only ever describes
+     * cards the Runners have already met.
+     *
+     * The exception is a card that never came on. Security's decision not to
+     * activate names the card, and the Runners are not entitled to that, so
+     * those lines read as the card being left off without saying which card it
+     * was.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function log(Run $run, bool $privileged): array
+    {
+        $rolls = $run->diceRolls->groupBy('run_event_id');
+
+        return $run->events
+            ->map(fn (RunEvent $event): array => [
+                'id' => $event->id,
+                'pass' => $event->pass,
+                'step' => $event->step->value,
+                'type' => $event->type,
+                'description' => $this->describe($event, $privileged),
+                'character' => $event->character?->name,
+                'at' => $event->created_at?->toIso8601String(),
+                'rolls' => $rolls->get($event->id, collect())
+                    ->map(fn (RunDiceRoll $roll): array => [
+                        'roller' => $roll->roller->value,
+                        'roller_label' => $roll->roller->label(),
+                        'pool' => $roll->pool,
+                        'die_faces' => $roll->die_faces,
+                        'faces' => $roll->faces,
+                        'successes' => $roll->successes,
+                        'readout' => $roll->readout(),
+                        'reason' => $privileged ? $roll->reason : null,
+                    ])->values()->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One line of the log, with anything the Runners may not read taken out.
+     */
+    private function describe(RunEvent $event, bool $privileged): string
+    {
+        if ($privileged) {
+            return $event->description;
+        }
+
+        return match ($event->type) {
+            RunEvent::TYPE_ACTIVATION_DECLINED => 'Security left the card switched off.',
+            RunEvent::TYPE_ACTIVATION_FAILED => 'Security could not afford to switch the card on, so it stayed off.',
+            default => $event->description,
+        };
+    }
+
+    /**
+     * Whether this user holds a character on the run.
+     */
+    private function isOnRun(Run $run, User $user): bool
+    {
+        return $run->participants
+            ->contains(fn (RunParticipant $participant): bool => $participant->character->user_id === $user->id);
+    }
+
+    /**
+     * Every run in the game this turn, for Control's own panel.
+     *
+     * Control has no secrets kept from it, so this is the privileged view of
+     * everything - including the runs that have been submitted and not yet
+     * ordered, which is the pile Control actually has to act on.
+     *
+     * @return array<string, mixed>
+     */
+    public function forControl(Game $game): array
+    {
+        $turn = $game->currentTurn();
+
+        if ($turn === null) {
+            return ['turn' => null, 'runs' => [], 'queues' => []];
+        }
+
+        $runs = Run::query()
+            ->where('turn_id', $turn->id)
+            ->with([
+                'facility.corporation',
+                'facility.facilityType',
+                'participants.character.gang',
+                'leader',
+                'events.character',
+                'events.card.cardType',
+                'diceRolls',
+            ])
+            ->orderBy('facility_id')
+            ->orderBy('order_index')
+            ->orderBy('id')
+            ->get();
+
+        return [
+            'turn' => $turn->number,
+            'game_running' => $game->status === GameStatus::Running,
+            'runs' => $runs
+                ->map(fn (Run $run): array => $this->control($run))
+                ->all(),
+            // The Facilities with more than one group at them, which are the
+            // only ones where the ordering of 3.4.1 has anything to decide.
+            'queues' => $runs
+                ->filter(fn (Run $run): bool => ! $run->status->isFinished())
+                ->groupBy('facility_id')
+                ->filter(fn (mixed $group): bool => $group->count() > 1)
+                ->map(fn (mixed $group): array => [
+                    'facility_id' => $group->first()->facility_id,
+                    'facility' => $group->first()->facility->name,
+                    'corporation' => FactionBadge::for($group->first()->facility->corporation->name),
+                    'runs' => $group->count(),
+                    'ordered' => $group->every(fn (Run $run): bool => $run->order_index !== null),
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * One run for Control, which is the same shape a Security player gets
+     * without asking the Gate anything.
+     *
+     * @return array<string, mixed>
+     */
+    private function control(Run $run): array
+    {
+        $cursor = $this->engine->cursor($run);
+        $state = $run->facility->stateForTurn($run->turn);
+
+        return [
+            'id' => $run->id,
+            'status' => $run->status->value,
+            'status_label' => $run->status->label(),
+            'is_finished' => $run->status->isFinished(),
+            'is_running' => $run->status === RunStatus::Running,
+            'facility' => [
+                'id' => $run->facility->id,
+                'name' => $run->facility->name,
+                'facility_type' => $run->facility->facilityType->name,
+                'corporation' => FactionBadge::for($run->facility->corporation->name),
+            ],
+            'order_index' => $run->order_index,
+            'order_reason' => $run->order_reason,
+            'alerts' => $run->alerts,
+            'alerts_available' => $run->alertsAvailable(),
+            'cards_passed' => $run->cards_passed,
+            'active_cards_passed' => $run->active_cards_passed,
+            'cards_remaining' => $cursor->cardsRemaining,
+            'pass' => $cursor->pass,
+            'step' => $cursor->step->value,
+            'step_label' => $cursor->step->label(),
+            'retry_pending' => $run->retry_pending,
+            'ignored_end_the_run' => $run->ignored_end_the_run,
+            'card' => $this->card($run, $cursor, privileged: true),
+            'leader' => $run->leader?->name,
+            'leader_character_id' => $run->run_leader_character_id,
+            'participants' => $run->participants
+                ->map(fn (RunParticipant $participant): array => [
+                    'character_id' => $participant->character_id,
+                    'name' => $participant->character->name,
+                    'position' => $participant->position,
+                    'is_leader' => $participant->character_id === $run->run_leader_character_id,
+                    'wounds' => $participant->character->wounds,
+                    'body' => $participant->character->body,
+                    'tags' => $participant->character->tags,
+                    'brawn' => $participant->character->brawn,
+                    'hack' => $participant->character->hack,
+                    'left' => ! $participant->isActive(),
+                    'left_reason' => $participant->left_reason?->label(),
+                ])->all(),
+            'budget' => [
+                'placed' => $state->security_budget,
+                'spent' => $state->security_budget_spent,
+                'left' => $state->unspentBudget(),
+            ],
+            'log' => $this->log($run, privileged: true),
+        ];
+    }
+}
