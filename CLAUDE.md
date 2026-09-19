@@ -1221,11 +1221,28 @@ printed code as often as by its name, and a Runner as often by their gang.
 
 **The lists themselves are filtered rather than paged**, by
 `shop-filter.tsx`, which both the players' counters and Control's list share so
-they cannot drift on what searching means. It appears only past
-`FILTER_FROM` lines, because a shop with four things on it does not need
-searching and an input above it is one more thing to read past — and it always
-shows a count, since a search that matches nothing and a shop that is empty look
-identical without one.
+they cannot drift on what searching means. It always shows a count, since a
+search that matches nothing and a shop that is empty look identical without one.
+
+**Neither control hides itself, and both learned that the hard way.** The filter
+had a threshold — it appeared only past eight lines, on the reasoning that a
+shop with four things on it does not need searching — and the first thing that
+happened was somebody setting a shop up, looking for the search they had asked
+for, and not finding it. The picker had the matching problem from the other end:
+its trigger is a button, which reads as an ordinary select, and nobody clicks a
+select expecting to type. So the threshold is gone, the trigger carries a
+magnifier until something is picked, and its placeholder says how many there are
+to search. A control that hides until it is "needed" is a control nobody knows
+is there.
+
+**`w-[var(--radix-popover-trigger-width)]`, not `w-[--radix-popover-trigger-width]`.**
+The bare form is Tailwind 3 shorthand for a CSS variable; this project is on
+Tailwind 4, which emits it as invalid CSS — so the popover silently sized to its
+content instead of matching the trigger. It is the kind of mistake that survives
+`tsc`, eslint and the whole test suite, and the tell is the built stylesheet:
+grep `public/build/assets/*.css` for the variable name and it is simply absent.
+`ui/sidebar.tsx` uses the `w-(--sidebar-width)` form and `ui/select.tsx` the
+`[var(--…)]` one; either is fine, the bare one is not.
 
 **Adding those two components with the shadcn CLI needs watching.** It pulled in
 `cn` and `radix-ui` — an unrelated utility package and the umbrella Radix

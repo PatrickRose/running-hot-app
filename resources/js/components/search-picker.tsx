@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { CheckIcon, ChevronsUpDownIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -86,7 +86,20 @@ export function SearchPicker({
                         className,
                     )}
                 >
-                    <span className="truncate">
+                    {/* A magnifier while nothing is picked, because the
+                        trigger otherwise reads as an ordinary select and
+                        nobody clicks a select expecting to type. That is not
+                        hypothetical: the first person to use this went looking
+                        for the search and did not find it. Once something is
+                        picked the icon goes, since by then the control has
+                        said what it is. */}
+                    {selected === null ? (
+                        <SearchIcon
+                            className="mr-2 size-4 shrink-0 opacity-50"
+                            aria-hidden="true"
+                        />
+                    ) : null}
+                    <span className="mr-auto truncate">
                         {selected === null ? placeholder : selected.label}
                         {selected?.hint ? (
                             <span className="ml-2 text-muted-foreground">
@@ -98,10 +111,11 @@ export function SearchPicker({
                 </Button>
             </PopoverTrigger>
 
-            {/* Matched to the trigger's width so a long card name has room,
-                and capped so eighty options scroll rather than running off
-                the bottom of the screen. */}
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            {/* Matched to the trigger's width so a long card name has room.
+                `[var(--…)]` rather than Tailwind 3's bare `[--…]` shorthand,
+                which this project's Tailwind 4 emits as invalid CSS - the
+                popover then sizes to its content and the match is silent. */}
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                 <Command
                     // cmdk scores its own fuzzy match by default, which puts
                     // "Angel" below things that merely contain those letters.
