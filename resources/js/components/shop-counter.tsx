@@ -1,11 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
-import {
-    FILTER_FROM,
-    listingMatches,
-    ShopFilter,
-} from '@/components/shop-filter';
+import { listingMatches, ShopFilter } from '@/components/shop-filter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -86,7 +82,7 @@ export function ShopCounter({
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-                {counter.listings.length > FILTER_FROM && (
+                {counter.listings.length > 0 && (
                     <ShopFilter
                         id={`filter-${title}`}
                         value={query}

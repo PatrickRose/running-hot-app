@@ -3,11 +3,7 @@ import { useState } from 'react';
 import Heading from '@/components/heading';
 import { SearchPicker } from '@/components/search-picker';
 import type { PickerOption } from '@/components/search-picker';
-import {
-    FILTER_FROM,
-    listingMatches,
-    ShopFilter,
-} from '@/components/shop-filter';
+import { listingMatches, ShopFilter } from '@/components/shop-filter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -230,7 +226,7 @@ function TheList({ gameId, shop }: { gameId: number; shop: ShopControlBoard }) {
 
     return (
         <div className="flex flex-col gap-4">
-            {shop.listings.length > FILTER_FROM && (
+            {shop.listings.length > 0 && (
                 <ShopFilter
                     id="filter-control-shop"
                     value={query}
@@ -360,7 +356,7 @@ function StockForm({
                         options={cardOptions(options)}
                         value={cardId}
                         onChange={setCardId}
-                        placeholder="Choose a card…"
+                        placeholder={`Search ${options.length} cards…`}
                         searchPlaceholder="Name, code or kind…"
                         emptyMessage="No card matches that. A card already on the list is not offered here — edit its line below instead."
                     />
@@ -601,7 +597,7 @@ function ListingRow({
                                 options={buyerOptions(buyers)}
                                 value={buyer}
                                 onChange={setBuyer}
-                                placeholder="Choose somebody…"
+                                placeholder={`Search ${buyers.length} people…`}
                                 searchPlaceholder="Name or team…"
                                 emptyMessage="Nobody of that name holds this counter's seat."
                             />
