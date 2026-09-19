@@ -1,6 +1,13 @@
 import { Head, router, usePoll } from '@inertiajs/react';
 import { useState } from 'react';
 import Heading from '@/components/heading';
+import { SearchPicker } from '@/components/search-picker';
+import type { PickerOption } from '@/components/search-picker';
+import {
+    FILTER_FROM,
+    listingMatches,
+    ShopFilter,
+} from '@/components/shop-filter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -94,26 +101,8 @@ export default function ControlShop({ game, shop }: Props) {
                             is a line that never runs out.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
-                        {shop.listings.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                                Nothing is on the list yet.
-                            </p>
-                        ) : (
-                            shop.listings.map((listing) => (
-                                <ListingRow
-                                    key={listing.id}
-                                    gameId={game.id}
-                                    listing={listing}
-                                    statuses={shop.statuses}
-                                    buyers={
-                                        listing.family === 'protection'
-                                            ? shop.buyers.protection
-                                            : shop.buyers.equipment
-                                    }
-                                />
-                            ))
-                        )}
+                    <CardContent>
+                        <TheList gameId={game.id} shop={shop} />
                     </CardContent>
                 </Card>
 
@@ -220,6 +209,101 @@ export default function ControlShop({ game, shop }: Props) {
 }
 
 /**
+ * Every line Control has put out, filtered once there are enough to need it.
+ *
+ * Control's list is the long one — it carries the withdrawn lines the players
+ * never see, so it is only ever bigger than a counter.
+ */
+function TheList({ gameId, shop }: { gameId: number; shop: ShopControlBoard }) {
+    const [query, setQuery] = useState('');
+    const shown = shop.listings.filter((listing) =>
+        listingMatches(listing, query),
+    );
+
+    if (shop.listings.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                Nothing is on the list yet.
+            </p>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-4">
+            {shop.listings.length > FILTER_FROM && (
+                <ShopFilter
+                    id="filter-control-shop"
+                    value={query}
+                    onChange={setQuery}
+                    shown={shown.length}
+                    total={shop.listings.length}
+                />
+            )}
+
+            {shown.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                    No line matches that.
+                </p>
+            ) : (
+                shown.map((listing) => (
+                    <ListingRow
+                        key={listing.id}
+                        gameId={gameId}
+                        listing={listing}
+                        statuses={shop.statuses}
+                        buyers={
+                            listing.family === 'protection'
+                                ? shop.buyers.protection
+                                : shop.buyers.equipment
+                        }
+                    />
+                ))
+            )}
+        </div>
+    );
+}
+
+/**
+ * A catalogue card as the picker takes it.
+ *
+ * The code goes into the search text as well as on screen, because a card is
+ * identified by its code and that is what Control has in front of them when
+ * somebody asks for PS013 by name. A research-only card is offered like any
+ * other and simply says so.
+ */
+function cardOptions(cards: ShopUnlistedCard[]): PickerOption[] {
+    return cards.map((card) => {
+        const notes = [
+            card.kind_label ?? card.category_label ?? '',
+            card.availability === 'rumoured' ? 'rumoured' : '',
+            card.availability === 'research_only' ? 'research only' : '',
+        ].filter(Boolean);
+
+        return {
+            value: card.id,
+            label: card.name,
+            hint: notes.join(' · ') || null,
+            search: [card.code ?? '', card.name, ...notes].join(' '),
+        };
+    });
+}
+
+/**
+ * Somebody Control can sell to. Their team is searchable as well as shown: a
+ * Runner is as likely to be remembered by their gang as by their own name.
+ */
+function buyerOptions(buyers: ShopBuyerOption[]): PickerOption[] {
+    return buyers.map((buyer) => ({
+        value: buyer.character_id,
+        label: buyer.name,
+        hint: [buyer.team, `${buyer.purse_credits}cr`]
+            .filter(Boolean)
+            .join(' · '),
+        search: [buyer.name, buyer.team ?? '', buyer.role_label].join(' '),
+    }));
+}
+
+/**
  * Putting a card out, or repricing one already on the list.
  *
  * The family is chosen rather than inferred, because the two catalogues number
@@ -237,7 +321,7 @@ function StockForm({
     const [family, setFamily] = useState<'protection' | 'equipment'>(
         'protection',
     );
-    const [cardId, setCardId] = useState('');
+    const [cardId, setCardId] = useState<number | null>(null);
     const [price, setPrice] = useState('5');
     const [stockLevel, setStockLevel] = useState('');
     const [status, setStatus] = useState<ShopListingStatus>('on_sale');
@@ -258,7 +342,7 @@ function StockForm({
                                 event.target.value as
                                     'protection' | 'equipment',
                             );
-                            setCardId('');
+                            setCardId(null);
                         }}
                         className={SELECT_CLASS}
                     >
@@ -271,30 +355,15 @@ function StockForm({
 
                 <div className="grid gap-1 lg:col-span-2">
                     <Label htmlFor="shop-card">Card</Label>
-                    <select
+                    <SearchPicker
                         id="shop-card"
+                        options={cardOptions(options)}
                         value={cardId}
-                        onChange={(event) => setCardId(event.target.value)}
-                        className={SELECT_CLASS}
-                    >
-                        <option value="">Choose a card…</option>
-                        {options.map((card) => (
-                            <option key={card.id} value={card.id}>
-                                {card.code ? `${card.code} — ` : ''}
-                                {card.name}
-                                {card.kind_label
-                                    ? ` (${card.kind_label}${
-                                          card.availability === 'rumoured'
-                                              ? ', rumoured'
-                                              : ''
-                                      })`
-                                    : ''}
-                                {card.category_label
-                                    ? ` (${card.category_label})`
-                                    : ''}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={setCardId}
+                        placeholder="Choose a card…"
+                        searchPlaceholder="Name, code or kind…"
+                        emptyMessage="No card matches that. A card already on the list is not offered here — edit its line below instead."
+                    />
                 </div>
 
                 <div className="grid gap-1">
@@ -355,13 +424,13 @@ function StockForm({
 
             <div>
                 <Button
-                    disabled={cardId === ''}
+                    disabled={cardId === null}
                     onClick={() =>
                         router.post(
                             stock.url({ game: gameId }),
                             {
                                 family,
-                                card_id: Number(cardId),
+                                card_id: cardId,
                                 price: Number(price),
                                 stock:
                                     stockLevel === ''
@@ -373,7 +442,7 @@ function StockForm({
                             {
                                 preserveScroll: true,
                                 onSuccess: () => {
-                                    setCardId('');
+                                    setCardId(null);
                                     setNotes('');
                                 },
                             },
@@ -412,7 +481,7 @@ function ListingRow({
     );
     const [status, setStatus] = useState<ShopListingStatus>(listing.status);
     const [notes, setNotes] = useState(listing.notes ?? '');
-    const [buyer, setBuyer] = useState('');
+    const [buyer, setBuyer] = useState<number | null>(null);
 
     const save = () =>
         router.post(
@@ -520,51 +589,38 @@ function ListingRow({
 
                 {buyers.length > 0 && (
                     <>
-                        <div className="grid gap-1">
+                        <div className="grid min-w-56 gap-1">
                             <Label
                                 htmlFor={`buyer-${listing.id}`}
                                 className="text-xs text-muted-foreground"
                             >
                                 Sell to
                             </Label>
-                            <select
+                            <SearchPicker
                                 id={`buyer-${listing.id}`}
+                                options={buyerOptions(buyers)}
                                 value={buyer}
-                                onChange={(event) =>
-                                    setBuyer(event.target.value)
-                                }
-                                className={SELECT_CLASS}
-                            >
-                                <option value="">Choose somebody…</option>
-                                {buyers.map((option) => (
-                                    <option
-                                        key={option.character_id}
-                                        value={option.character_id}
-                                    >
-                                        {option.name}
-                                        {option.team
-                                            ? ` — ${option.team}`
-                                            : ''}{' '}
-                                        ({option.purse_credits}cr)
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={setBuyer}
+                                placeholder="Choose somebody…"
+                                searchPlaceholder="Name or team…"
+                                emptyMessage="Nobody of that name holds this counter's seat."
+                            />
                         </div>
 
                         <Button
                             size="sm"
                             variant="secondary"
-                            disabled={buyer === ''}
+                            disabled={buyer === null}
                             onClick={() =>
                                 router.post(
                                     buy.url({
                                         game: gameId,
                                         listing: listing.id,
                                     }),
-                                    { character_id: Number(buyer) },
+                                    { character_id: buyer },
                                     {
                                         preserveScroll: true,
-                                        onSuccess: () => setBuyer(''),
+                                        onSuccess: () => setBuyer(null),
                                     },
                                 )
                             }

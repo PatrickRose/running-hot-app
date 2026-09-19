@@ -1,6 +1,11 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
+import {
+    FILTER_FROM,
+    listingMatches,
+    ShopFilter,
+} from '@/components/shop-filter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,6 +59,11 @@ export function ShopCounter({
     /** Why this viewer cannot buy, where they cannot. Null when they can. */
     readOnlyReason: string | null;
 }) {
+    const [query, setQuery] = useState('');
+    const shown = counter.listings.filter((listing) =>
+        listingMatches(listing, query),
+    );
+
     return (
         <Card>
             <CardHeader>
@@ -76,12 +86,26 @@ export function ShopCounter({
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+                {counter.listings.length > FILTER_FROM && (
+                    <ShopFilter
+                        id={`filter-${title}`}
+                        value={query}
+                        onChange={setQuery}
+                        shown={shown.length}
+                        total={counter.listings.length}
+                    />
+                )}
+
                 {counter.listings.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         Control has not put anything out yet.
                     </p>
+                ) : shown.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        Nothing on this counter matches that.
+                    </p>
                 ) : (
-                    counter.listings.map((listing) => (
+                    shown.map((listing) => (
                         <ShopLine
                             key={listing.id}
                             listing={listing}

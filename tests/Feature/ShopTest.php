@@ -21,7 +21,6 @@ use App\Services\ShopService;
 use App\Services\TurnEngine;
 use App\Support\ShopPresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
@@ -485,17 +484,26 @@ class ShopTest extends TestCase
     }
 
     /**
-     * Cards that require specialised research "will not be available for
-     * general sale" (3.3.3), and Control's way round it is the card's own
-     * availability rather than a second flag on the shop.
+     * Any card can be put out, a research-only one included.
+     *
+     * 3.3.3 says those "will not be available for general sale", and this
+     * application does not enforce it: the shop is how Control hands a card
+     * over at a price, and a card the tree was meant to unlock is exactly the
+     * sort of thing that gets sold once because the table went somewhere
+     * interesting. It sells like any other line.
      */
-    public function test_a_research_only_card_cannot_be_stocked(): void
+    public function test_a_research_only_card_can_be_stocked_and_bought(): void
     {
+        $security = $this->security();
         $card = $this->protectionCard('PR010');
+        $listing = $this->listing($card, price: 9, stock: 1);
 
-        $this->expectException(ValidationException::class);
+        $this->actingAs($security->user)
+            ->post("/shop/{$listing->id}/buy", ['character_id' => $security->id])
+            ->assertSessionHasNoErrors();
 
-        app(ShopService::class)->stock($this->game, $card, price: 5);
+        $this->assertSame(31, $this->corporation->fresh()->credits);
+        $this->assertSame(1, app(FacilityDefenceService::class)->copiesInHand($this->corporation, $card));
     }
 
     public function test_the_page_renders_for_a_player(): void

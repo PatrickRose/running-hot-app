@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\CharacterRole;
-use App\Enums\ProtectionCardAvailability;
 use App\Enums\ShopListingStatus;
 use App\Enums\Tracker;
 use App\Models\Character;
@@ -22,12 +21,21 @@ use Illuminate\Validation\ValidationException;
  * The shop: what Control has put out, at what price, and what happens when
  * somebody buys one (rulebook 3.3.3, and 2.1 for the Runners' market).
  *
- * The rulebook gives the shop three sentences and one allocation rule. Control
- * announces the cards available for sale, they are bought first come first
- * served, and research-only cards are never on general sale. Everything else
- * about a shop - haggling, credit, a limit per Corporation, who gets told
- * first - is a conversation at the table, so none of it is here. What is here
- * is the list, the price, the count, and the exchange.
+ * The rulebook gives the shop two sentences and one allocation rule: Control
+ * announces the cards available for sale, and they are bought first come first
+ * served. Everything else about a shop - haggling, credit, a limit per
+ * Corporation, who gets told first - is a conversation at the table, so none of
+ * it is here. What is here is the list, the price, the count, and the exchange.
+ *
+ * **Any card can be put out, including a research-only one.** 3.3.3 says those
+ * "will not be available for general sale", and that was enforced here until it
+ * got in the way of the thing it was protecting: the shop is how Control hands
+ * a card over at a price, and a card the tree was supposed to unlock is exactly
+ * the sort of thing Control sells once during a game because the table has got
+ * somewhere interesting. Control always wins, and a rule the organisers have to
+ * go and edit a catalogue to get round is a rule fighting them. The card's own
+ * availability still travels to the panel, so a line Control may not have meant
+ * to put out says what it is.
  *
  * Two counters, and they are genuinely different transactions rather than one
  * with a parameter:
@@ -81,7 +89,6 @@ class ShopService
         ?string $notes = null,
     ): ShopListing {
         $this->guardCardBelongsToGame($game, $card);
-        $this->guardGeneralSale($card, $status);
 
         if ($price < 0) {
             throw ValidationException::withMessages([
@@ -440,40 +447,6 @@ class ShopService
         if ($card->getAttribute('game_id') !== $game->id) {
             throw ValidationException::withMessages([
                 'stockable_id' => 'That card belongs to another game.',
-            ]);
-        }
-    }
-
-    /**
-     * A card that needs specialised research is never on general sale (3.3.3).
-     *
-     * Refused rather than quietly listed, and Control's override is one field
-     * away on a page they already have: the card's own availability. That is
-     * better than a second flag here, because the catalogue's word and the
-     * shop's would then be free to disagree about the same card.
-     *
-     * @param  ProtectionCardType|EquipmentCardType  $card
-     */
-    protected function guardGeneralSale(Model $card, ShopListingStatus $status): void
-    {
-        if (! $card instanceof ProtectionCardType) {
-            return;
-        }
-
-        // Withdrawing is always allowed, and has to be: a card Control makes
-        // research-only *after* stocking it needs a way off the list, and
-        // refusing the one status that takes it off would trap it there.
-        if ($status === ShopListingStatus::Withdrawn) {
-            return;
-        }
-
-        if ($card->availability === ProtectionCardAvailability::ResearchOnly) {
-            throw ValidationException::withMessages([
-                'stockable_id' => sprintf(
-                    '%s requires specialised research, so 3.3.3 keeps it off general sale. '
-                    .'Change its availability in the card catalogue first.',
-                    $card->name,
-                ),
             ]);
         }
     }

@@ -141,10 +141,14 @@ class ShopControlTest extends TestCase
     }
 
     /**
-     * 3.3.3 keeps a research-only card off general sale, and Control's way
-     * round it is the card's own availability - which the refusal says.
+     * Control can put any card out, a research-only one included.
+     *
+     * 3.3.3's "will not be available for general sale" is about the ordinary
+     * run of the game rather than about what Control may do, and a rule the
+     * organisers have to go and edit a catalogue to get round is a rule
+     * fighting them.
      */
-    public function test_a_research_only_card_is_refused_with_the_way_round_it(): void
+    public function test_control_can_stock_a_research_only_card(): void
     {
         $card = $this->protectionCard('PR010');
 
@@ -156,22 +160,28 @@ class ShopControlTest extends TestCase
                 'stock' => 1,
                 'status' => 'on_sale',
             ])
-            ->assertSessionHasErrors('stockable_id');
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame(0, ShopListing::query()->count());
+        $this->assertSame(1, ShopListing::query()->count());
     }
 
     /**
-     * ...and it is not offered in the picker either, because a button that
-     * cannot work is worse than no button.
+     * It is offered in the picker too, and says what it is - a card Control
+     * might not have meant to put out should read as unusual rather than be
+     * silently missing.
      */
-    public function test_a_research_only_card_is_not_offered_to_be_listed(): void
+    public function test_the_picker_offers_every_card_and_says_which_are_unusual(): void
     {
         $shop = app(ShopPresenter::class)->forControl($this->game);
-        $names = array_column($shop['unlisted']['protection'], 'name');
+        $offered = $shop['unlisted']['protection'];
+        $names = array_column($offered, 'name');
 
         $this->assertContains('Angel', $names);
-        $this->assertNotContains('Anzû', $names);
+        $this->assertContains('Anzû', $names);
+
+        $anzu = collect($offered)->firstWhere('name', 'Anzû');
+        $this->assertSame('research_only', $anzu['availability']);
+        $this->assertSame('Research only', $anzu['availability_label']);
     }
 
     /**

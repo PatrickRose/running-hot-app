@@ -5,7 +5,6 @@ namespace App\Support;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
-use App\Enums\ProtectionCardAvailability;
 use App\Enums\ShopListingStatus;
 use App\Models\Character;
 use App\Models\Corporation;
@@ -407,11 +406,14 @@ class ShopPresenter
     }
 
     /**
-     * Protection Cards not yet on the list.
+     * Protection Cards not yet on the list - all of them.
      *
-     * Research-only cards are left out, because 3.3.3 keeps them off general
-     * sale and ShopService refuses to stock one - offering it in the picker
-     * would be offering a button that cannot work.
+     * Research-only cards used to be left out, on 3.3.3's "will not be
+     * available for general sale". They are offered now, because the shop is
+     * how Control hands a card over at a price and that sentence is about the
+     * ordinary run of the game rather than about what Control may do. Each one
+     * still carries its availability, so a card Control might not have meant to
+     * put out says what it is rather than being silently missing.
      *
      * @param  array<string, array<int, int>>  $listed
      * @return array<int, array<string, mixed>>
@@ -422,7 +424,6 @@ class ShopPresenter
 
         return $game->protectionCardTypes()
             ->whereNotIn('id', $taken)
-            ->where('availability', '!=', ProtectionCardAvailability::ResearchOnly)
             ->orderBy('kind')
             ->orderBy('name')
             ->get()

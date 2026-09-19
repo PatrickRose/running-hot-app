@@ -1067,13 +1067,17 @@ Credits, the Angel lands next turn" is the decision the list exists to let them
 make, so a shop that left it out would be a shop that told them nothing. Nothing
 moves a line onto sale on its own: 3.3.3 has Control announcing it.
 
-**A research-only card is refused rather than quietly listed.** "Will not be
-available for general sale" is a rule, so `ShopService` checks the card's own
-`availability` when a line is written, and the picker does not offer one.
-Control's override is one field away on a page they already have — the card's
-availability in the catalogue — and the refusal says so. That is better than a
-second flag on the listing, because the catalogue's word and the shop's would
-then be free to disagree about the same card.
+**Any card can be put out, a research-only one included.** 3.3.3 says those
+"will not be available for general sale", and that was enforced here until it
+got in the way of the thing it was protecting: the shop is how Control hands a
+card over at a price, and a card the tree was meant to unlock is exactly the
+sort of thing that gets sold once in a game because the table went somewhere
+interesting. Control always wins, and a rule the organisers have to go and edit
+a catalogue to get round is a rule fighting them. So the sentence is read as
+being about the ordinary run of the game rather than about what Control may do.
+The card's own `availability` still travels to the panel and the picker says
+"research only" beside it, so a line Control might not have meant to put out
+reads as unusual rather than being silently missing.
 
 **Withdrawn is how a line leaves without taking its sales with it.** A listing
 that has been bought from cannot be deleted, because the purchases hanging off
@@ -1133,6 +1137,37 @@ announces a card mid-phase, a rumoured line comes on sale, and somebody else
 takes the last Angel — none of it anything the reader's browser did, and first
 come first served is not a rule you can play to against a stale page.
 
+**Two catalogues of eighty-odd cards need searching, so the picker is a
+combobox.** A native `select` holding 83 Protection Cards is a list nobody finds
+anything in, and worst of all on a phone — which is where half of this game is
+played. `resources/js/components/search-picker.tsx` is the shadcn combobox
+(`cmdk` inside a Radix popover, which is what those two dependencies are for),
+and it is deliberately generic rather than a card picker: Control also picks a
+character to sell to out of a roster of forty-odd, and that is the same control
+with different words in it. It matches a **plain substring** over a `search`
+string the option supplies, rather than cmdk's own fuzzy scoring, because the
+useful terms are not always the ones on screen — a card is looked up by its
+printed code as often as by its name, and a Runner as often by their gang.
+
+**The lists themselves are filtered rather than paged**, by
+`shop-filter.tsx`, which both the players' counters and Control's list share so
+they cannot drift on what searching means. It appears only past
+`FILTER_FROM` lines, because a shop with four things on it does not need
+searching and an input above it is one more thing to read past — and it always
+shows a count, since a search that matches nothing and a shop that is empty look
+identical without one.
+
+**Adding those two components with the shadcn CLI needs watching.** It pulled in
+`cn` and `radix-ui` — an unrelated utility package and the umbrella Radix
+build — where this repo uses `@/lib/utils` and individual `@radix-ui/react-*`,
+and it silently rewrote `ui/dialog.tsx` to a newer shadcn layout that imports
+from both. Only `cmdk` and `@radix-ui/react-popover` were wanted; `dialog.tsx`
+was reverted and `command.tsx`'s `CommandDialog` removed, since nothing here
+wants a command palette and keeping it would couple the file to whichever
+dialog version happens to be in tree. `resources/js/components/ui/*` is
+prettier-ignored, so those two files keep shadcn's own formatting like the rest
+of the kit.
+
 **Auctions are not modelled, and that is a decision.** "Control may also decide
 to auction Protection Cards - in those cases the Security player who pays the
 most will receive a copy" happens in the room, and what the application wants
@@ -1148,6 +1183,7 @@ a worse version of a conversation with everyone in front of you.
 | Who may buy, and when | `App\Policies\ShopListingPolicy` |
 | What each counter looks like to whoever is at it | `App\Support\ShopPresenter` |
 | The counters players shop from | `App\Http\Controllers\ShopController`, `resources/js/pages/shop.tsx` |
+| Searching a catalogue, and filtering a list | `resources/js/components/search-picker.tsx`, `shop-filter.tsx` |
 | Control announcing the list | `App\Http\Controllers\Control\ShopController`, `resources/js/pages/control/games/shop.tsx` |
 
 ## The research game
