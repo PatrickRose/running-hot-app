@@ -135,6 +135,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('runs/{run}/equipment/play', [RunController::class, 'playEquipment'])
         ->name('runs.equipment.play');
 
+    // What that card is doing to your skills for the rest of the run. Its own
+    // route because a skill is halved on the way into the pool for everybody
+    // who is not leading, so it is not the same thing as adding dice to a roll.
+    Route::post('runs/{run}/skills', [RunController::class, 'adjustSkills'])
+        ->name('runs.skills.update');
+
     Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
     Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 

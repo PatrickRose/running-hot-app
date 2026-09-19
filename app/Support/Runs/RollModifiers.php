@@ -25,7 +25,9 @@ use InvalidArgumentException;
  *   one"
  * - **die size**, which covers "Roll d8 for Brute" and "The next time you roll
  *   dice, roll d8s" - both of which are a Wounded Runner buying their d8s back
- * - **rerolling failures once**, which is Mind jack
+ * - **+1 to a die already rolled**, which is Armour's "Add +1 to one of your
+ *   dice" - not a die added to the pool but a face nudged after it has been
+ *   thrown, which is what turns a 4 into the success it was one short of
  *
  * The card played is recorded separately, so the log says which card was in
  * somebody's hand when the pool changed size. This says only what the dice did.
@@ -38,8 +40,18 @@ readonly class RollModifiers
     public function __construct(
         public int $dice = 0,
         public ?int $dieFaces = null,
-        public bool $rerollFailures = false,
+        /**
+         * How many +1s the Runners are putting on dice they have already
+         * rolled. One per die: the card says "one of your dice", so two cards
+         * nudge two dice rather than stacking on one. Whether they may stack
+         * is not printed anywhere and is Control's call.
+         */
+        public int $bumps = 0,
     ) {
+        if ($bumps < 0) {
+            throw new InvalidArgumentException('A die cannot be nudged downwards.');
+        }
+
         if ($dieFaces !== null && ! in_array($dieFaces, self::ALLOWED_FACES, true)) {
             throw new InvalidArgumentException(sprintf('A d%d is not a die this game rolls.', $dieFaces));
         }
@@ -52,7 +64,7 @@ readonly class RollModifiers
 
     public function isEmpty(): bool
     {
-        return $this->dice === 0 && $this->dieFaces === null && ! $this->rerollFailures;
+        return $this->dice === 0 && $this->dieFaces === null && $this->bumps === 0;
     }
 
     /**
@@ -88,6 +100,43 @@ readonly class RollModifiers
     }
 
     /**
+     * Put the +1s on the dice, once they have been thrown.
+     *
+     * Each goes on the highest die that is *not* yet a success, which is where
+     * it can do something: a 4 one short of the threshold becomes a 5, and a 2
+     * becomes a 3 and is still nothing. That is also optimal play, so applying
+     * them here rather than asking takes no decision off anybody - a player
+     * choosing for themselves would put them in exactly these places.
+     *
+     * A bump with nowhere useful to go is spent anyway rather than refused:
+     * the card was played, and whether that was a waste is the player's
+     * business.
+     *
+     * @param  array<int, int>  $faces
+     * @return array<int, int>
+     */
+    public function bump(array $faces, int $successOn): array
+    {
+        if ($this->bumps < 1) {
+            return $faces;
+        }
+
+        // Highest first, so the ones closest to succeeding are nudged first.
+        $failing = array_keys(array_filter(
+            $faces,
+            static fn (int $face): bool => $face < $successOn,
+        ));
+
+        usort($failing, static fn (int $a, int $b): int => $faces[$b] <=> $faces[$a]);
+
+        foreach (array_slice($failing, 0, $this->bumps) as $index) {
+            $faces[$index]++;
+        }
+
+        return $faces;
+    }
+
+    /**
      * The same thing in a sentence, naming only what was actually changed.
      */
     public function explain(): string
@@ -102,22 +151,26 @@ readonly class RollModifiers
             $parts[] = sprintf('rolled as d%d', $this->dieFaces);
         }
 
-        if ($this->rerollFailures) {
-            $parts[] = 'failures rerolled once';
+        if ($this->bumps > 0) {
+            $parts[] = sprintf(
+                '%+d on %s',
+                $this->bumps,
+                $this->bumps === 1 ? 'one die' : sprintf('%d dice', $this->bumps),
+            );
         }
 
         return $parts === [] ? 'nothing' : implode(', ', $parts);
     }
 
     /**
-     * @return array{dice: int, die_faces: int|null, reroll_failures: bool}
+     * @return array{dice: int, die_faces: int|null, bumps: int}
      */
     public function toArray(): array
     {
         return [
             'dice' => $this->dice,
             'die_faces' => $this->dieFaces,
-            'reroll_failures' => $this->rerollFailures,
+            'bumps' => $this->bumps,
         ];
     }
 }

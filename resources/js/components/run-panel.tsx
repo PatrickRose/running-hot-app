@@ -44,6 +44,7 @@ import {
     play as playEquipment,
     store as equipItems,
 } from '@/routes/runs/equipment';
+import { update as updateSkills } from '@/routes/runs/skills';
 import type {
     RunCard,
     RunConsequenceEffect,
@@ -834,7 +835,10 @@ function EquipDesk({ run }: { run: RunView }) {
             <GroupLoadouts run={run} />
 
             {equipment.hands.map((hand) => (
-                <EquipForm key={hand.character_id} run={run} hand={hand} />
+                <div key={hand.character_id} className="flex flex-col gap-3">
+                    <EquipForm run={run} hand={hand} />
+                    <SkillAdjustment run={run} hand={hand} />
+                </div>
             ))}
         </section>
     );
@@ -999,13 +1003,94 @@ function PlayEquipmentDesk({ run }: { run: RunView }) {
             <GroupLoadouts run={run} />
 
             {hands.map((hand) => (
-                <PlayEquipmentForm
-                    key={hand.character_id}
-                    run={run}
-                    hand={hand}
-                />
+                <div key={hand.character_id} className="flex flex-col gap-3">
+                    <PlayEquipmentForm run={run} hand={hand} />
+                    <SkillAdjustment run={run} hand={hand} />
+                </div>
             ))}
         </section>
+    );
+}
+
+/**
+ * What a Runner's Equipment is worth to their skills, for this run.
+ *
+ * A card reading "+2 Brute" changes the *skill*, and that is not the same as
+ * adding dice: 3.4.2 halves a skill on the way into the pool for everybody who
+ * is not leading, so +2 Brawn is two dice to the Run Leader and one to anybody
+ * else. The Leader's per-roll boxes on the challenge form are the other thing,
+ * for a card that really does say "+1 die for this roll".
+ *
+ * Declared rather than read off the cards, like everything else here — and set
+ * rather than added to, so a number typed wrong is corrected by sending the
+ * right one. The pool above re-reads itself the moment this lands.
+ */
+function SkillAdjustment({ run, hand }: { run: RunView; hand: RunHand }) {
+    const [brawn, setBrawn] = useState(String(hand.brawn_adjustment));
+    const [hack, setHack] = useState(String(hand.hack_adjustment));
+    const { busy, refusal, post } = useRunAction();
+
+    const changed =
+        brawn !== String(hand.brawn_adjustment) ||
+        hack !== String(hand.hack_adjustment);
+
+    return (
+        <form
+            className="flex flex-col gap-2 border-l-2 pl-3"
+            onSubmit={(event) => {
+                event.preventDefault();
+                post(updateSkills(run.id), {
+                    character_id: hand.character_id,
+                    brawn_adjustment: brawn === '' ? 0 : Number(brawn),
+                    hack_adjustment: hack === '' ? 0 : Number(hack),
+                });
+            }}
+        >
+            <p className="text-sm font-medium">
+                {hand.name}&rsquo;s skills for this run
+            </p>
+
+            <Refusal message={refusal} />
+
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="flex flex-col gap-1">
+                    <Label htmlFor={`brawn-${run.id}-${hand.character_id}`}>
+                        Brawn
+                    </Label>
+                    <Input
+                        id={`brawn-${run.id}-${hand.character_id}`}
+                        type="number"
+                        className="w-20"
+                        value={brawn}
+                        placeholder="0"
+                        onChange={(event) => setBrawn(event.target.value)}
+                    />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <Label htmlFor={`hack-${run.id}-${hand.character_id}`}>
+                        Hack
+                    </Label>
+                    <Input
+                        id={`hack-${run.id}-${hand.character_id}`}
+                        type="number"
+                        className="w-20"
+                        value={hack}
+                        placeholder="0"
+                        onChange={(event) => setHack(event.target.value)}
+                    />
+                </div>
+                <Button type="submit" size="sm" disabled={busy || !changed}>
+                    Set
+                </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+                What your cards add to your skills, not to your dice — a skill
+                is halved for everyone who is not leading, so the pool counts it
+                properly. A card that grants dice for one roll goes on the
+                Leader&rsquo;s form instead.
+            </p>
+        </form>
     );
 }
 
@@ -1937,7 +2022,7 @@ function LeaderDesk({ run }: { run: RunView }) {
     // invented mid-game would get nothing. See App\Support\Runs\RollModifiers.
     const [extraDice, setExtraDice] = useState('');
     const [dieFaces, setDieFaces] = useState('');
-    const [reroll, setReroll] = useState(false);
+    const [bumps, setBumps] = useState('');
     const { busy, refusal, post } = useRunAction();
 
     return (
@@ -1971,7 +2056,7 @@ function LeaderDesk({ run }: { run: RunView }) {
                                 extraDice === '' ? 0 : Number(extraDice),
                             die_faces:
                                 dieFaces === '' ? null : Number(dieFaces),
-                            reroll_failures: reroll,
+                            bumps: bumps === '' ? 0 : Number(bumps),
                         });
                     }}
                 >
@@ -2038,23 +2123,32 @@ function LeaderDesk({ run }: { run: RunView }) {
                                 ))}
                             </select>
                         </div>
-                        <label className="flex items-center gap-2 pb-2 text-sm">
-                            <input
-                                type="checkbox"
-                                checked={reroll}
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor={`bumps-${run.id}`}>
+                                +1 on a die
+                            </Label>
+                            <Input
+                                id={`bumps-${run.id}`}
+                                type="number"
+                                min={0}
+                                className="w-24"
+                                value={bumps}
+                                placeholder="0"
                                 onChange={(event) =>
-                                    setReroll(event.target.checked)
+                                    setBumps(event.target.value)
                                 }
                             />
-                            Reroll failures once
-                        </label>
+                        </div>
                     </fieldset>
 
                     <p className="w-full text-xs text-muted-foreground">
                         Security has already thrown theirs. The dice are rolled
                         on the server and every face is kept. Anything your
                         Equipment grants goes in the three boxes above — the
-                        cards are not read for you.
+                        cards are not read for you. A &ldquo;+1 on a die&rdquo;
+                        lands after the roll, on whichever die it can turn into
+                        a success; a card that raises a <em>skill</em> goes on
+                        your own desk below instead.
                     </p>
                 </form>
             )}

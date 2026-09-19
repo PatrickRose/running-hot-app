@@ -299,10 +299,13 @@ class RunnerEquipmentTest extends TestCase
     }
 
     /**
-     * Mind jack, and nothing else on the sheet: "Retry any failed rolls once."
-     * The failures are thrown again and the new faces stand.
+     * Armour, and the cards like it: "Add +1 to one of your dice."
+     *
+     * A face nudged after it has been thrown rather than a die added to the
+     * pool - which is the only way a 4 becomes the success it was one short
+     * of. Nothing on the sheet rerolls a failure.
      */
-    public function test_a_reroll_throws_the_failures_again(): void
+    public function test_a_plus_one_lands_on_the_die_it_can_turn_into_a_success(): void
     {
         $runner = $this->runner(['brawn' => 4]);
         $run = $this->begun($runner);
@@ -311,18 +314,70 @@ class RunnerEquipmentTest extends TestCase
         $this->dice->willRoll(1, 1);
         $this->engine()->defend($run->refresh(), 1);
 
-        // Four dice: one hits, three miss. The three are thrown again and all
-        // three land, so four successes off a roll that started with one.
-        $this->dice->will([8, 1, 1, 1]);
-        $this->dice->will([8, 8, 8]);
+        // One hit and a 4 that missed by one, plus two that are nowhere near.
+        $this->dice->will([8, 4, 2, 1]);
 
         $outcome = $this->engine()->challenge(
             $run->refresh(),
             RunnerSkill::Brawn,
-            new RollModifiers(rerollFailures: true),
+            new RollModifiers(bumps: 1),
         );
 
-        $this->assertSame(4, $outcome->runnersRoll->successes);
+        // The +1 goes on the 4, not on the 2: two successes, not one.
+        $this->assertSame(2, $outcome->runnersRoll->successes);
+        $this->assertSame([8, 5, 2, 1], $outcome->runnersRoll->faces);
+    }
+
+    /**
+     * Each +1 goes on a different die, because the card says "one of your
+     * dice". Whether two may stack on one die is printed nowhere and is
+     * Control's call.
+     */
+    public function test_two_plus_ones_land_on_two_different_dice(): void
+    {
+        $runner = $this->runner(['brawn' => 4]);
+        $run = $this->begun($runner);
+
+        $this->engine()->activate($run->refresh());
+        $this->dice->willRoll(1, 1);
+        $this->engine()->defend($run->refresh(), 1);
+
+        $this->dice->will([4, 4, 1, 1]);
+
+        $outcome = $this->engine()->challenge(
+            $run->refresh(),
+            RunnerSkill::Brawn,
+            new RollModifiers(bumps: 2),
+        );
+
+        $this->assertSame([5, 5, 1, 1], $outcome->runnersRoll->faces);
+        $this->assertSame(2, $outcome->runnersRoll->successes);
+    }
+
+    /**
+     * A +1 with nowhere useful to go is spent rather than refused: the card
+     * was played, and whether that was a waste is the player's business.
+     */
+    public function test_a_plus_one_with_nothing_to_rescue_is_still_spent(): void
+    {
+        $runner = $this->runner(['brawn' => 2]);
+        $run = $this->begun($runner);
+
+        $this->engine()->activate($run->refresh());
+        $this->dice->willRoll(1, 1);
+        $this->engine()->defend($run->refresh(), 1);
+
+        $this->dice->will([8, 8]);
+
+        $outcome = $this->engine()->challenge(
+            $run->refresh(),
+            RunnerSkill::Brawn,
+            new RollModifiers(bumps: 1),
+        );
+
+        // Both already succeeded, so there is no failing die to nudge.
+        $this->assertSame([8, 8], $outcome->runnersRoll->faces);
+        $this->assertSame(2, $outcome->runnersRoll->successes);
     }
 
     /**

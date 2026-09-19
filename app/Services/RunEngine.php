@@ -422,6 +422,73 @@ class RunEngine
     }
 
     /**
+     * Set what a Runner's Equipment is doing to their skills on this run.
+     *
+     * A card that reads "+2 Brute" changes the *skill*, not the dice, and the
+     * difference matters: 3.4.2 halves a skill on the way into the pool for
+     * everybody who is not leading, so +2 Brawn is two dice to the Run Leader
+     * and one to everybody else. App\Support\Runs\RollModifiers cannot say
+     * that - it adds dice to a single roll - so this is its own thing, and it
+     * lasts the run rather than the roll.
+     *
+     * **Declared, not parsed**, for the reason nothing else about a card is:
+     * the player is holding it and reads it. And **set** rather than added to,
+     * so a number typed wrong is corrected by sending the right one, which is
+     * the choice equipping a loadout and handing cards to the Council Chair
+     * both make.
+     *
+     * Settable while the run is under way, because a This-run card is played
+     * in the middle of one - and refused once it has ended, when there is no
+     * pool left to change.
+     */
+    public function adjustSkills(
+        Run $run,
+        Character $runner,
+        int $brawn,
+        int $hack,
+        ?User $actor = null,
+    ): RunParticipant {
+        if (! in_array($run->status, [RunStatus::Submitted, RunStatus::Running], true)) {
+            throw ValidationException::withMessages([
+                'skills' => 'That run is over, so there is no pool left to change.',
+            ]);
+        }
+
+        $participant = $run->participants->firstWhere('character_id', $runner->id);
+
+        if ($participant === null) {
+            throw ValidationException::withMessages([
+                'skills' => sprintf('%s is not on this run.', $runner->name),
+            ]);
+        }
+
+        $participant->update([
+            'brawn_adjustment' => $brawn,
+            'hack_adjustment' => $hack,
+        ]);
+
+        $this->record(
+            $run,
+            RunEvent::TYPE_SKILLS_ADJUSTED,
+            $brawn === 0 && $hack === 0
+                ? sprintf('%s is running on their own skills again.', $runner->name)
+                : sprintf(
+                    '%s is running at %s for this run.',
+                    $runner->name,
+                    collect([
+                        $brawn === 0 ? null : sprintf('%+d Brawn', $brawn),
+                        $hack === 0 ? null : sprintf('%+d Hack', $hack),
+                    ])->filter()->join(' and '),
+                ),
+            actor: $actor,
+            character: $runner,
+            payload: ['brawn' => $brawn, 'hack' => $hack],
+        );
+
+        return $participant->refresh();
+    }
+
+    /**
      * Take one copy of an Equipment card out of a Runner's hand.
      *
      * The count itself belongs to App\Services\EquipmentService, which is the
@@ -1002,16 +1069,21 @@ class RunEngine
             ]);
         }
 
+        $leading = $runners->firstWhere('character_id', $leader->id);
+
         $others = $runners
             ->reject(fn (RunParticipant $p): bool => $p->character_id === $leader->id)
             ->mapWithKeys(fn (RunParticipant $p): array => [$p->character_id => [
-                'skill' => (int) $p->character->getAttribute($skill->column()),
-                'wounded' => $p->character->wounds > 0,
+                'skill' => $p->skill($skill),
+                'wounded' => $p->isWounded(),
             ]])
             ->all();
 
+        // Read off the participant rather than the character, so whatever
+        // their Equipment is doing to this skill is in the pool that is
+        // actually thrown - and is the same number the screen quoted.
         $pool = DicePool::for(
-            leaderSkill: (int) $leader->getAttribute($skill->column()),
+            leaderSkill: $leading?->skill($skill) ?? 0,
             leaderWounded: $leader->wounds > 0,
             others: $others,
         );
@@ -1049,26 +1121,11 @@ class RunEngine
 
             $runnerFaces = $this->dice->roll($count, $faces);
 
-            // Mind jack, and nothing else on the sheet: "Retry any failed rolls
-            // once". The failures are thrown again and the new faces stand,
-            // which is what retrying a die means - a reroll that kept the
-            // better of the two would be a different card.
-            if ($modifiers->rerollFailures) {
-                $failed = count(array_filter(
-                    $runnerFaces,
-                    fn (int $face): bool => $face < DicePool::SUCCESS_ON,
-                ));
-
-                if ($failed > 0) {
-                    $runnerFaces = [
-                        ...array_values(array_filter(
-                            $runnerFaces,
-                            fn (int $face): bool => $face >= DicePool::SUCCESS_ON,
-                        )),
-                        ...$this->dice->roll($failed, $faces),
-                    ];
-                }
-            }
+            // Armour, and the cards like it: "Add +1 to one of your dice". A
+            // face nudged after it has been thrown rather than a die added to
+            // the pool, so the faces kept below are the ones that decided the
+            // challenge. Nothing on the sheet rerolls a failure.
+            $runnerFaces = $modifiers->bump($runnerFaces, DicePool::SUCCESS_ON);
 
             $runnerSuccesses = DicePool::countSuccesses($runnerFaces);
             $won = DicePool::runnersWin($runnerSuccesses, $securitySuccesses);
@@ -2323,16 +2380,22 @@ class RunEngine
      */
     protected function accessPool(Run $run, Character $runner): DicePool
     {
-        $others = $run->activeParticipants()
+        $active = $run->activeParticipants();
+        $spending = $active->firstWhere('character_id', $runner->id);
+
+        $others = $active
             ->reject(fn (RunParticipant $p): bool => $p->character_id === $runner->id)
             ->mapWithKeys(fn (RunParticipant $p): array => [$p->character_id => [
-                'skill' => $p->character->brawn + $p->character->hack,
-                'wounded' => $p->character->wounds > 0,
+                'skill' => $p->combinedSkill(),
+                'wounded' => $p->isWounded(),
             ]])
             ->all();
 
+        // A card raising Brawn raises it here too: 3.4.3 rolls both skills
+        // added, so Equipment reaches an access exactly as it reaches a
+        // challenge.
         return DicePool::for(
-            leaderSkill: $runner->brawn + $runner->hack,
+            leaderSkill: $spending?->combinedSkill() ?? $runner->brawn + $runner->hack,
             leaderWounded: $runner->wounds > 0,
             others: $others,
         );

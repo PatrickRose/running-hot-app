@@ -825,13 +825,42 @@ places it in front of you, and the engine refuses it once the run has gone in.
 A This-run or Single-use card is played during a step, one per Runner per
 *step* rather than per run, which is what the worked examples make it. And what
 either card then *does* is declared on the challenge form, in three boxes:
-extra dice, die size, and rerolling failures once.
+extra dice, die size, and +1s to put on dice already rolled.
 
 **Declared rather than parsed, for the reason nothing else here is parsed
 either.** The seventy-four printed effects would be a second rulebook to keep
 in step, and a card Control invented mid-game would get nothing from it. The
 player is holding the card; `App\Support\Runs\RollModifiers` takes what they
 say it grants this roll.
+
+**A skill and a die are different things, and the difference is the halving.**
+3.4.2 takes half of a skill rounded down for everybody who is not leading, so
+"+2 Brute" is two dice to the Run Leader and one to anybody else, while "+1 die
+for this roll" is one die to whoever rolls. So a card that changes a *skill*
+goes on `run_participants.brawn_adjustment` / `hack_adjustment` and lasts the
+run; a card that changes the *dice* goes in `RollModifiers` and lasts the roll.
+Putting a skill through `RollModifiers` would quietly pay a non-leader double.
+
+The adjustment sits on the participant rather than the character because Brawn
+and Hack are Trackers - permanent, ledgered, argued about three turns later -
+and a Shiv is carried into one Facility and out again. `RunParticipant::skill()`
+is the one place the two are added, which is what keeps the pool the screen
+quotes and the pool the engine throws from disagreeing: the challenge roll, the
+access roll and the readout all go through it.
+
+**A "+1 to one of your dice" is not a die in the pool.** Armour's effect lands
+*after* the throw, on a face rather than on the count, which is the only way a
+4 becomes the success it was one short of. `RollModifiers::bump()` puts each +1
+on the highest die that is not yet a success - which is where it can do
+something and is also optimal play, so applying it rather than asking takes no
+decision off anybody. One per die, because the card says "one of your dice";
+whether two may stack on one die is printed nowhere and is Control's call.
+
+**Nothing on the sheet rerolls a failure.** A `rerollFailures` flag was built
+off `EEP001` Mind jack's "Retry any failed rolls once" and has been taken out -
+that is not a mechanic this game has. Note the catalogue still carries that
+sentence as the card's printed effect, which wants checking against the card
+sheet.
 
 **Both acts are `act` plus a check that the character named is one you hold.**
 `RunPolicy::act` only asks whether you are on this run, which every Runner on

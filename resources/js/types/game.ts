@@ -1212,6 +1212,13 @@ export type RunHand = {
     /** Whether this Runner has already played a card during this pass and step. */
     played_this_step: boolean;
     left: boolean;
+    /**
+     * What this Runner has declared their Equipment is worth to each skill for
+     * this run. A skill rather than dice: 3.4.2 halves it on the way into the
+     * pool for everybody who is not leading.
+     */
+    brawn_adjustment: number;
+    hack_adjustment: number;
 };
 
 export type RunEquipmentView = {

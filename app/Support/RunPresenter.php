@@ -242,15 +242,20 @@ class RunPresenter
 
         $pools = [];
 
+        $leading = $runners->firstWhere('character_id', $leader->id);
+
         foreach (RunnerSkill::cases() as $skill) {
+            // Off the participant, because a Runner's Equipment changes what
+            // their skill is worth on this run - and the number quoted here
+            // has to be the number RunEngine::challenge actually throws.
             $pools[$skill->value] = DicePool::for(
-                leaderSkill: (int) $leader->getAttribute($skill->column()),
+                leaderSkill: $leading?->skill($skill) ?? 0,
                 leaderWounded: $leader->wounds > 0,
                 others: $others
                     ->mapWithKeys(fn (RunParticipant $participant): array => [
                         $participant->character_id => [
-                            'skill' => (int) $participant->character->getAttribute($skill->column()),
-                            'wounded' => $participant->character->wounds > 0,
+                            'skill' => $participant->skill($skill),
+                            'wounded' => $participant->isWounded(),
                         ],
                     ])
                     ->all(),
@@ -663,6 +668,11 @@ class RunPresenter
                         && $item->step === $cursor->step,
                 ),
                 'left' => ! $participant->isActive(),
+                // What this Runner has declared their Equipment is worth, so
+                // the control opens on the number already set rather than on
+                // nought and quietly wiping it.
+                'brawn_adjustment' => $participant->brawn_adjustment,
+                'hack_adjustment' => $participant->hack_adjustment,
             ];
         }
 

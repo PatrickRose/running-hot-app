@@ -267,7 +267,8 @@ class RunController extends Controller
             // effects - see App\Support\Runs\RollModifiers.
             'extra_dice' => ['nullable', 'integer', 'min:-9', 'max:9'],
             'die_faces' => ['nullable', 'integer', Rule::in(RollModifiers::ALLOWED_FACES)],
-            'reroll_failures' => ['nullable', 'boolean'],
+            // +1s put on dice already rolled, not dice added to the pool.
+            'bumps' => ['nullable', 'integer', 'min:0', 'max:20'],
         ]);
 
         $outcome = $this->runs->challenge(
@@ -276,7 +277,7 @@ class RunController extends Controller
             new RollModifiers(
                 dice: (int) ($validated['extra_dice'] ?? 0),
                 dieFaces: isset($validated['die_faces']) ? (int) $validated['die_faces'] : null,
-                rerollFailures: (bool) ($validated['reroll_failures'] ?? false),
+                bumps: (int) ($validated['bumps'] ?? 0),
             ),
             $request->user(),
         );
@@ -605,6 +606,51 @@ class RunController extends Controller
             $runner->name,
             $card->name,
         ));
+    }
+
+    /**
+     * What a Runner's Equipment is doing to their skills for this run (3.4.1).
+     *
+     * Its own act rather than part of playing a card, because the two do not
+     * line up: a permanent item equipped before the run changes a skill for
+     * all of it, a This-run card changes it from the moment it is played, and
+     * a Single-use card may change nothing at all. The player reads their own
+     * cards and says what they add up to.
+     *
+     * Set rather than adjusted, so correcting a number is sending the right
+     * one. `act` plus the character check, as everything else here is.
+     */
+    public function adjustSkills(Run $run, Request $request): RedirectResponse
+    {
+        Gate::authorize('act', $run);
+
+        $validated = $request->validate([
+            'character_id' => ['required', 'integer'],
+            // Bounded either way: a card may cost a skill as readily as give
+            // one, and nothing on the sheet moves a skill by more than a few.
+            'brawn_adjustment' => ['required', 'integer', 'min:-20', 'max:20'],
+            'hack_adjustment' => ['required', 'integer', 'min:-20', 'max:20'],
+        ]);
+
+        /** @var Character $runner */
+        $runner = Character::query()->findOrFail($validated['character_id']);
+
+        $this->authoriseActingAs($request, $run, $runner, 'skills to set');
+
+        $this->runs->adjustSkills(
+            $run,
+            $runner,
+            (int) $validated['brawn_adjustment'],
+            (int) $validated['hack_adjustment'],
+            $request->user(),
+        );
+
+        return back()->with(
+            'status',
+            $run->refresh()->events()->where('type', RunEvent::TYPE_SKILLS_ADJUSTED)
+                ->latest('id')->value('description')
+                ?? sprintf('%s\'s skills updated.', $runner->name),
+        );
     }
 
     /**
