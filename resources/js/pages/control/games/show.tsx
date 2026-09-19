@@ -24,6 +24,7 @@ import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import { index as researchIndex } from '@/routes/control/research';
+import { index as shopIndex } from '@/routes/control/shop';
 import type {
     CharacterSubject,
     ControlMember,
@@ -133,6 +134,14 @@ export default function ControlGameShow({
                             }
                         >
                             Card lists
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(shopIndex.url({ game: game.id }))
+                            }
+                        >
+                            Shop
                         </Button>
                         <Button
                             variant="ghost"

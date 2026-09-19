@@ -87,7 +87,7 @@ class DefaultRosterTest extends TestCase
         $expected = [
             'Facers' => 5,
             'g33ks' => 5,
-            'Dancers' => 6,
+            'Dancers' => 4,
             'Gruffsters' => 4,
         ];
 
@@ -209,8 +209,8 @@ class DefaultRosterTest extends TestCase
         $this->assertFalse($created['skipped']);
         $this->assertSame(5, $created['corporations']);
         $this->assertSame(4, $created['gangs']);
-        $this->assertSame(41, $created['characters']);
-        $this->assertSame(41, $game->characters()->count());
+        $this->assertSame(39, $created['characters']);
+        $this->assertSame(39, $game->characters()->count());
     }
 
     /**
@@ -268,7 +268,7 @@ class DefaultRosterTest extends TestCase
 
         $this->assertSame(5, $game->corporations()->count());
         $this->assertSame(4, $game->gangs()->count());
-        $this->assertSame(41, $game->characters()->count());
+        $this->assertSame(39, $game->characters()->count());
     }
 
     /**
@@ -290,7 +290,7 @@ class DefaultRosterTest extends TestCase
 
         $this->assertSame(5, $game->corporations()->count());
         $this->assertSame(4, $game->gangs()->count());
-        $this->assertSame(41, $game->characters()->count());
+        $this->assertSame(39, $game->characters()->count());
     }
 
     public function test_control_can_ask_for_an_empty_game(): void

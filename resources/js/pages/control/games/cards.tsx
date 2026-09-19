@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import { CardFacesDialog } from '@/components/card-faces-dialog';
 import { EquipmentCardForm } from '@/components/equipment-card-form';
+import { EquipmentHoldings } from '@/components/equipment-holdings';
 import Heading from '@/components/heading';
 import {
     ResearchSuitCost,
@@ -25,6 +26,7 @@ import { destroy as destroyTechnology } from '@/routes/control/technologies';
 import type {
     EquipmentCardSummary,
     FacilityTypeSummary,
+    GangEquipmentHoldings,
     GameSummary,
     ProtectionCardSummary,
     ResearchSuitSummary,
@@ -36,6 +38,7 @@ type Props = {
     game: GameSummary;
     protectionCards: ProtectionCardSummary[];
     equipment: EquipmentCardSummary[];
+    equipmentHoldings: GangEquipmentHoldings[];
     technologies: TechnologySummary[];
     researchSuits: ResearchSuitSummary[];
     technologyTrees: TechnologyTreeSummary[];
@@ -46,18 +49,22 @@ type Props = {
 /**
  * All three of the game's card lists.
  *
- * Read-only. What this replaces is Control leafing through a printed card list
- * while ruling on something at the table, which is why the Protection Cards lead:
- * a Run turns on a challenge and its consequence, and that is the thing most
- * likely to be looked up in a hurry.
+ * Mostly to look at: what this replaces is Control leafing through a printed
+ * card list while ruling on something at the table, which is why the Protection
+ * Cards lead - a Run turns on a challenge and its consequence, and that is the
+ * thing most likely to be looked up in a hurry.
  *
- * The Protection Card catalogue is editable on the Facility Defence page
- * instead, beside installing - the thing that makes a card matter.
+ * The one thing set here is who is *carrying* which Equipment, which sits under
+ * the Equipment list because that is where Control is already looking when a
+ * Runner asks for a card. A Corporation's Protection Card holdings are the same
+ * idea a page away, on Facility Defence, beside installing - the thing that
+ * makes one of those matter.
  */
 export default function ControlCards({
     game,
     protectionCards,
     equipment,
+    equipmentHoldings,
     technologies,
     researchSuits,
     technologyTrees,
@@ -257,6 +264,30 @@ export default function ControlCards({
                         </div>
 
                         <EquipmentCardForm gameId={game.id} />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Who is carrying what</CardTitle>
+                        <CardDescription>
+                            Equipment is held per Runner, because that is what
+                            the rulebook caps and what it takes away — three
+                            equipped permanent items are theirs, and their
+                            permanent Equipment goes to the Security player if
+                            they are carried out of a Facility. Set a count
+                            outright: buying from the market, selling to another
+                            Runner, splitting a haul and being handed a card for
+                            a job that went well all happen at the table, so
+                            what is recorded here is where the count ended up.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <EquipmentHoldings
+                            gameId={game.id}
+                            holdings={equipmentHoldings}
+                            cards={equipment}
+                        />
                     </CardContent>
                 </Card>
 

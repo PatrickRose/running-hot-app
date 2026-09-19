@@ -110,6 +110,16 @@ class Run extends Model
         return $this->hasMany(RunParticipant::class)->orderBy('position');
     }
 
+    /**
+     * Equipment brought on this run, and played during it (rulebook 3.4.1).
+     *
+     * @return HasMany<RunEquipment, $this>
+     */
+    public function equipment(): HasMany
+    {
+        return $this->hasMany(RunEquipment::class);
+    }
+
     /** @return HasMany<RunEvent, $this> */
     public function events(): HasMany
     {

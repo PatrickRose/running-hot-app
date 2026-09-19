@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\CharacterRole;
+use App\Enums\EquipmentCategory;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
 use App\Enums\RunAccessKind;
@@ -10,12 +11,15 @@ use App\Enums\RunnerSkill;
 use App\Enums\RunStatus;
 use App\Models\Character;
 use App\Models\Corporation;
+use App\Models\EquipmentCardType;
+use App\Models\EquipmentHolding;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\Game;
 use App\Models\Run;
 use App\Models\RunAccess;
 use App\Models\RunDiceRoll;
+use App\Models\RunEquipment;
 use App\Models\RunEvent;
 use App\Models\RunParticipant;
 use App\Models\TechnologyHolding;
@@ -238,15 +242,20 @@ class RunPresenter
 
         $pools = [];
 
+        $leading = $runners->firstWhere('character_id', $leader->id);
+
         foreach (RunnerSkill::cases() as $skill) {
+            // Off the participant, because a Runner's Equipment changes what
+            // their skill is worth on this run - and the number quoted here
+            // has to be the number RunEngine::challenge actually throws.
             $pools[$skill->value] = DicePool::for(
-                leaderSkill: (int) $leader->getAttribute($skill->column()),
+                leaderSkill: $leading?->skill($skill) ?? 0,
                 leaderWounded: $leader->wounds > 0,
                 others: $others
                     ->mapWithKeys(fn (RunParticipant $participant): array => [
                         $participant->character_id => [
-                            'skill' => (int) $participant->character->getAttribute($skill->column()),
-                            'wounded' => $participant->character->wounds > 0,
+                            'skill' => $participant->skill($skill),
+                            'wounded' => $participant->isWounded(),
                         ],
                     ])
                     ->all(),
@@ -497,6 +506,11 @@ class RunPresenter
                     'left_reason' => $participant->left_reason?->label(),
                 ])->all(),
 
+            // What the group is carrying, and what the viewer's own Runners
+            // still have in hand. Null for the Security side, who have no
+            // business reading either.
+            'equipment' => $this->equipment($run, $user, $cursor),
+
             // The budget is the Corporation's business, and a Runner who could
             // read it would know exactly how much defence was left in the
             // Facility.
@@ -530,7 +544,11 @@ class RunPresenter
             // seen stay a count, which is what keeps the blind draw blind.
             'known_technologies' => $this->knownTechnologies($run),
 
-            'log' => $this->log($run, $privileged),
+            // The log needs the kit question as well as the Security one,
+            // because what a Runner walked in wearing was chosen in Secret
+            // (3.4.1) and naming it here would hand Security the loadout the
+            // payload above carefully withholds.
+            'log' => $this->log($run, $privileged, $this->seesRunnerKit($run, $user)),
         ];
     }
 
@@ -561,6 +579,131 @@ class RunPresenter
             'is_empty' => $slip->isEmpty(),
             'ends_the_run' => $slip->endsTheRun(),
             'ignore_cost' => $run->ignored_end_the_run + 1,
+        ];
+    }
+
+    /**
+     * What the Runners are carrying (rulebook 3.4.1).
+     *
+     * Two tiers, and the line is where the cards physically are at the table.
+     *
+     * **What is equipped is the whole group's to see**, because 3.4.1 has you
+     * equip permanent items "by placing them in front of you" - face up, on
+     * the table, where the four people going in can all read them. A group
+     * deciding who takes a consequence needs to know who is wearing the
+     * Armour.
+     *
+     * **A hand is its owner's.** The cards you have not played are still in
+     * your pocket, and the same reasoning that gives `/equipment` only your own
+     * seats applies here. Control sees every hand, because Control always does.
+     *
+     * **Security sees none of it**, equipped items included. This is the one
+     * place `$privileged` is the wrong question: it means "the Security side or
+     * Control", and Security reading the Runners' kit would know exactly what
+     * was coming down the corridor. So the question asked here is whether the
+     * viewer is *on the run*, or Control.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function equipment(Run $run, User $user, RunCursor $cursor): ?array
+    {
+        if (! $this->seesRunnerKit($run, $user)) {
+            return null;
+        }
+
+        $isControl = $user->isControlFor($run->game);
+
+        $brought = $run->equipment()->with('cardType')->get();
+
+        $equipped = [];
+        $hands = [];
+
+        foreach ($run->participants as $participant) {
+            $runner = $participant->character;
+
+            $equipped[] = [
+                'character_id' => $runner->id,
+                'name' => $runner->name,
+                'cards' => $brought
+                    ->where('character_id', $runner->id)
+                    ->filter(fn (RunEquipment $item): bool => $item->wasEquippedBeforehand())
+                    ->map(fn (RunEquipment $item): array => $this->equipmentCard($item->cardType))
+                    ->values()
+                    ->all(),
+            ];
+
+            if (! $isControl && $runner->user_id !== $user->id) {
+                continue;
+            }
+
+            $held = $runner->equipmentHoldings()
+                ->where('copies', '>', 0)
+                ->with('cardType')
+                ->get()
+                ->sortBy(fn (EquipmentHolding $holding): string => $holding->cardType->name);
+
+            $hands[] = [
+                'character_id' => $runner->id,
+                'name' => $runner->name,
+                // Split by when a card may be used, because that is the only
+                // thing the screen does differently with them: one set is
+                // chosen before the run and the other played during it.
+                'permanent' => $held
+                    ->filter(fn (EquipmentHolding $holding): bool => $holding->cardType->category === EquipmentCategory::Permanent)
+                    ->map(fn (EquipmentHolding $holding): array => $this->equipmentCard($holding->cardType, $holding->copies))
+                    ->values()
+                    ->all(),
+                'playable' => $held
+                    ->filter(fn (EquipmentHolding $holding): bool => $holding->cardType->category !== EquipmentCategory::Permanent)
+                    ->map(fn (EquipmentHolding $holding): array => $this->equipmentCard($holding->cardType, $holding->copies))
+                    ->values()
+                    ->all(),
+                // One card per Runner per step (3.4.2), counted off the rows
+                // the way everything else on a run is derived. Sent so the
+                // screen can say why the control is closed rather than
+                // refusing the press.
+                'played_this_step' => $brought->contains(
+                    fn (RunEquipment $item): bool => $item->character_id === $runner->id
+                        && $item->pass === $cursor->pass
+                        && $item->step === $cursor->step,
+                ),
+                'left' => ! $participant->isActive(),
+                // What this Runner has declared their Equipment is worth, so
+                // the control opens on the number already set rather than on
+                // nought and quietly wiping it.
+                'brawn_adjustment' => $participant->brawn_adjustment,
+                'hack_adjustment' => $participant->hack_adjustment,
+            ];
+        }
+
+        return [
+            'equipped' => $equipped,
+            'hands' => $hands,
+            // The cap, from the engine rather than written again here.
+            'cap' => RunEngine::EQUIPPED_ITEMS,
+        ];
+    }
+
+    /**
+     * One Equipment card, as both tiers describe it.
+     *
+     * @return array<string, mixed>
+     */
+    private function equipmentCard(EquipmentCardType $card, ?int $copies = null): array
+    {
+        return [
+            'card_type_id' => $card->id,
+            'code' => $card->code,
+            'name' => $card->name,
+            'category' => $card->category->value,
+            'category_label' => $card->category->label(),
+            'category_glyph' => $card->category->glyph(),
+            // The printed effect, because it is what the Runner is reading to
+            // decide - and what they then declare on the challenge form, since
+            // none of the seventy-four is parsed.
+            'effect' => $card->effect,
+            'image_path' => $card->imagePath(),
+            'copies' => $copies,
         ];
     }
 
@@ -644,7 +787,7 @@ class RunPresenter
      *
      * @return array<int, array<string, mixed>>
      */
-    private function log(Run $run, bool $privileged): array
+    private function log(Run $run, bool $privileged, bool $seesKit): array
     {
         $rolls = $run->diceRolls->groupBy('run_event_id');
 
@@ -654,7 +797,7 @@ class RunPresenter
                 'pass' => $event->pass,
                 'step' => $event->step->value,
                 'type' => $event->type,
-                'description' => $this->describe($event, $privileged),
+                'description' => $this->describe($event, $privileged, $seesKit),
                 'character' => $event->character?->name,
                 'at' => $event->created_at?->toIso8601String(),
                 'rolls' => $rolls->get($event->id, collect())
@@ -676,8 +819,21 @@ class RunPresenter
     /**
      * One line of the log, with anything the Runners may not read taken out.
      */
-    private function describe(RunEvent $event, bool $privileged): string
+    private function describe(RunEvent $event, bool $privileged, bool $seesKit): string
     {
+        // What a Runner walked in wearing was chosen in Secret alongside the
+        // target (3.4.1), so it is not Security's to read - and the line is
+        // kept rather than dropped, for the reason a card Security left off is
+        // still logged: something happened, and the log should say so without
+        // naming it. A card *played* during the run is not redacted, because
+        // that one is laid on the table in front of everybody.
+        if (! $seesKit && $event->type === RunEvent::TYPE_EQUIPPED) {
+            return sprintf(
+                '%s equipped what they are carrying.',
+                $event->character->name ?? 'A Runner',
+            );
+        }
+
         if ($privileged) {
             return $event->description;
         }
@@ -687,6 +843,18 @@ class RunPresenter
             RunEvent::TYPE_ACTIVATION_FAILED => 'Security could not afford to switch the card on, so it stayed off.',
             default => $event->description,
         };
+    }
+
+    /**
+     * Whether this viewer may read what the Runners are carrying.
+     *
+     * Deliberately not `$privileged`, which means "the Security side or
+     * Control": Security reading the group's kit would know exactly what was
+     * coming down the corridor, and 3.4.1 has it chosen in Secret.
+     */
+    private function seesRunnerKit(Run $run, User $user): bool
+    {
+        return $this->isOnRun($run, $user) || $user->isControlFor($run->game);
     }
 
     /**
@@ -812,7 +980,7 @@ class RunPresenter
                 'spent' => $state->security_budget_spent,
                 'left' => $state->unspentBudget(),
             ],
-            'log' => $this->log($run, privileged: true),
+            'log' => $this->log($run, privileged: true, seesKit: true),
         ];
     }
 }

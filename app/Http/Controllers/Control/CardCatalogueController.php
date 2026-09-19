@@ -20,6 +20,10 @@ use Inertia\Response;
  * The Protection Card catalogue is editable, but on the Facility Defence page
  * rather than this one - it belongs beside installing, which is the thing that
  * makes a card matter. This is the same list to look at rather than to change.
+ *
+ * The one thing set here is who is *carrying* which Equipment (3.4.1), which
+ * belongs under the Equipment list because that is where Control is already
+ * looking when a Runner asks for a card.
  */
 class CardCatalogueController extends Controller
 {
@@ -29,6 +33,8 @@ class CardCatalogueController extends Controller
             'game' => $presenter->summary($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
             'equipment' => $presenter->equipmentCardTypes($game),
+            // Who is carrying what, which is the one thing this page sets.
+            'equipmentHoldings' => $presenter->equipmentHoldings($game),
             'technologies' => $presenter->technologyTypes($game),
             'researchSuits' => $presenter->researchSuits(),
             // For the forms that add a card: which trees a technology may sit

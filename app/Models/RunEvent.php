@@ -67,6 +67,15 @@ class RunEvent extends Model
 
     public const TYPE_BEGAN = 'began';
 
+    /** Permanent items placed in front of a Runner before the run (3.4.1). */
+    public const TYPE_EQUIPPED = 'equipped';
+
+    /** A This-run or Single-use card played during a step (3.4.1, 3.4.2). */
+    public const TYPE_EQUIPMENT_PLAYED = 'equipment_played';
+
+    /** A Runner's skills changed for this run, by what their Equipment grants. */
+    public const TYPE_SKILLS_ADJUSTED = 'skills_adjusted';
+
     public const TYPE_ACTIVATED = 'activated';
 
     /** Security attempted to activate and could not cover the cost (3.4.2). */

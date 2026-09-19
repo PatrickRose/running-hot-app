@@ -8,6 +8,7 @@ use App\Http\Controllers\Control\ControlMemberController;
 use App\Http\Controllers\Control\CouncilController as ControlCouncilController;
 use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\EquipmentCardTypeController;
+use App\Http\Controllers\Control\EquipmentHoldingController;
 use App\Http\Controllers\Control\FacilityController;
 use App\Http\Controllers\Control\FacilityTypeController;
 use App\Http\Controllers\Control\GameController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Control\ResearchCardController;
 use App\Http\Controllers\Control\ResearchController;
 use App\Http\Controllers\Control\ResearchEquationController;
 use App\Http\Controllers\Control\ResearchSessionController;
+use App\Http\Controllers\Control\ShopController as ControlShopController;
 use App\Http\Controllers\Control\TechnologyHoldingController;
 use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
@@ -25,6 +27,7 @@ use App\Http\Controllers\CouncilBallotController;
 use App\Http\Controllers\CouncilChairController;
 use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
 use App\Http\Controllers\ResearchBoardController;
@@ -32,6 +35,7 @@ use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
 use App\Http\Controllers\RunBoardController;
 use App\Http\Controllers\RunController;
+use App\Http\Controllers\ShopController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -67,6 +71,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('facilities.cards.quote');
     Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
         ->name('facilities.cards.remove');
+
+    // What a Runner is carrying (rulebook 3.4.1). Names no character: a
+    // player sees the hands of whoever they have claimed, and Control sees
+    // everybody, so the viewer is the whole of the question.
+    Route::get('equipment', EquipmentController::class)->name('equipment');
 
     // The research sub-game (rulebook 3.2). None of these names a Corporation:
     // a player has exactly one, so the seat they hold decides which, and the
@@ -117,6 +126,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('runs.consequences.mark');
     Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
         ->name('runs.consequences.store');
+    // What a Runner is taking in, and what they play once inside (3.4.1,
+    // 3.4.2). Each is `act` plus a check that the character named is one this
+    // player holds, because `act` only asks whether you are on the run - and
+    // every Runner on it passes that, so a gangmate's kit would be reachable.
+    Route::post('runs/{run}/equipment', [RunController::class, 'equip'])
+        ->name('runs.equipment.store');
+    Route::post('runs/{run}/equipment/play', [RunController::class, 'playEquipment'])
+        ->name('runs.equipment.play');
+
+    // What that card is doing to your skills for the rest of the run. Its own
+    // route because a skill is halved on the way into the pool for everybody
+    // who is not leading, so it is not the same thing as adding dice to a roll.
+    Route::post('runs/{run}/skills', [RunController::class, 'adjustSkills'])
+        ->name('runs.skills.update');
+
     Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
     Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 
@@ -128,6 +152,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // rulebook makes it its own step: the card is revealed and then decided on.
     Route::post('runs/{run}/accesses/{access}', [RunController::class, 'resolveAccess'])
         ->name('runs.accesses.resolve');
+
+    // The shop (rulebook 3.3.3, and 2.1 for the Runners' market). One page for
+    // both counters, because a user claims characters rather than a side and
+    // plenty of people are at both - which of them they are shown is the
+    // ShopPresenter's answer.
+    Route::get('shop', [ShopController::class, 'index'])->name('shop');
+
+    // Buying one copy. The character is named in the request rather than
+    // inferred, because which seat is standing at the counter decides whose
+    // Credits pay and whose hand the card lands in - and the ShopListingPolicy
+    // is what checks the seat matches the counter, and that the shop is open.
+    Route::post('shop/{listing}/buy', [ShopController::class, 'buy'])->name('shop.buy');
 
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,
@@ -245,6 +281,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::patch('games/{game}/protection-card-holdings', [ProtectionCardHoldingController::class, 'update'])
                     ->name('protection-card-holdings.update');
 
+                // What Equipment each Runner is carrying (rulebook 3.4.1).
+                // Control's to set: the market, a Runner selling to another and
+                // a gang splitting a haul all happen at the table.
+                Route::patch('games/{game}/equipment-holdings', [EquipmentHoldingController::class, 'update'])
+                    ->name('equipment-holdings.update');
+
                 // All three card lists to look at, and the two that are not edited
                 // beside the Facilities to change.
                 Route::get('games/{game}/cards', [CardCatalogueController::class, 'index'])
@@ -335,6 +377,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('control-members.store');
                 Route::delete('games/{game}/control-members/{controlMember}', [ControlMemberController::class, 'destroy'])
                     ->name('control-members.destroy');
+
+                // The shop (rulebook 3.3.3). Control announces what is for
+                // sale, so the list, the prices and the stock are Control's -
+                // and so is unwinding a sale that should not have happened.
+                Route::get('games/{game}/shop', [ControlShopController::class, 'index'])
+                    ->name('shop.index');
+                Route::post('games/{game}/shop', [ControlShopController::class, 'stock'])
+                    ->name('shop.stock');
+                Route::delete('games/{game}/shop/{listing}', [ControlShopController::class, 'destroy'])
+                    ->name('shop.destroy');
+                // Buying for a player who phoned it in, on the same service the
+                // players' own route uses - so every rule still applies.
+                Route::post('games/{game}/shop/{listing}/buy', [ControlShopController::class, 'buy'])
+                    ->name('shop.buy');
+                Route::delete('games/{game}/shop/purchases/{purchase}', [ControlShopController::class, 'refund'])
+                    ->name('shop.refund');
 
                 // The Council (rulebook 3.1). Control's half of it: the deck
                 // and the draw, the remarks on a custom agenda, the sign-off

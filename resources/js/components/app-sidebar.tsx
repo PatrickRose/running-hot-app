@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import {
+    Backpack,
     BookOpen,
     Building2,
     Crosshair,
@@ -7,6 +8,7 @@ import {
     FolderGit2,
     Gavel,
     LayoutGrid,
+    ShoppingCart,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -21,7 +23,15 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { council, dashboard, facilities, research, runs } from '@/routes';
+import {
+    council,
+    dashboard,
+    equipment,
+    facilities,
+    research,
+    runs,
+    shop,
+} from '@/routes';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -41,6 +51,11 @@ const mainNavItems: NavItem[] = [
         icon: Crosshair,
     },
     {
+        title: 'Equipment',
+        href: equipment(),
+        icon: Backpack,
+    },
+    {
         title: 'Council',
         href: council(),
         icon: Gavel,
@@ -49,6 +64,11 @@ const mainNavItems: NavItem[] = [
         title: 'Research',
         href: research(),
         icon: FlaskConical,
+    },
+    {
+        title: 'Shop',
+        href: shop(),
+        icon: ShoppingCart,
     },
 ];
 

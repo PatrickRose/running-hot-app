@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Models\Character;
 use App\Models\Corporation;
+use App\Models\EquipmentCardType;
 use App\Models\Game;
 use App\Models\Gang;
+use App\Models\ProtectionCardType;
 use App\Models\User;
 use App\Services\Dice;
 use App\Services\RandomDice;
@@ -57,6 +59,11 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Tracker adjustments address their subject by alias, so the aliases have to
      * stay stable even if a model is moved or renamed.
+     *
+     * The two card catalogues are here because a shop listing addresses its
+     * card the same way (rulebook 3.3.3): the two counters sell different
+     * things out of different purses, so the listing carries which rather than
+     * a nullable column per family.
      */
     protected function configureMorphMap(): void
     {
@@ -65,6 +72,8 @@ class AppServiceProvider extends ServiceProvider
             'corporation' => Corporation::class,
             'gang' => Gang::class,
             'character' => Character::class,
+            'protection_card_type' => ProtectionCardType::class,
+            'equipment_card_type' => EquipmentCardType::class,
         ]);
     }
 

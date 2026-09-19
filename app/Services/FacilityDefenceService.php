@@ -505,6 +505,56 @@ class FacilityDefenceService
     }
 
     /**
+     * Put one more copy into the Corporation's hand.
+     *
+     * The shop's way in (rulebook 3.3.3), and the counterpart of
+     * EquipmentService::giveCopy. Setting the count outright is Control saying
+     * where it ended up; this is one copy arriving, which is what a purchase
+     * is - so a sale cannot silently overwrite a count that moved underneath
+     * it while the Security player was reading the price.
+     *
+     * The row is created where there was none: a Corporation buying its first
+     * Angel has never held one.
+     */
+    public function giveCopy(Corporation $corporation, ProtectionCardType $cardType): void
+    {
+        $corporation->protectionCardHoldings()->firstOrCreate(
+            ['protection_card_type_id' => $cardType->id],
+            ['copies' => 0],
+        )->increment('copies');
+    }
+
+    /**
+     * Take one copy back out of the Corporation's hand, refusing if it has
+     * none there to take.
+     *
+     * Installing has its own version of this below, which knows the Facility
+     * the card is going into and says so when it refuses. This one is for
+     * everything that takes a copy away without installing it - the shop
+     * unwinding a sale it should not have made - so the caller supplies the
+     * sentence, because "left to install" would be the wrong thing to tell
+     * somebody who was not installing anything.
+     *
+     * A copy already standing in a Facility is not in the hand and will not be
+     * found here. That refusal is the right one: the card exists, it is simply
+     * not the Corporation's to hand back until it comes off the stack.
+     */
+    public function takeCopyFromHand(
+        Corporation $corporation,
+        ProtectionCardType $cardType,
+        string $message,
+    ): void {
+        $taken = $corporation->protectionCardHoldings()
+            ->where('protection_card_type_id', $cardType->id)
+            ->where('copies', '>', 0)
+            ->decrement('copies');
+
+        if ($taken === 0) {
+            throw ValidationException::withMessages(['copies' => $message]);
+        }
+    }
+
+    /**
      * Take one copy out of the Corporation's hand, refusing if it has none.
      *
      * A Corporation with no row for a card holds none of it, which is the same

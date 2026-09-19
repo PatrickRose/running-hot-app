@@ -197,6 +197,45 @@ export type CorporationCardHoldings = Faction & {
     cards: CardHolding[];
 };
 
+/** One Runner's stake in one Equipment card (rulebook 3.4.1). */
+export type EquipmentHolding = {
+    card_type_id: number;
+    code: string | null;
+    name: string;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    category_glyph: string;
+    /** What the card does, as printed. */
+    effect: string;
+    /** Where the artwork lives, or null when there is none on record. */
+    image_path: string | null;
+    /**
+     * Copies in hand. Playing a This-run or Single-use card spends one; a
+     * Permanent item is only lost by being carried out of a Facility.
+     */
+    copies: number;
+};
+
+/** What one Runner is carrying. Per Character, because that is what 3.4.1 caps. */
+export type RunnerEquipment = {
+    character_id: number;
+    name: string;
+    role: 'runner' | 'freelancer';
+    role_label: string;
+    cards: EquipmentHolding[];
+};
+
+/**
+ * One gang's Runners and their hands, or the Freelancers, who run with nobody.
+ */
+export type GangEquipmentHoldings = Faction & {
+    /** Null for the Freelancers, who are grouped together rather than banded. */
+    gang_id: number | null;
+    /** False for that group, whose name is what they are rather than a faction. */
+    has_badge: boolean;
+    runners: RunnerEquipment[];
+};
+
 /** A card Runners carry into a Run (rulebook 3.4.1). */
 export type EquipmentCardSummary = {
     id: number;
@@ -1123,10 +1162,70 @@ export type RunView = {
     participants: RunParticipantView[];
     /** Null for the Runners: how much defence is left is the Corporation's. */
     budget: RunBudget | null;
+    /**
+     * What the group is carrying. Null for the Security side, who have no
+     * business reading either tier of it.
+     */
+    equipment: RunEquipmentView | null;
     can_lead: boolean;
     can_act: boolean;
     can_defend: boolean;
     log: RunEventView[];
+};
+
+/** One Equipment card, as a run describes it (rulebook 3.4.1). */
+export type RunEquipmentCard = {
+    card_type_id: number;
+    code: string | null;
+    name: string;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    category_glyph: string;
+    /**
+     * The printed effect. What it does to a roll is declared on the challenge
+     * form rather than parsed from this — see App\Support\Runs\RollModifiers.
+     */
+    effect: string;
+    image_path: string | null;
+    /** Copies in hand, or null on a card already equipped for this run. */
+    copies: number | null;
+};
+
+/**
+ * What one Runner has in front of them. Visible to the whole group, because
+ * 3.4.1 equips permanent items "by placing them in front of you".
+ */
+export type RunLoadout = {
+    character_id: number;
+    name: string;
+    cards: RunEquipmentCard[];
+};
+
+/** One Runner's own hand. Only ever their own, or every one of them to Control. */
+export type RunHand = {
+    character_id: number;
+    name: string;
+    /** Chosen before the run goes in, capped at `cap`. */
+    permanent: RunEquipmentCard[];
+    /** Played during the run, one per Runner per step. */
+    playable: RunEquipmentCard[];
+    /** Whether this Runner has already played a card during this pass and step. */
+    played_this_step: boolean;
+    left: boolean;
+    /**
+     * What this Runner has declared their Equipment is worth to each skill for
+     * this run. A skill rather than dice: 3.4.2 halves it on the way into the
+     * pool for everybody who is not leading.
+     */
+    brawn_adjustment: number;
+    hack_adjustment: number;
+};
+
+export type RunEquipmentView = {
+    equipped: RunLoadout[];
+    hands: RunHand[];
+    /** The permanent-item cap of 3.4.1, from the engine rather than hardcoded. */
+    cap: number;
 };
 
 export type RunTarget = {
@@ -1162,4 +1261,146 @@ export type RunBoard = {
     yours: RunView[];
     /** Runs coming at this player's Facilities, seen from the Security desk. */
     defending: RunView[];
+};
+
+/**
+ * Where a line of the shop's list stands (rulebook 3.3.3).
+ *
+ * Rumoured is a real line rather than an absent one: a card nobody can buy yet
+ * is still something Security is told about and plans around.
+ */
+export type ShopListingStatus = 'on_sale' | 'rumoured' | 'withdrawn';
+
+/** The Protection Card half of a shop line. */
+export type ShopProtectionCard = {
+    id: number;
+    code: string | null;
+    name: string;
+    image_path: string | null;
+    kind: string;
+    kind_label: string;
+    kind_glyph: string;
+    challenge: string;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+    /** The catalogue's own word on the card, which is a different question. */
+    availability: string;
+    availability_label: string;
+};
+
+/** The Equipment half. */
+export type ShopEquipmentCard = {
+    id: number;
+    code: string | null;
+    name: string;
+    image_path: string | null;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    category_glyph: string;
+    effect: string;
+};
+
+/** One line of the shop's list: a card, a price, and what is left of it. */
+export type ShopListing = {
+    id: number;
+    family: 'protection' | 'equipment';
+    card: ShopProtectionCard | ShopEquipmentCard;
+    price: number;
+    /** Null is a line that never runs out, which is not the same as nought. */
+    stock: number | null;
+    status: ShopListingStatus;
+    status_label: string;
+    /** On sale and in stock. What the buy button is enabled on. */
+    available: boolean;
+    sold_out: boolean;
+    sold_count: number;
+    notes: string | null;
+};
+
+/**
+ * A seat this player can shop with, and the purse it spends from.
+ *
+ * The purse is the Corporation's at the Protection counter and the character's
+ * own at the market, so it is named rather than assumed.
+ */
+export type ShopBuyer = {
+    character_id: number;
+    name: string;
+    /** The Corporation at the Protection counter, the character at the market. */
+    purse_name: string;
+    credits: number;
+    /** Copies already in hand, keyed by listing id. */
+    held: Record<number, number | undefined>;
+};
+
+/** One counter: what is on it, and who this player can buy with. */
+export type ShopCounter = {
+    listings: ShopListing[];
+    buyers: ShopBuyer[];
+};
+
+/**
+ * The shop as a player sees it. Either counter may be null: a Runner is not
+ * handed the Protection Card list, and a Security player has no business at the
+ * Runners' market.
+ */
+export type ShopBoard = {
+    /** Whether a purchase would be in time. The shop runs during Setup. */
+    open: boolean;
+    phase: string | null;
+    is_control: boolean;
+    protection: ShopCounter | null;
+    equipment: ShopCounter | null;
+};
+
+/** A card not yet on the list, for Control's add form. */
+export type ShopUnlistedCard = {
+    id: number;
+    code: string | null;
+    name: string;
+    kind_label?: string;
+    category_label?: string;
+    availability?: string;
+    availability_label?: string;
+};
+
+/** One copy leaving the shop, as Control's till roll shows it. */
+export type ShopPurchase = {
+    id: number;
+    card_name: string;
+    buyer_name: string;
+    corporation_name: string | null;
+    price_paid: number;
+    turn: number | null;
+    phase: string | null;
+    bought_at: string | null;
+};
+
+/** Somebody Control can buy on behalf of. */
+export type ShopBuyerOption = {
+    character_id: number;
+    name: string;
+    role_label: string;
+    team: string | null;
+    credits: number;
+    /** The purse that would actually pay: the Corporation's, or their own. */
+    purse_credits: number;
+};
+
+/** The shop as Control runs it. */
+export type ShopControlBoard = {
+    open: boolean;
+    phase: string | null;
+    listings: ShopListing[];
+    unlisted: {
+        protection: ShopUnlistedCard[];
+        equipment: ShopUnlistedCard[];
+    };
+    purchases: ShopPurchase[];
+    buyers: {
+        protection: ShopBuyerOption[];
+        equipment: ShopBuyerOption[];
+    };
+    statuses: { value: ShopListingStatus; label: string }[];
 };
