@@ -3,16 +3,15 @@ import { Input } from '@/components/ui/input';
 import type { ShopListing } from '@/types/game';
 
 /**
- * How many lines a counter has to carry before it gets a filter.
- *
- * A shop with four things on it does not need searching, and an input above it
- * is one more thing to read past. Eighty does — Control can put the whole
- * catalogue out — so the control appears when it starts earning its place.
- */
-export const FILTER_FROM = 8;
-
-/**
  * Whether a line matches what somebody has typed.
+ *
+ * There is deliberately **no threshold** on drawing the filter. It had one —
+ * it appeared only past eight lines, on the reasoning that a shop with four
+ * things on it does not need searching — and the first thing that happened was
+ * somebody setting a shop up, looking for the search they had asked for, and
+ * not finding it. A control that hides until it is "needed" is a control
+ * nobody knows is there, and one input above a short list costs far less than
+ * that. So the list always has a filter.
  *
  * Matches the code as well as the name, because a card is identified by its
  * code, and the status word too so "rumoured" narrows to the rumoured lines.
