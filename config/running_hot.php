@@ -247,11 +247,14 @@ return [
             'name' => 'Dancers',
             'notoriety' => 0,
             'runners' => [
+                // Four, not six. The cast list is the roster of record and the
+                // Dancers are cast four deep; Rapper and Tango were in here and
+                // are in nobody's chair, which would have seated two Runners
+                // nobody is playing and given a gang two extra bodies in every
+                // dice pool. Their briefings do not exist either.
                 ['name' => 'Ballet', 'brawn' => 1, 'hack' => 1, 'charisma' => 6, 'body' => 3],
                 ['name' => 'Hustle', 'brawn' => 2, 'hack' => 3, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Rapper', 'brawn' => 2, 'hack' => 3, 'charisma' => 3, 'body' => 5],
                 ['name' => 'Swing', 'brawn' => 3, 'hack' => 2, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Tango', 'brawn' => 3, 'hack' => 2, 'charisma' => 3, 'body' => 5],
                 ['name' => 'Tap', 'brawn' => 2, 'hack' => 2, 'charisma' => 1, 'body' => 7],
             ],
         ],
