@@ -112,6 +112,32 @@ class ProtectionCardBlueprintTest extends TestCase
     }
 
     /**
+     * No card's printed strength counts the Alerts standing, because the Run
+     * already does.
+     *
+     * Security shutter (PS006) and its ANT counterpart Öryggisluggari (PS017)
+     * were transcribed as "Brute or Hack (Number of alerts+2)", which the sheet
+     * gives as a flat Brute/Hack (4). The sheet is right, and the reason is
+     * arithmetic rather than provenance: App\Support\Runs\ChallengeStrength
+     * adds AlertSchedule::strengthBonus() to *every* card, so a card printing
+     * the Alert count into its own strength has it counted twice - once in the
+     * number Security types in and again in the curve underneath.
+     *
+     * Written as a sweep rather than against the two codes, because the next
+     * card to do this would be as wrong and as quiet.
+     */
+    public function test_no_printed_strength_counts_the_alerts_standing(): void
+    {
+        foreach (ProtectionCardBlueprint::defaults() as $card) {
+            $this->assertStringNotContainsStringIgnoringCase(
+                'alert',
+                $card['challenge'],
+                $card['code'].' counts Alerts into its printed strength, which the Run already does.',
+            );
+        }
+    }
+
+    /**
      * A Charge is a cost and a consequence together (rulebook 3.3.5). Half of
      * one is neither usable nor printable, and the catalogue routes refuse it -
      * so the seeded list must not carry one either.

@@ -133,11 +133,12 @@ class CardCatalogueTest extends TestCase
     {
         $game = Game::factory()->create();
 
-        $shutter = $game->protectionCardTypes()->where('code', 'PS006')->sole();
+        $beiIlai = $game->protectionCardTypes()->where('code', 'PR006')->sole();
         $keypad = $game->protectionCardTypes()->where('code', 'PS005')->sole();
         $aosSi = $game->protectionCardTypes()->where('code', 'PR030')->sole();
 
-        $this->assertSame('Brute or Hack (Number of alerts+2)', $shutter->challenge);
+        // Two challenges on one card, met in order.
+        $this->assertSame('Hack (4), followed by Brute (4)', $beiIlai->challenge);
         $this->assertSame('Brute/Hack (2)', $keypad->challenge);
         $this->assertStringContainsString('Hack (4+N)', $aosSi->challenge);
     }

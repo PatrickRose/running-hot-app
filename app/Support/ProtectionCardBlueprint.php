@@ -542,7 +542,7 @@ class ProtectionCardBlueprint
                 code: 'PS006',
                 name: 'Security shutter',
                 kind: ProtectionKind::Physical,
-                challenge: 'Brute or Hack (Number of alerts+2)',
+                challenge: 'Brute/Hack (4)',
                 consequence: 'End the Run',
             ),
             self::card(
@@ -633,7 +633,7 @@ class ProtectionCardBlueprint
                 code: 'PS017',
                 name: 'Öryggisluggari',
                 kind: ProtectionKind::Physical,
-                challenge: 'Brute or Hack (Number of alerts+2)',
+                challenge: 'Brute/Hack (4)',
                 consequence: 'End the Run',
             ),
             self::card(
