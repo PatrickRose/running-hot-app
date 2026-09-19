@@ -393,14 +393,34 @@ export type FacilitySummary = {
     technologies: StoredTechnology[];
 };
 
-/** A technology card sitting in a Facility (rulebook 3.2.2). */
+/**
+ * A technology card sitting in a Facility (rulebook 3.2.2).
+ *
+ * Only ever the cards actually in the building: one a Run stole or destroyed
+ * keeps its row but is not listed here, so the count on screen is the count the
+ * server enforces capacity against.
+ *
+ * It carries enough to draw itself because Security drags these between
+ * Facilities — which building holds what is a decision about what a Run would
+ * come away with, so the card is shown while it is in the air rather than a
+ * ghost of a chip.
+ */
 export type StoredTechnology = {
     id: number;
     name: string;
     code: string | null;
+    image_path: string | null;
+    description: string | null;
+    effect: string | null;
     status: string;
     status_label: string;
     origin_label: string;
+    /**
+     * The Facility type this card has to be housed in, if it names one
+     * (rulebook 3.2.2). Null for a technology that will go anywhere.
+     */
+    required_facility_type_id: number | null;
+    required_facility_type: string | null;
     /**
      * 3.2.7 in one boolean: a claimed copy is paper until it is paid for, and a
      * stolen piece of a split technology does nothing until its thief holds
@@ -618,13 +638,24 @@ export type TechnologyHoldingSummary = {
     image_path: string | null;
     back_image_path: string | null;
     effect: string | null;
-    status: 'claimed' | 'researched' | 'destroyed';
+    /**
+     * Destroyed and Stolen are the two ways a Run takes a card off a
+     * Corporation, and they are kept apart because they are not the same loss
+     * (rulebook 3.2.6). Neither row is deleted.
+     */
+    status: 'claimed' | 'researched' | 'destroyed' | 'stolen';
     status_label: string;
     origin: 'researched' | 'shared' | 'weak_copy' | 'good_copy' | 'stolen';
     origin_label: string;
     discount_percent: number;
     facility_id: number | null;
     facility: string | null;
+    /**
+     * The Facility type this card has to be housed in, if it names one
+     * (rulebook 3.2.2). Null for a technology that will go anywhere.
+     */
+    required_facility_type_id: number | null;
+    required_facility_type: string | null;
     paid: Record<string, number>;
     /**
      * Whether the card is actually working. False for a claimed copy, and false

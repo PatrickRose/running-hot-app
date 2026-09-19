@@ -321,9 +321,24 @@ class TechnologyService
      * A Facility that has been destroyed, or one whose storage is needed for
      * something else, sends its cards somewhere - so this is a real move rather
      * than a correction, and it is checked like one.
+     *
+     * A card that has left the building cannot be moved within it. A Run that
+     * stole or destroyed one took it out of its Facility as well as off the
+     * Corporation, and putting it back is {@see restore()}'s job and Control's
+     * judgement - not something a drag on the Facility board may do quietly.
      */
     public function place(TechnologyHolding $holding, ?Facility $facility): TechnologyHolding
     {
+        if (! $holding->status->occupiesStorage()) {
+            throw ValidationException::withMessages([
+                'facility_id' => sprintf(
+                    '%s is %s, so it is not in the building to be moved.',
+                    $holding->technologyType->name,
+                    mb_strtolower($holding->status->label()),
+                ),
+            ]);
+        }
+
         if ($facility !== null) {
             $this->assertCanStore(
                 $holding->corporation,
