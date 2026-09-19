@@ -612,15 +612,27 @@ class GamePresenter
      * ships with carry nothing only because their briefings give them special
      * rules instead - not because nobody could ever hand them a card.
      *
+     * A viewer narrows it to their own hands. Passing nobody is Control's
+     * whole-game view, which is what the Control panel asks for; passing a
+     * player gives them the Runners and Freelancers they have claimed and
+     * nothing else, because a hand is private the way a Facility's stack is.
+     * Control passed as the viewer still sees everybody, so the one page can
+     * serve both without a second implementation of the shape.
+     *
      * @return array<int, array<string, mixed>>
      */
-    public function equipmentHoldings(Game $game): array
+    public function equipmentHoldings(Game $game, ?User $viewer = null): array
     {
-        $runners = $game->characters()
+        $query = $game->characters()
             ->whereIn('role', [CharacterRole::Runner, CharacterRole::Freelancer])
             ->with(['gang', 'equipmentHoldings.cardType'])
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        if ($viewer !== null && ! $viewer->isControlFor($game)) {
+            $query->where('user_id', $viewer->id);
+        }
+
+        $runners = $query->get();
 
         $groups = [];
 
@@ -648,6 +660,10 @@ class GamePresenter
                     'category' => $holding->cardType->category->value,
                     'category_label' => $holding->cardType->category->label(),
                     'category_glyph' => $holding->cardType->category->glyph(),
+                    // What the card does, and its artwork: a Runner reading
+                    // their own hand is reading the cards, not a list of names.
+                    'effect' => $holding->cardType->effect,
+                    'image_path' => $holding->cardType->imagePath(),
                     'copies' => $holding->copies,
                 ])
                 ->sortBy(fn (array $card): array => [$card['category'], $card['name']])

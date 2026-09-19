@@ -284,6 +284,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
 | Inertia payload shaping | `App\Support\GamePresenter` |
 | What a player may see of the Facilities | `App\Http\Controllers\FacilityBoardController` |
+| What a player may see of their Equipment | `App\Http\Controllers\EquipmentController`, `resources/js/pages/equipment.tsx` |
 | Security arranging their own stacks | `App\Http\Controllers\FacilityDefenceController`, `App\Policies\FacilityPolicy` |
 | The drag-and-drop defence board | `resources/js/components/facility-defence-board.tsx` |
 | Auto-advance and its backstop | `App\Jobs\AdvancePhase`, `game:tick` |
@@ -1015,6 +1016,12 @@ None of it is a Tracker. A Tracker is a number the game moves and argues about a
 **Every Runner opens the game carrying what their briefing prints**, seeded by `SeedEquipmentHoldings` from per-Runner lists in `config/running_hot.php` — per Runner because the briefings are one document per player, so there is deliberately no gang-level list to be mis-keyed against somebody else. Two readings are worth knowing. A briefing's **"Ability" section is a card too**: what is printed under it is the effect text of `EEP014`–`EEP016`, the three Reconnaissance cards, reproduced almost word for word, so Ballet, Bitter and Z3R0 are seeded as the cards they are. And a **Freelancer carrying nothing is the right answer**, not an unfinished one — all three are given "Special rules" in place of a kit, and none of those is an Equipment card.
 
 The seeder **skips a code it cannot find**, which is right when Control has deleted a card and wrong when somebody has fat-fingered a digit — and the two are indistinguishable at run time, so a Runner would simply open the game one card lighter than their briefing. `EquipmentSeedingTest` checks the configuration against the catalogue for exactly that, rather than transcribing the eighteen kits a second time where they would agree with themselves instead of with the briefings.
+
+**Players read their own hand at `/equipment`, and the tier line is a ruling rather than a reading.** You see the Runners and Freelancers you have claimed and nobody else; Control sees everybody. The rulebook does *not* make a hand Secret the way 3.4.2 makes a Facility's stack — this is here because a gang reading each other's kit off a screen is a gang that never has the conversation, and at the table you would have to ask. `GamePresenter::equipmentHoldings()` takes an optional viewer and is the only thing that decides: passing nobody is the Control panel's whole-game view, passing a player narrows to their own seats, and passing Control widens again. One implementation, so the page filters nothing and a hand that is not yours never reaches the browser.
+
+It is its own page rather than a corner of the dashboard, because a hand is what you work from: choosing three permanent items to equip means laying the cards out and reading them, so they are drawn as `CardFace`s grouped by category. The `×N` copy count sits *outside* `CardFace` and on top of it, for the reason the defence board's does — it has to stay legible over artwork as well as over the text box. The gang band is drawn only for Control: a player holding one Runner already knows which gang they are in, and it is what makes twenty-one hands readable.
+
+Read-only, on both sides of the line. Every way a card changes hands is a conversation with Control, who sets the count on their own panel.
 
 **Not modelled:** the market. Buying, selling between Runners and splitting a haul are conversations at the table, so Control sets the count.
 

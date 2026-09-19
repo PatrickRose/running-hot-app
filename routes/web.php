@@ -26,6 +26,7 @@ use App\Http\Controllers\CouncilBallotController;
 use App\Http\Controllers\CouncilChairController;
 use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
 use App\Http\Controllers\ResearchBoardController;
@@ -68,6 +69,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('facilities.cards.quote');
     Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
         ->name('facilities.cards.remove');
+
+    // What a Runner is carrying (rulebook 3.4.1). Names no character: a
+    // player sees the hands of whoever they have claimed, and Control sees
+    // everybody, so the viewer is the whole of the question.
+    Route::get('equipment', EquipmentController::class)->name('equipment');
 
     // The research sub-game (rulebook 3.2). None of these names a Corporation:
     // a player has exactly one, so the seat they hold decides which, and the

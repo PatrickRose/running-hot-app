@@ -205,6 +205,10 @@ export type EquipmentHolding = {
     category: 'permanent' | 'this-run' | 'single-use';
     category_label: string;
     category_glyph: string;
+    /** What the card does, as printed. */
+    effect: string;
+    /** Where the artwork lives, or null when there is none on record. */
+    image_path: string | null;
     /**
      * Copies in hand. Playing a This-run or Single-use card spends one; a
      * Permanent item is only lost by being carried out of a Facility.
