@@ -126,6 +126,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('runs.consequences.mark');
     Route::post('runs/{run}/consequences', [RunController::class, 'consequence'])
         ->name('runs.consequences.store');
+    // What a Runner is taking in, and what they play once inside (3.4.1,
+    // 3.4.2). Each is `act` plus a check that the character named is one this
+    // player holds, because `act` only asks whether you are on the run - and
+    // every Runner on it passes that, so a gangmate's kit would be reachable.
+    Route::post('runs/{run}/equipment', [RunController::class, 'equip'])
+        ->name('runs.equipment.store');
+    Route::post('runs/{run}/equipment/play', [RunController::class, 'playEquipment'])
+        ->name('runs.equipment.play');
+
     Route::post('runs/{run}/leave', [RunController::class, 'leave'])->name('runs.leave');
     Route::post('runs/{run}/advance', [RunController::class, 'advance'])->name('runs.advance');
 

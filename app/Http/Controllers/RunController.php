@@ -8,10 +8,12 @@ use App\Enums\RunnerSkill;
 use App\Enums\TechnologyAccessAction;
 use App\Http\Requests\SubmitRunRequest;
 use App\Models\Character;
+use App\Models\EquipmentCardType;
 use App\Models\Facility;
 use App\Models\Game;
 use App\Models\Run;
 use App\Models\RunAccess;
+use App\Models\RunEquipment;
 use App\Models\RunEvent;
 use App\Models\TechnologyHolding;
 use App\Services\RunEngine;
@@ -402,7 +404,7 @@ class RunController extends Controller
         /** @var Character $runner */
         $runner = Character::query()->findOrFail($validated['character_id']);
 
-        $this->authoriseAccessFor($request, $run, $runner);
+        $this->authoriseActingAs($request, $run, $runner);
 
         $access = match (RunAccessKind::from($validated['kind'])) {
             RunAccessKind::Credits => $this->runs->takeCredits($run, $runner, $request->user()),
@@ -448,7 +450,7 @@ class RunController extends Controller
             'action' => ['nullable', Rule::enum(TechnologyAccessAction::class)],
         ]);
 
-        $this->authoriseAccessFor($request, $run, $access->character);
+        $this->authoriseActingAs($request, $run, $access->character);
 
         $this->runs->resolveAccess(
             $access,
@@ -505,8 +507,12 @@ class RunController extends Controller
      * access out from under them, which is the one thing per-Runner accesses
      * are for.
      */
-    private function authoriseAccessFor(Request $request, Run $run, Character $runner): void
-    {
+    private function authoriseActingAs(
+        Request $request,
+        Run $run,
+        Character $runner,
+        string $what = 'access to spend',
+    ): void {
         $user = $request->user();
 
         if ($user !== null && $user->isControlFor($run->game)) {
@@ -514,8 +520,91 @@ class RunController extends Controller
         }
 
         if ($runner->user_id !== $user?->id) {
-            abort(403, 'That is somebody else\'s access to spend.');
+            abort(403, sprintf('That is somebody else\'s %s.', $what));
         }
+    }
+
+    /**
+     * Equip the permanent items you are taking in (rulebook 3.4.1).
+     *
+     * Before the run goes in, because that is when 3.4.1 has you place them in
+     * front of you - the engine refuses it once the run is Running. Three at
+     * most, and one copy of each by title, which are the engine's rules rather
+     * than this method's.
+     *
+     * Sets the loadout rather than adding to it, so a card picked by mistake is
+     * taken back by sending the corrected set - the same choice handing cards
+     * to the Council Chair makes.
+     *
+     * `act` and then the character check, for the reason an access needs both:
+     * `act` only asks whether you are on this run, which every Runner on it
+     * passes, so without the second half a Runner could kit out a gangmate.
+     */
+    public function equip(Run $run, Request $request): RedirectResponse
+    {
+        Gate::authorize('act', $run);
+
+        $validated = $request->validate([
+            'character_id' => ['required', 'integer'],
+            'equipment_card_type_ids' => ['present', 'array'],
+            'equipment_card_type_ids.*' => ['integer'],
+        ]);
+
+        /** @var Character $runner */
+        $runner = Character::query()->findOrFail($validated['character_id']);
+
+        $this->authoriseActingAs($request, $run, $runner, 'loadout to choose');
+
+        /** @var array<int, int> $ids */
+        $ids = $validated['equipment_card_type_ids'];
+
+        $equipped = $this->runs->equip($run, $runner, $ids, $request->user());
+
+        return back()->with('status', $equipped->isEmpty()
+            ? sprintf('%s is taking nothing in.', $runner->name)
+            : sprintf(
+                '%s is carrying %s.',
+                $runner->name,
+                $equipped->map(fn (RunEquipment $item): string => $item->cardType->name)->join(', ', ' and '),
+            ));
+    }
+
+    /**
+     * Play a This-run or Single-use card (rulebook 3.4.2).
+     *
+     * One per Runner per step, which the worked examples make per *step* rather
+     * than per run - Ryan uses a Boost card during the Activate step and "can
+     * not use another card until the next Activate step". The engine counts the
+     * rows for this pass and step, so this method only has to say who and what.
+     *
+     * Playing spends the copy, because both categories go back to Control
+     * afterwards. What the card then *does* is the Runner's to declare on the
+     * challenge form, since the seventy-four printed effects are not parsed.
+     */
+    public function playEquipment(Run $run, Request $request): RedirectResponse
+    {
+        Gate::authorize('act', $run);
+
+        $validated = $request->validate([
+            'character_id' => ['required', 'integer'],
+            'equipment_card_type_id' => ['required', 'integer'],
+        ]);
+
+        /** @var Character $runner */
+        $runner = Character::query()->findOrFail($validated['character_id']);
+
+        $this->authoriseActingAs($request, $run, $runner, 'card to play');
+
+        /** @var EquipmentCardType $card */
+        $card = EquipmentCardType::query()->findOrFail($validated['equipment_card_type_id']);
+
+        $this->runs->playEquipment($run, $runner, $card, $request->user());
+
+        return back()->with('status', sprintf(
+            '%s played %s.',
+            $runner->name,
+            $card->name,
+        ));
     }
 
     /**

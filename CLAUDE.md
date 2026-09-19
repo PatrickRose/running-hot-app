@@ -819,6 +819,42 @@ quoted by the server as `ignore_cost`. There is deliberately no separate
 `ignore-end` route any more: it was a second way to reach `ignoreEndTheRun()`
 that skipped Security's marking entirely.
 
+**Equipment reaches a run in three places, and all three are the player's.** A
+permanent item is equipped at `/runs` while the run is still Submitted - 3.4.1
+places it in front of you, and the engine refuses it once the run has gone in.
+A This-run or Single-use card is played during a step, one per Runner per
+*step* rather than per run, which is what the worked examples make it. And what
+either card then *does* is declared on the challenge form, in three boxes:
+extra dice, die size, and rerolling failures once.
+
+**Declared rather than parsed, for the reason nothing else here is parsed
+either.** The seventy-four printed effects would be a second rulebook to keep
+in step, and a card Control invented mid-game would get nothing from it. The
+player is holding the card; `App\Support\Runs\RollModifiers` takes what they
+say it grants this roll.
+
+**Both acts are `act` plus a check that the character named is one you hold.**
+`RunPolicy::act` only asks whether you are on this run, which every Runner on
+it passes - so without the controller's own half, a Runner could kit out a
+gangmate or spend their cards. Exactly the boundary the accesses already draw,
+and `RunController::authoriseActingAs` is now the one implementation of it.
+
+**What is equipped is the whole group's to read; a hand is its owner's.** 3.4.1
+equips "by placing them in front of you" - face up, on the table, where the
+four people going in can all see it, and a group deciding who takes a
+consequence needs to know who has the Armour on. The cards you have *not*
+played are still in your pocket.
+
+**Security sees none of it, and that is the one place `$privileged` is the
+wrong question.** It means "the Security side or Control", and Security reading
+the group's kit would know exactly what was coming down the corridor.
+`RunPresenter::seesRunnerKit()` asks the right one - on the run, or Control -
+and the *log* needs it too: a line naming what somebody equipped would hand
+Security the loadout the payload carefully withholds, so it is redacted to
+"equipped what they are carrying" rather than dropped. A card **played** during
+the run is not redacted, because that one is laid on the table in front of
+everybody.
+
 **Where the rulebook says "may", nothing moves.** Walking away at the Breather
 "may have an effect on your gang's Notoriety", so no Notoriety moves and the
 event says it is Control's call. Being incapacitated hands your permanent

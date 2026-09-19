@@ -3,6 +3,7 @@ import { ChevronDownIcon } from 'lucide-react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
+import { GameIcon } from '@/components/game-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,9 +40,15 @@ import {
     mark as markConsequence,
     store as storeConsequence,
 } from '@/routes/runs/consequences';
+import {
+    play as playEquipment,
+    store as equipItems,
+} from '@/routes/runs/equipment';
 import type {
     RunCard,
     RunConsequenceEffect,
+    RunEquipmentCard,
+    RunHand,
     RunParticipantView,
     RunUndecidedAccess,
     RunView,
@@ -81,6 +88,9 @@ type RunPayload = Record<
     // What Security marks: a count per effect, which is how a card's own
     // sentence goes over the wire.
     | Record<string, number>
+    // A whole loadout at once, because equipping sets the set rather than
+    // adding to it - the same choice handing cards to the Council Chair makes.
+    | number[]
 >;
 
 const EFFECT_LABELS: Record<RunConsequenceEffect, string> = {
@@ -264,7 +274,12 @@ export function RunPanel({ run }: { run: RunView }) {
                     <CardContent className="flex flex-col gap-6">
                         <RunGauges run={run} />
 
-                        {run.status === 'submitted' && <NotInYet run={run} />}
+                        {run.status === 'submitted' && (
+                            <>
+                                <EquipDesk run={run} />
+                                <NotInYet run={run} />
+                            </>
+                        )}
 
                         {run.status === 'running' && (
                             <>
@@ -281,6 +296,10 @@ export function RunPanel({ run }: { run: RunView }) {
                                         {!run.can_lead && !run.can_defend && (
                                             <Watching run={run} />
                                         )}
+                                        {/* Every Runner's own, Leader or not:
+                                        3.4.2 gives each of them a card a step
+                                        rather than giving the Leader four. */}
+                                        <PlayEquipmentDesk run={run} />
                                     </div>
                                 </div>
                             </>
@@ -752,6 +771,315 @@ function NotInYet({ run }: { run: RunView }) {
             )}
             <Button type="submit" disabled={busy} className="self-start">
                 Go in
+            </Button>
+        </form>
+    );
+}
+
+/**
+ * A card in a hand or on the table, small enough to sit in a list.
+ *
+ * Its name, its category and what it does, because the effect is the whole
+ * reason you are choosing between them — and because it is what you then
+ * declare on the challenge form, since none of the seventy-four is parsed.
+ */
+function EquipmentLine({ card }: { card: RunEquipmentCard }) {
+    return (
+        <span className="flex min-w-0 flex-col">
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+                <GameIcon
+                    glyph={card.category_glyph}
+                    label={card.category_label}
+                />
+                {card.name}
+                {card.copies !== null && card.copies > 1 ? (
+                    <span className="font-mono text-xs font-normal text-muted-foreground">
+                        &times;{card.copies}
+                    </span>
+                ) : null}
+            </span>
+            <span className="text-xs text-muted-foreground">{card.effect}</span>
+        </span>
+    );
+}
+
+/**
+ * What the group is taking in, and what each of them has in front of them.
+ *
+ * Drawn before the run goes in, because that is when 3.4.1 has you equip a
+ * permanent item — "by placing them in front of you", which is also why the
+ * finished loadouts are the whole group's to read rather than each Runner's
+ * own secret. Your *hand* is yours; what you are wearing is on the table.
+ *
+ * One form per Runner you hold, so somebody playing two seats kits both out.
+ */
+function EquipDesk({ run }: { run: RunView }) {
+    const equipment = run.equipment;
+
+    if (equipment === null || equipment.hands.length === 0) {
+        return null;
+    }
+
+    return (
+        <section className="flex flex-col gap-4 rounded-md border p-3">
+            <div>
+                <h3 className="font-medium">Kit</h3>
+                <p className="text-sm text-muted-foreground">
+                    Up to {equipment.cap} permanent items each, placed in front
+                    of you before you go in. Choosing again replaces what you
+                    picked.
+                </p>
+            </div>
+
+            <GroupLoadouts run={run} />
+
+            {equipment.hands.map((hand) => (
+                <EquipForm key={hand.character_id} run={run} hand={hand} />
+            ))}
+        </section>
+    );
+}
+
+function EquipForm({ run, hand }: { run: RunView; hand: RunHand }) {
+    const equipment = run.equipment;
+    const alreadyOn =
+        equipment?.equipped.find(
+            (loadout) => loadout.character_id === hand.character_id,
+        )?.cards ?? [];
+
+    const [chosen, setChosen] = useState<number[]>(() =>
+        alreadyOn.map((card) => card.card_type_id),
+    );
+    const { busy, refusal, post } = useRunAction();
+
+    const cap = equipment?.cap ?? 3;
+    const full = chosen.length >= cap;
+
+    if (hand.permanent.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                {hand.name} is carrying no permanent items.
+            </p>
+        );
+    }
+
+    return (
+        <form
+            className="flex flex-col gap-2 border-l-2 pl-3"
+            onSubmit={(event) => {
+                event.preventDefault();
+                post(equipItems(run.id), {
+                    character_id: hand.character_id,
+                    equipment_card_type_ids: chosen,
+                });
+            }}
+        >
+            <p className="text-sm font-medium">
+                {hand.name}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {chosen.length} of {cap} chosen
+                </span>
+            </p>
+
+            <Refusal message={refusal} />
+
+            <ul className="flex flex-col gap-1.5">
+                {hand.permanent.map((card) => {
+                    const picked = chosen.includes(card.card_type_id);
+
+                    return (
+                        <li key={card.card_type_id}>
+                            <label className="flex items-start gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="mt-1"
+                                    checked={picked}
+                                    /* The cap is the server's rule; this only
+                                    stops you queueing up a refusal you can
+                                    already see coming. */
+                                    disabled={!picked && full}
+                                    onChange={() =>
+                                        setChosen((current) =>
+                                            picked
+                                                ? current.filter(
+                                                      (id) =>
+                                                          id !==
+                                                          card.card_type_id,
+                                                  )
+                                                : [
+                                                      ...current,
+                                                      card.card_type_id,
+                                                  ],
+                                        )
+                                    }
+                                />
+                                <EquipmentLine card={card} />
+                            </label>
+                        </li>
+                    );
+                })}
+            </ul>
+
+            <Button
+                type="submit"
+                size="sm"
+                disabled={busy}
+                className="self-start"
+            >
+                {chosen.length === 0 ? 'Take nothing in' : 'Equip these'}
+            </Button>
+        </form>
+    );
+}
+
+/**
+ * Who is wearing what, for everybody on the run.
+ *
+ * Face up on the table at 3.4.1, so face up here: a group deciding who takes a
+ * consequence needs to know which of them has the Armour on.
+ */
+function GroupLoadouts({ run }: { run: RunView }) {
+    const loadouts = (run.equipment?.equipped ?? []).filter(
+        (loadout) => loadout.cards.length > 0,
+    );
+
+    if (loadouts.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                Nobody has equipped anything yet.
+            </p>
+        );
+    }
+
+    return (
+        <dl className="flex flex-col gap-1 text-sm">
+            {loadouts.map((loadout) => (
+                <div
+                    key={loadout.character_id}
+                    className="flex flex-wrap items-baseline gap-x-2"
+                >
+                    <dt className="font-medium">{loadout.name}</dt>
+                    <dd className="text-muted-foreground">
+                        {loadout.cards.map((card) => card.name).join(', ')}
+                    </dd>
+                </div>
+            ))}
+        </dl>
+    );
+}
+
+/**
+ * Playing a This-run or Single-use card (rulebook 3.4.2).
+ *
+ * One card per Runner per *step*, which is what the worked examples make it:
+ * Ryan uses a Boost during the Activate step and "can not use another card
+ * until the next Activate step". The server counts the rows and refuses the
+ * second; this says so up front, because a button that looks live and then
+ * refuses is worse than one that explains itself.
+ *
+ * Every Runner gets their own, Leader or not — the card is theirs to spend.
+ */
+function PlayEquipmentDesk({ run }: { run: RunView }) {
+    const hands = (run.equipment?.hands ?? []).filter((hand) => !hand.left);
+
+    if (hands.length === 0) {
+        return null;
+    }
+
+    return (
+        <section className="flex flex-col gap-3 rounded-md border p-3">
+            <div>
+                <h3 className="font-medium">Your cards</h3>
+                <p className="text-sm text-muted-foreground">
+                    One each during this {run.step_label} step. What it does to
+                    a roll is yours to declare on the Leader&rsquo;s form.
+                </p>
+            </div>
+
+            <GroupLoadouts run={run} />
+
+            {hands.map((hand) => (
+                <PlayEquipmentForm
+                    key={hand.character_id}
+                    run={run}
+                    hand={hand}
+                />
+            ))}
+        </section>
+    );
+}
+
+function PlayEquipmentForm({ run, hand }: { run: RunView; hand: RunHand }) {
+    const [selected, setSelected] = useState('');
+    const { busy, refusal, post } = useRunAction();
+
+    if (hand.playable.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                {hand.name} has nothing left to play.
+            </p>
+        );
+    }
+
+    if (hand.played_this_step) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                {hand.name} has already played a card this {run.step_label}{' '}
+                step.
+            </p>
+        );
+    }
+
+    const card = hand.playable.find(
+        (option) => String(option.card_type_id) === selected,
+    );
+
+    return (
+        <form
+            className="flex flex-col gap-2 border-l-2 pl-3"
+            onSubmit={(event) => {
+                event.preventDefault();
+                post(playEquipment(run.id), {
+                    character_id: hand.character_id,
+                    equipment_card_type_id: Number(selected),
+                });
+            }}
+        >
+            <p className="text-sm font-medium">{hand.name}</p>
+
+            <Refusal message={refusal} />
+
+            <select
+                aria-label={`A card for ${hand.name} to play`}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={selected}
+                onChange={(event) => setSelected(event.target.value)}
+            >
+                <option value="">Choose a card&hellip;</option>
+                {hand.playable.map((option) => (
+                    <option
+                        key={option.card_type_id}
+                        value={option.card_type_id}
+                    >
+                        {option.name}
+                        {option.copies !== null && option.copies > 1
+                            ? ` (\u00d7${option.copies})`
+                            : ''}
+                    </option>
+                ))}
+            </select>
+
+            {card !== undefined && (
+                <p className="text-xs text-muted-foreground">{card.effect}</p>
+            )}
+
+            <Button
+                type="submit"
+                size="sm"
+                disabled={busy || selected === ''}
+                className="self-start"
+            >
+                Play it
             </Button>
         </form>
     );
@@ -1603,6 +1931,13 @@ function DicePoolReadout({
  */
 function LeaderDesk({ run }: { run: RunView }) {
     const [skill, setSkill] = useState<'brawn' | 'hack'>('brawn');
+    // What Equipment is doing to this roll, as the Runners reading their cards
+    // say. Nothing is parsed from the seventy-four printed effects — encoding
+    // them would be a second rulebook to keep in step, and a card Control
+    // invented mid-game would get nothing. See App\Support\Runs\RollModifiers.
+    const [extraDice, setExtraDice] = useState('');
+    const [dieFaces, setDieFaces] = useState('');
+    const [reroll, setReroll] = useState(false);
     const { busy, refusal, post } = useRunAction();
 
     return (
@@ -1630,7 +1965,14 @@ function LeaderDesk({ run }: { run: RunView }) {
                     className="flex flex-wrap items-end gap-2"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        post(challenge(run.id), { skill });
+                        post(challenge(run.id), {
+                            skill,
+                            extra_dice:
+                                extraDice === '' ? 0 : Number(extraDice),
+                            die_faces:
+                                dieFaces === '' ? null : Number(dieFaces),
+                            reroll_failures: reroll,
+                        });
                     }}
                 >
                     <div className="flex flex-col gap-1">
@@ -1651,9 +1993,68 @@ function LeaderDesk({ run }: { run: RunView }) {
                         Roll
                     </Button>
                     <DicePoolReadout run={run} skill={skill} />
+
+                    {/* The dice are thrown on the server, so a card that says
+                    "+2 Brute" or "roll d8s" has nowhere else to act. Declared
+                    rather than parsed: the player is holding the card. */}
+                    <fieldset className="flex w-full flex-wrap items-end gap-2 border-t pt-2">
+                        <legend className="sr-only">
+                            What your Equipment is doing to this roll
+                        </legend>
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor={`extra-dice-${run.id}`}>
+                                Extra dice
+                            </Label>
+                            <Input
+                                id={`extra-dice-${run.id}`}
+                                type="number"
+                                min={-9}
+                                max={9}
+                                className="w-24"
+                                value={extraDice}
+                                placeholder="0"
+                                onChange={(event) =>
+                                    setExtraDice(event.target.value)
+                                }
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor={`die-faces-${run.id}`}>
+                                Die size
+                            </Label>
+                            <select
+                                id={`die-faces-${run.id}`}
+                                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                                value={dieFaces}
+                                onChange={(event) =>
+                                    setDieFaces(event.target.value)
+                                }
+                            >
+                                <option value="">As normal</option>
+                                {[4, 6, 8, 10, 12].map((faces) => (
+                                    <option key={faces} value={faces}>
+                                        d{faces}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <label className="flex items-center gap-2 pb-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={reroll}
+                                onChange={(event) =>
+                                    setReroll(event.target.checked)
+                                }
+                            />
+                            Reroll failures once
+                        </label>
+                    </fieldset>
+
                     <p className="w-full text-xs text-muted-foreground">
                         Security has already thrown theirs. The dice are rolled
-                        on the server and every face is kept.
+                        on the server and every face is kept. Anything your
+                        Equipment grants goes in the three boxes above — the
+                        cards are not read for you.
                     </p>
                 </form>
             )}

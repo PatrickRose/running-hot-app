@@ -1162,10 +1162,63 @@ export type RunView = {
     participants: RunParticipantView[];
     /** Null for the Runners: how much defence is left is the Corporation's. */
     budget: RunBudget | null;
+    /**
+     * What the group is carrying. Null for the Security side, who have no
+     * business reading either tier of it.
+     */
+    equipment: RunEquipmentView | null;
     can_lead: boolean;
     can_act: boolean;
     can_defend: boolean;
     log: RunEventView[];
+};
+
+/** One Equipment card, as a run describes it (rulebook 3.4.1). */
+export type RunEquipmentCard = {
+    card_type_id: number;
+    code: string | null;
+    name: string;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    category_glyph: string;
+    /**
+     * The printed effect. What it does to a roll is declared on the challenge
+     * form rather than parsed from this — see App\Support\Runs\RollModifiers.
+     */
+    effect: string;
+    image_path: string | null;
+    /** Copies in hand, or null on a card already equipped for this run. */
+    copies: number | null;
+};
+
+/**
+ * What one Runner has in front of them. Visible to the whole group, because
+ * 3.4.1 equips permanent items "by placing them in front of you".
+ */
+export type RunLoadout = {
+    character_id: number;
+    name: string;
+    cards: RunEquipmentCard[];
+};
+
+/** One Runner's own hand. Only ever their own, or every one of them to Control. */
+export type RunHand = {
+    character_id: number;
+    name: string;
+    /** Chosen before the run goes in, capped at `cap`. */
+    permanent: RunEquipmentCard[];
+    /** Played during the run, one per Runner per step. */
+    playable: RunEquipmentCard[];
+    /** Whether this Runner has already played a card during this pass and step. */
+    played_this_step: boolean;
+    left: boolean;
+};
+
+export type RunEquipmentView = {
+    equipped: RunLoadout[];
+    hands: RunHand[];
+    /** The permanent-item cap of 3.4.1, from the engine rather than hardcoded. */
+    cap: number;
 };
 
 export type RunTarget = {
