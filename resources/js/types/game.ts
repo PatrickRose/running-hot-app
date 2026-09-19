@@ -1202,3 +1202,145 @@ export type RunBoard = {
     /** Runs coming at this player's Facilities, seen from the Security desk. */
     defending: RunView[];
 };
+
+/**
+ * Where a line of the shop's list stands (rulebook 3.3.3).
+ *
+ * Rumoured is a real line rather than an absent one: a card nobody can buy yet
+ * is still something Security is told about and plans around.
+ */
+export type ShopListingStatus = 'on_sale' | 'rumoured' | 'withdrawn';
+
+/** The Protection Card half of a shop line. */
+export type ShopProtectionCard = {
+    id: number;
+    code: string | null;
+    name: string;
+    image_path: string | null;
+    kind: string;
+    kind_label: string;
+    kind_glyph: string;
+    challenge: string;
+    consequence: string;
+    charge_cost: number | null;
+    charge_consequence: string | null;
+    /** The catalogue's own word on the card, which is a different question. */
+    availability: string;
+    availability_label: string;
+};
+
+/** The Equipment half. */
+export type ShopEquipmentCard = {
+    id: number;
+    code: string | null;
+    name: string;
+    image_path: string | null;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    category_glyph: string;
+    effect: string;
+};
+
+/** One line of the shop's list: a card, a price, and what is left of it. */
+export type ShopListing = {
+    id: number;
+    family: 'protection' | 'equipment';
+    card: ShopProtectionCard | ShopEquipmentCard;
+    price: number;
+    /** Null is a line that never runs out, which is not the same as nought. */
+    stock: number | null;
+    status: ShopListingStatus;
+    status_label: string;
+    /** On sale and in stock. What the buy button is enabled on. */
+    available: boolean;
+    sold_out: boolean;
+    sold_count: number;
+    notes: string | null;
+};
+
+/**
+ * A seat this player can shop with, and the purse it spends from.
+ *
+ * The purse is the Corporation's at the Protection counter and the character's
+ * own at the market, so it is named rather than assumed.
+ */
+export type ShopBuyer = {
+    character_id: number;
+    name: string;
+    /** The Corporation at the Protection counter, the character at the market. */
+    purse_name: string;
+    credits: number;
+    /** Copies already in hand, keyed by listing id. */
+    held: Record<number, number | undefined>;
+};
+
+/** One counter: what is on it, and who this player can buy with. */
+export type ShopCounter = {
+    listings: ShopListing[];
+    buyers: ShopBuyer[];
+};
+
+/**
+ * The shop as a player sees it. Either counter may be null: a Runner is not
+ * handed the Protection Card list, and a Security player has no business at the
+ * Runners' market.
+ */
+export type ShopBoard = {
+    /** Whether a purchase would be in time. The shop runs during Setup. */
+    open: boolean;
+    phase: string | null;
+    is_control: boolean;
+    protection: ShopCounter | null;
+    equipment: ShopCounter | null;
+};
+
+/** A card not yet on the list, for Control's add form. */
+export type ShopUnlistedCard = {
+    id: number;
+    code: string | null;
+    name: string;
+    kind_label?: string;
+    category_label?: string;
+    availability?: string;
+    availability_label?: string;
+};
+
+/** One copy leaving the shop, as Control's till roll shows it. */
+export type ShopPurchase = {
+    id: number;
+    card_name: string;
+    buyer_name: string;
+    corporation_name: string | null;
+    price_paid: number;
+    turn: number | null;
+    phase: string | null;
+    bought_at: string | null;
+};
+
+/** Somebody Control can buy on behalf of. */
+export type ShopBuyerOption = {
+    character_id: number;
+    name: string;
+    role_label: string;
+    team: string | null;
+    credits: number;
+    /** The purse that would actually pay: the Corporation's, or their own. */
+    purse_credits: number;
+};
+
+/** The shop as Control runs it. */
+export type ShopControlBoard = {
+    open: boolean;
+    phase: string | null;
+    listings: ShopListing[];
+    unlisted: {
+        protection: ShopUnlistedCard[];
+        equipment: ShopUnlistedCard[];
+    };
+    purchases: ShopPurchase[];
+    buyers: {
+        protection: ShopBuyerOption[];
+        equipment: ShopBuyerOption[];
+    };
+    statuses: { value: ShopListingStatus; label: string }[];
+};

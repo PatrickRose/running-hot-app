@@ -19,6 +19,7 @@ use App\Http\Controllers\Control\ResearchCardController;
 use App\Http\Controllers\Control\ResearchController;
 use App\Http\Controllers\Control\ResearchEquationController;
 use App\Http\Controllers\Control\ResearchSessionController;
+use App\Http\Controllers\Control\ShopController as ControlShopController;
 use App\Http\Controllers\Control\TechnologyHoldingController;
 use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
@@ -34,6 +35,7 @@ use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
 use App\Http\Controllers\RunBoardController;
 use App\Http\Controllers\RunController;
+use App\Http\Controllers\ShopController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -135,6 +137,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // rulebook makes it its own step: the card is revealed and then decided on.
     Route::post('runs/{run}/accesses/{access}', [RunController::class, 'resolveAccess'])
         ->name('runs.accesses.resolve');
+
+    // The shop (rulebook 3.3.3, and 2.1 for the Runners' market). One page for
+    // both counters, because a user claims characters rather than a side and
+    // plenty of people are at both - which of them they are shown is the
+    // ShopPresenter's answer.
+    Route::get('shop', [ShopController::class, 'index'])->name('shop');
+
+    // Buying one copy. The character is named in the request rather than
+    // inferred, because which seat is standing at the counter decides whose
+    // Credits pay and whose hand the card lands in - and the ShopListingPolicy
+    // is what checks the seat matches the counter, and that the shop is open.
+    Route::post('shop/{listing}/buy', [ShopController::class, 'buy'])->name('shop.buy');
 
     // The Council (rulebook 3.1). Everyone playing may read it, because the
     // agenda is read out and any player may write a custom one. Who may vote,
@@ -348,6 +362,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('control-members.store');
                 Route::delete('games/{game}/control-members/{controlMember}', [ControlMemberController::class, 'destroy'])
                     ->name('control-members.destroy');
+
+                // The shop (rulebook 3.3.3). Control announces what is for
+                // sale, so the list, the prices and the stock are Control's -
+                // and so is unwinding a sale that should not have happened.
+                Route::get('games/{game}/shop', [ControlShopController::class, 'index'])
+                    ->name('shop.index');
+                Route::post('games/{game}/shop', [ControlShopController::class, 'stock'])
+                    ->name('shop.stock');
+                Route::delete('games/{game}/shop/{listing}', [ControlShopController::class, 'destroy'])
+                    ->name('shop.destroy');
+                // Buying for a player who phoned it in, on the same service the
+                // players' own route uses - so every rule still applies.
+                Route::post('games/{game}/shop/{listing}/buy', [ControlShopController::class, 'buy'])
+                    ->name('shop.buy');
+                Route::delete('games/{game}/shop/purchases/{purchase}', [ControlShopController::class, 'refund'])
+                    ->name('shop.refund');
 
                 // The Council (rulebook 3.1). Control's half of it: the deck
                 // and the draw, the remarks on a custom agenda, the sign-off

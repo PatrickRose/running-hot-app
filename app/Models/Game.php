@@ -195,6 +195,27 @@ class Game extends Model
         return $this->hasMany(Run::class);
     }
 
+    /**
+     * The shop's list for this game (rulebook 3.3.3).
+     *
+     * Per game rather than per catalogue, because the price is: the card sheet
+     * has a cost column the application deliberately does not seed, so what a
+     * card goes for is Control's decision on the night and belongs to the night
+     * it was made on.
+     *
+     * @return HasMany<ShopListing, $this>
+     */
+    public function shopListings(): HasMany
+    {
+        return $this->hasMany(ShopListing::class);
+    }
+
+    /** @return HasMany<ShopPurchase, $this> */
+    public function shopPurchases(): HasMany
+    {
+        return $this->hasMany(ShopPurchase::class);
+    }
+
     /** @return HasMany<TrackerAdjustment, $this> */
     public function trackerAdjustments(): HasMany
     {

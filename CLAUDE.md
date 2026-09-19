@@ -244,6 +244,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Phase transitions, pause/resume/extend | `App\Services\TurnEngine` |
 | Tracker writes and the audit ledger | `App\Services\TrackerService` |
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
+| The shop's list, its stock, and what a purchase moves | `App\Services\ShopService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
 | A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
 | The game's agenda deck | `App\Support\AgendaCardBlueprint`, `App\Actions\SeedAgendaCards` |
@@ -985,7 +986,7 @@ Three card families, all real data from the game's own card sheet, all seeded pe
 
 **Availability is read off the code prefix, and that is a reading rather than a rule.** The card sheet has no availability column. `PS` and `PE` cards are the ones the card sheet prices and the briefings hand out; every `PR` and `PX` card is the target of some technology's `Unlock:` effect, so they are seeded research-only. Three (`PR001`, `PR011`, `PR013`) are unlocked by no technology in the list at all, so Control has to add the research or open them up by hand. `ProtectionCardBlueprint` says all of this in one place instead of deriving it at runtime.
 
-**No card carries a shop price, deliberately.** The card sheet has a cost column, but the Corporation shop and the Runners' market do not work the way it suggests, so seeding those numbers would encode a pricing model the game does not use — and a wrong price is worse than none, because the shop would be built on it. `cost` stays a nullable column that Control can fill in for a one-off ruling, and **pricing arrives with the shop**, which is its own piece of work. A Charge is unaffected: its cost is Credits Security spends during a Run (3.3.5), printed on the card and nothing to do with buying one, so it is seeded. Research costs are unaffected too — those are Research Points, not Credits.
+**No card carries a shop price, deliberately.** The card sheet has a cost column, but the Corporation shop and the Runners' market do not work the way it suggests, so seeding those numbers would encode a pricing model the game does not use — and a wrong price is worse than none, because the shop would be built on it. `cost` stays a nullable column that Control can fill in for a one-off ruling, and the price a card actually sells at is a **shop listing** — per game, set by Control, and nothing to do with the catalogue. See The shop, below. A Charge is unaffected: its cost is Credits Security spends during a Run (3.3.5), printed on the card and nothing to do with buying one, so it is seeded. Research costs are unaffected too — those are Research Points, not Credits.
 
 **Cards are found by code, and a card with no artwork is normal.** `App\Support\CardImage` resolves `public/images/cards/<CODE>.{webp,png,jpg}` and answers null when there is nothing there. Control invents cards mid-game — the rulebook has research proposals priced and added to the tree during play, and DTC's "Unfortunate Malfunction" hands out a bypass card named after whichever Protection Card it counters — and those have never been printed. The `CardFace` React component shows artwork where there is any and a card-shaped box of the card's own text where there is not, so the text box is the other normal case rather than a fallback.
 
@@ -999,7 +1000,7 @@ Three card families, all real data from the game's own card sheet, all seeded pe
 
 **Owning copies is modelled; buying them is not.** `protection_card_holdings` is a count per Corporation per card, and it is what caps how far a card stretches: one copy per Facility, so four copies of Security Team defend four Facilities and no more. `FacilityDefenceService::install()` is the only place a copy leaves a hand and `remove()` the only place one comes back — a copy in a Facility is a row in `facility_protection_cards`, so the hand plus the installed copies is still the briefing's count. Installing with none left is refused; Control raises the count first.
 
-Control sets any count outright via `ProtectionCardHoldingController`. The Corporation shop, auctions, research grants and Security players trading between themselves all happen at the table, so the application records where a count ended up rather than replaying how it got there. **Buying from the shop is a follow-up.**
+Control sets any count outright via `ProtectionCardHoldingController`. Auctions, research grants and Security players trading between themselves all happen at the table, so the application records where a count ended up rather than replaying how it got there. The one route to a copy that *is* modelled is buying one — see The shop, below, which goes through `FacilityDefenceService::giveCopy` rather than writing the holding itself.
 
 **Starting cards are drawn from what a Corporation actually holds.** `installed_in_each` in `config/running_hot.php` says how many of each kind a starting Facility opens with (one each), and `CreateDefaultFacilities` picks the card the Corporation has most copies of that the Facility does not already have. That is what makes ANT's Facilities open with ANT's own cards, and it spreads the load — a Corporation holds four copies of its commonest card against five Facilities, so no single card can cover them all. Running out is not an error: a Facility simply opens thinner.
 
@@ -1021,13 +1022,133 @@ The seeder **skips a code it cannot find**, which is right when Control has dele
 
 It is its own page rather than a corner of the dashboard, because a hand is what you work from: choosing three permanent items to equip means laying the cards out and reading them, so they are drawn as `CardFace`s grouped by category. The `×N` copy count sits *outside* `CardFace` and on top of it, for the reason the defence board's does — it has to stay legible over artwork as well as over the text box. The gang band is drawn only for Control: a player holding one Runner already knows which gang they are in, and it is what makes twenty-one hands readable.
 
-Read-only, on both sides of the line. Every way a card changes hands is a conversation with Control, who sets the count on their own panel.
-
-**Not modelled:** the market. Buying, selling between Runners and splitting a haul are conversations at the table, so Control sets the count.
+Read-only, on both sides of the line: a hand is read here and spent elsewhere. **Selling between Runners and splitting a haul stay conversations at the table**, so Control sets the count for those on their own panel. Buying from the market does not — see The shop, below.
 
 **Technology trees attach to Corporations late.** A game is created before its roster exists, so `SeedTechnologies` writes every technology unattached and fills in `corporation_id` on a second run, after `CreateDefaultRoster`. `CreateDefaultFacilities` makes that second call. Note the codes do not identify the tree reliably — Gordon and Genetic Equity both take a `G` — so the tree comes from the sheet's own column.
 
-**Not modelled, deliberately:** the Corporation shop, auctions, research grants, trading copies between Security players, and who owns which Equipment card. Each is a conversation with Control, who then sets the count.
+**Not modelled, deliberately:** auctions, research grants, and trading copies between Security players. Each is a conversation with Control, who then sets the count.
+
+## The shop
+
+Where cards come from (rulebook 3.3.3 for the Corporation shop, and 2.1 for the
+Runners' market). Control puts cards out at a price, players buy them, and the
+counts land in the holdings that were already there.
+
+**A price is a line in a game's shop, not a column on a card.** The card sheet
+has a cost column and the application still deliberately does not seed it: the
+shop does not price cards the way that column suggests, and a wrong price in the
+catalogue would be worse than none because everything downstream would be built
+on it. So `shop_listings` is per game, Control writes every number on it, and
+the same card can go for five Credits on Saturday and twelve on Sunday without
+either game touching the other.
+
+**Two counters, and they are different transactions rather than one with a
+parameter.** A Protection Card is bought by a Security player, out of the
+*Corporation's* Credits, into the Corporation's hand — 3.3.3 puts the list in
+Security's hands and 3.3.4 makes the copies the Corporation's. An Equipment card
+is bought by a Runner or Freelancer, out of *their own* Credits, into their own
+hand, because 3.4.1 caps and takes away equipment per person. Which of the two
+applies is read off the listing and nowhere else, so no caller ever has to say.
+That is why `shop_listings.stockable` is a morph rather than two nullable
+columns, the reasoning `council_ballots.voter` already follows.
+
+**The shop writes no holding itself.** A copy reaches a Corporation through
+`FacilityDefenceService::giveCopy` and a Runner through
+`EquipmentService::giveCopy`, because each is the one writer of its own table,
+and Credits move through `TrackerService` like every other number the game
+argues about. A shop that grew its own copy of either write would be a second
+place a count could move.
+
+**Rumoured is a line, not an absent one**, and it is the whole reason
+`ShopListingStatus` is not a boolean. 3.3.3 hands Security a list in three
+parts — available now, "rumoured to be in progress", and research-only — and a
+card nobody can buy yet is still something Security plans around. "Hold your
+Credits, the Angel lands next turn" is the decision the list exists to let them
+make, so a shop that left it out would be a shop that told them nothing. Nothing
+moves a line onto sale on its own: 3.3.3 has Control announcing it.
+
+**A research-only card is refused rather than quietly listed.** "Will not be
+available for general sale" is a rule, so `ShopService` checks the card's own
+`availability` when a line is written, and the picker does not offer one.
+Control's override is one field away on a page they already have — the card's
+availability in the catalogue — and the refusal says so. That is better than a
+second flag on the listing, because the catalogue's word and the shop's would
+then be free to disagree about the same card.
+
+**Withdrawn is how a line leaves without taking its sales with it.** A listing
+that has been bought from cannot be deleted, because the purchases hanging off
+it are how Control answers "where did that card come from?" three turns later.
+An unsold line deletes freely, which is what a typo wants.
+
+**Stock is a count, and no count is a line that never runs out.** Null and nought
+are different answers and the distinction is load-bearing: nought is sold out,
+null is Control saying the shop has as many of these as anybody wants. Which is
+why Control's form reads a blank box as null rather than through
+`$request->integer()`, which would turn every unlimited line into a sold-out
+one. "First come first served" is the only allocation rule the rulebook gives,
+so the count is all the shop needs — there is deliberately no per-buyer limit,
+because there is none in the book.
+
+**...and first come first served is a row lock.** `ShopService::buy` locks the
+listing for the length of the sale, because two Security players reaching for
+the last Angel at the same moment is exactly the case 3.3.3 is answering, and
+without it they would both get one.
+
+**`shop_purchases` is how the stock count stays believable.** The count says
+where the shelf ended up; the rows say how it got there, which is the division
+`tracker_adjustments` already draws. It is not a duplicate of that ledger: a card
+given away at nought Credits moves no tracker and so leaves no ledger row at all.
+Two people are on a purchase and they are different questions — the character is
+who stood at the counter, the corporation is whose Credits paid — and the price
+is kept on the row rather than read back off the line, because Control raising a
+price next turn must not rewrite what was paid last turn.
+
+**A refund moves all three together or none of them.** Credits back, copy back,
+shelf back up — the counterpart of unscoring an equation, and there for the same
+reason: a shop run live will sell somebody the wrong card. It is refused when the
+copy is not in hand to give back, which a Protection Card standing in a Facility
+is not. That refusal is better than a refund that quietly leaves the Corporation
+a card up; Control takes it off the stack first.
+
+**The clock is a policy question, which is what lets Control through it.** "The
+Corporation shop will be open during the Setup Phase" (3.3.3), and 2.1 puts the
+market there too — so `ShopListingPolicy` asks about the phase, the seat and the
+claim, and `before()` hands Control the lot. A player will phone a purchase in or
+turn up at the desk between phases, and none of that can wait for the clock to
+come round again. What `ShopService` refuses, though, it refuses to Control as
+well: a Katana in a CEO's hand is a row nothing reads whoever wrote it.
+
+**Which counter you see is the seat you hold.** 3.3.3 hands the Protection Card
+list to the Security players, so it goes to the Corporate seats; the market is
+the Runners'. A price list is not one of the things 3.4.2 keeps Secret, but
+handing every Runner a catalogue of the cards they are about to meet is
+reconnaissance the rulebook makes them pay for, so `ShopPresenter` draws the same
+line the rulebook does. Inside a Corporation the CEO and the Research player read
+the list and only Security buys, which is `FacilityPolicy::defend`'s boundary
+again and the same reasoning: a purse two people can spend out of is a purse
+neither can plan with.
+
+**The page polls**, for the reason the research table and the Chamber do. Control
+announces a card mid-phase, a rumoured line comes on sale, and somebody else
+takes the last Angel — none of it anything the reader's browser did, and first
+come first served is not a rule you can play to against a stale page.
+
+**Auctions are not modelled, and that is a decision.** "Control may also decide
+to auction Protection Cards - in those cases the Security player who pays the
+most will receive a copy" happens in the room, and what the application wants
+afterwards is the result: Control moves the Credits with the tracker controls and
+raises the holding on the card page, both of which already exist. A bidding UI is
+a worse version of a conversation with everyone in front of you.
+
+| Concern | Location |
+|---|---|
+| The list, the price, the stock and the exchange | `App\Services\ShopService` |
+| A line, and whether a copy could be sold at all | `App\Models\ShopListing`, `App\Enums\ShopListingStatus` |
+| What has left the shop | `App\Models\ShopPurchase` |
+| Who may buy, and when | `App\Policies\ShopListingPolicy` |
+| What each counter looks like to whoever is at it | `App\Support\ShopPresenter` |
+| The counters players shop from | `App\Http\Controllers\ShopController`, `resources/js/pages/shop.tsx` |
+| Control announcing the list | `App\Http\Controllers\Control\ShopController`, `resources/js/pages/control/games/shop.tsx` |
 
 ## The research game
 
@@ -1491,6 +1612,6 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 ## Built so far
 
-The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and the security budget — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the accesses a successful one buys, the screen players work it from, the Runners being let into the Facility's own Discord channels for the length of it, and what each Runner is carrying — the Equipment holdings, seeded from the briefings and handed out by Control.
+The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and the security budget — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the accesses a successful one buys, the screen players work it from, the Runners being let into the Facility's own Discord channels for the length of it, and what each Runner is carrying — the Equipment holdings, seeded from the briefings and handed out by Control — and the shop: Control putting cards out at a price with a stock behind them, and both counters players buy from, the Corporation shop out of the Corporation's Credits and the market out of their own.
 
 **What is left is tracked as GitHub issues**, each written against the relevant rulebook section — start there rather than re-deriving the scope. Runs are the highest-value piece and the last of the sub-games, and everything a Run operates on is now built: the Facilities, their Protection Card stacks, and the technologies stored in them. `#facility-list` now carries the Facility list once Control publishes it.

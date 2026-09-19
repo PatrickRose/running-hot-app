@@ -8,6 +8,7 @@ import {
     FolderGit2,
     Gavel,
     LayoutGrid,
+    ShoppingCart,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -29,6 +30,7 @@ import {
     facilities,
     research,
     runs,
+    shop,
 } from '@/routes';
 import type { NavItem } from '@/types';
 
@@ -62,6 +64,11 @@ const mainNavItems: NavItem[] = [
         title: 'Research',
         href: research(),
         icon: FlaskConical,
+    },
+    {
+        title: 'Shop',
+        href: shop(),
+        icon: ShoppingCart,
     },
 ];
 
