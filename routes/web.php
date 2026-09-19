@@ -8,6 +8,7 @@ use App\Http\Controllers\Control\ControlMemberController;
 use App\Http\Controllers\Control\CouncilController as ControlCouncilController;
 use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\EquipmentCardTypeController;
+use App\Http\Controllers\Control\EquipmentHoldingController;
 use App\Http\Controllers\Control\FacilityController;
 use App\Http\Controllers\Control\FacilityTypeController;
 use App\Http\Controllers\Control\GameController;
@@ -244,6 +245,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 // Control's to set: everything that moves it happens at the table.
                 Route::patch('games/{game}/protection-card-holdings', [ProtectionCardHoldingController::class, 'update'])
                     ->name('protection-card-holdings.update');
+
+                // What Equipment each Runner is carrying (rulebook 3.4.1).
+                // Control's to set: the market, a Runner selling to another and
+                // a gang splitting a haul all happen at the table.
+                Route::patch('games/{game}/equipment-holdings', [EquipmentHoldingController::class, 'update'])
+                    ->name('equipment-holdings.update');
 
                 // All three card lists to look at, and the two that are not edited
                 // beside the Facilities to change.

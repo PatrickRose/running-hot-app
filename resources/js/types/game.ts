@@ -197,6 +197,41 @@ export type CorporationCardHoldings = Faction & {
     cards: CardHolding[];
 };
 
+/** One Runner's stake in one Equipment card (rulebook 3.4.1). */
+export type EquipmentHolding = {
+    card_type_id: number;
+    code: string | null;
+    name: string;
+    category: 'permanent' | 'this-run' | 'single-use';
+    category_label: string;
+    category_glyph: string;
+    /**
+     * Copies in hand. Playing a This-run or Single-use card spends one; a
+     * Permanent item is only lost by being carried out of a Facility.
+     */
+    copies: number;
+};
+
+/** What one Runner is carrying. Per Character, because that is what 3.4.1 caps. */
+export type RunnerEquipment = {
+    character_id: number;
+    name: string;
+    role: 'runner' | 'freelancer';
+    role_label: string;
+    cards: EquipmentHolding[];
+};
+
+/**
+ * One gang's Runners and their hands, or the Freelancers, who run with nobody.
+ */
+export type GangEquipmentHoldings = Faction & {
+    /** Null for the Freelancers, who are grouped together rather than banded. */
+    gang_id: number | null;
+    /** False for that group, whose name is what they are rather than a faction. */
+    has_badge: boolean;
+    runners: RunnerEquipment[];
+};
+
 /** A card Runners carry into a Run (rulebook 3.4.1). */
 export type EquipmentCardSummary = {
     id: number;

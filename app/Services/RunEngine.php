@@ -19,7 +19,6 @@ use App\Enums\Tracker;
 use App\Jobs\SyncRunChannelAccess;
 use App\Models\Character;
 use App\Models\EquipmentCardType;
-use App\Models\EquipmentHolding;
 use App\Models\Facility;
 use App\Models\FacilityCardActivation;
 use App\Models\FacilityProtectionCard;
@@ -96,6 +95,7 @@ class RunEngine
     public function __construct(
         private readonly TrackerService $trackers,
         private readonly Dice $dice,
+        private readonly EquipmentService $equipment,
     ) {}
 
     /**
@@ -423,13 +423,14 @@ class RunEngine
 
     /**
      * Take one copy of an Equipment card out of a Runner's hand.
+     *
+     * The count itself belongs to App\Services\EquipmentService, which is the
+     * one writer of `equipment_holdings` - the same rule a Corporation's
+     * Protection Cards live under. What stays here is when a run takes one.
      */
     protected function spendEquipment(Character $runner, EquipmentCardType $card): void
     {
-        EquipmentHolding::query()
-            ->where('character_id', $runner->id)
-            ->where('equipment_card_type_id', $card->id)
-            ->decrement('copies');
+        $this->equipment->takeCopy($runner, $card);
     }
 
     /**
@@ -2552,13 +2553,7 @@ class RunEngine
             $this->spendEquipment($character, $item->cardType);
 
             if ($security !== null) {
-                EquipmentHolding::query()->updateOrCreate(
-                    [
-                        'character_id' => $security->id,
-                        'equipment_card_type_id' => $item->equipment_card_type_id,
-                    ],
-                    [],
-                )->increment('copies');
+                $this->equipment->giveCopy($security, $item->cardType);
             }
         }
 

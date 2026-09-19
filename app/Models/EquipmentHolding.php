@@ -21,8 +21,11 @@ use Illuminate\Support\Carbon;
  * Copies here are in hand. Playing a This-run or Single-use card on a run
  * spends one, because both are "returned to Control" afterwards; a Permanent
  * item is not spent, because it comes home with its owner unless they are
- * carried out. App\Services\RunEngine owns every one of those moves, so nothing
- * else may write this - the same rule facility holdings live under.
+ * carried out - and a Runner carried out loses theirs to the Security player.
+ * App\Services\EquipmentService is the one writer of this table, so nothing
+ * else may touch a count: App\Services\RunEngine asks it for both of those
+ * moves and Control's hand-out goes through it too. The same rule a
+ * Corporation's Protection Cards live under.
  *
  * @property int $id
  * @property int $character_id
