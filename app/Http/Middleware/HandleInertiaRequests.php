@@ -84,6 +84,19 @@ class HandleInertiaRequests extends Middleware
 
                 return $phase === null ? null : $this->games->phase($phase);
             }),
+            // And what the player is standing at, beside it.
+            //
+            // Same reasoning as the clock, and the same mechanism for the same
+            // reason: an ordinary shared prop is filtered out of a partial
+            // reload, so a page polling `only: ['research']` would draw Credits
+            // that stopped moving the moment it loaded - which is worse than
+            // not drawing them, because a stale number reads as a current one.
+            // An always prop rides every poll any page already makes.
+            'standing' => Inertia::always(function () use ($request): ?array {
+                $game = Game::current();
+
+                return $game === null ? null : $this->games->standing($game, $request->user());
+            }),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

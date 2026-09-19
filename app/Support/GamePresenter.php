@@ -209,6 +209,90 @@ class GamePresenter
     }
 
     /**
+     * What the signed-in player is standing at, for the header on every page.
+     *
+     * The companion to phase(): the clock is on every page because the whole
+     * game runs to it, and these numbers are there for the same reason - every
+     * decision the game asks of a player is "can I afford this?", and it was
+     * only answerable by going back to the dashboard.
+     *
+     * Two halves, and they are shown to different people. Procatorion's
+     * Stability and Civil Unrest belong to the game, so everybody sees them,
+     * Control and the two Press outlets included. The characters are the
+     * player's own, one entry each because a player may hold more than one and
+     * Control holds none; which numbers an entry carries is the role's
+     * question, not this method's:
+     *
+     * - a Corporate player is shown their **Corporation's** Credits, since
+     *   that is the purse they spend from and they have no other;
+     * - a Runner or Freelancer is shown their own Credits, Wounds and Tags;
+     * - a Press outlet and HM Government are shown neither, and are left out
+     *   entirely rather than sent as a row of zeroes.
+     *
+     * @return array<string, mixed>
+     */
+    public function standing(Game $game, ?User $user): array
+    {
+        return [
+            'stability' => $game->stability,
+            'civil_unrest' => $game->civil_unrest,
+            'characters' => $user === null ? [] : $this->standingCharacters($game, $user),
+        ];
+    }
+
+    /**
+     * The claimed characters the header draws, and the numbers each one shows.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function standingCharacters(Game $game, User $user): array
+    {
+        return Character::query()
+            ->where('game_id', $game->id)
+            ->where('user_id', $user->id)
+            ->with('corporation:id,name,credits')
+            ->orderBy('name')
+            ->get()
+            ->map(function (Character $character): ?array {
+                if ($character->role->isCorporate()) {
+                    $corporation = $character->corporation;
+
+                    // A Corporate seat with no Corporation has no purse to
+                    // show. Control can build a roster like that, so it is a
+                    // shape to cope with rather than an error.
+                    return $corporation === null ? null : [
+                        'character_id' => $character->id,
+                        'character' => $character->name,
+                        'subject' => $corporation->name,
+                        'credits' => $corporation->credits,
+                        'wounds' => null,
+                        'tags' => null,
+                        'body' => null,
+                        'incapacitated' => false,
+                    ];
+                }
+
+                if (! $character->role->carriesOwnTrackers()) {
+                    return null;
+                }
+
+                return [
+                    'character_id' => $character->id,
+                    'character' => $character->name,
+                    'subject' => $character->name,
+                    'credits' => $character->credits,
+                    'wounds' => $character->wounds,
+                    'tags' => $character->tags,
+                    'body' => $character->body,
+                    'incapacitated' => $character->isIncapacitated(),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Every tracker Control can move, grouped by subject.
      *
      * @return array<string, mixed>
@@ -270,6 +354,12 @@ class GamePresenter
                     'team' => $character->gang->name ?? $character->corporation?->name,
                     'discord_username' => $character->discord_username,
                     'claimed_by' => $character->user?->name,
+                    // The four printed stats. Not Trackers: they are what a
+                    // character is rather than a number that moves, so Control
+                    // edits them outright and no ledger row is written.
+                    'brawn' => $character->brawn,
+                    'hack' => $character->hack,
+                    'charisma' => $character->charisma,
                     'body' => $character->body,
                     'incapacitated' => $character->isIncapacitated(),
                     'values' => [

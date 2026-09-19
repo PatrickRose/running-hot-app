@@ -45,4 +45,22 @@ enum CharacterRole: string
     {
         return in_array($this, [self::Runner, self::Freelancer], true);
     }
+
+    /**
+     * Roles whose Credits, Wounds and Tags are their own.
+     *
+     * A Corporate player spends their Corporation's Credits rather than a purse
+     * of their own, and the two roles that are organisations rather than people
+     * - the Press outlets, and HM Government sitting on the Council as Other -
+     * carry none of the three: they never walk into a Facility, so nothing in
+     * the rulebook gives them a Wound or a Tag.
+     *
+     * The same two cases as healsDuringTeamTime(), and deliberately a separate
+     * question: that one is about upkeep and this one is about what a player is
+     * shown, so a role that gained one would not necessarily gain the other.
+     */
+    public function carriesOwnTrackers(): bool
+    {
+        return in_array($this, [self::Runner, self::Freelancer], true);
+    }
 }
