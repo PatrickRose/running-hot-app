@@ -79,6 +79,13 @@ class TechnologyHoldingController extends Controller
     ): RedirectResponse {
         abort_if($holding->game_id !== $game->id, 404);
 
+        // Salvaged first, so that putting a destroyed card back and saying
+        // where it goes is one request rather than two: place() refuses a card
+        // that is not in the building, and until it is restored this is one.
+        if ($request->boolean('restore') && $holding->status === TechnologyHoldingStatus::Destroyed) {
+            $this->technologies->restore($holding);
+        }
+
         if ($request->has('facility_id')) {
             $facilityId = $request->integer('facility_id');
 
@@ -98,10 +105,6 @@ class TechnologyHoldingController extends Controller
 
         if ($request->has('notes')) {
             $holding->forceFill(['notes' => $request->string('notes')->toString() ?: null])->save();
-        }
-
-        if ($request->boolean('restore') && $holding->status === TechnologyHoldingStatus::Destroyed) {
-            $this->technologies->restore($holding);
         }
 
         return back()->with('status', $holding->technologyType->name.' updated.');

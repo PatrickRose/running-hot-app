@@ -131,6 +131,50 @@ export default function Facilities({ game, board }: Props) {
                                         </div>
                                     </div>
 
+                                    {/* What is stored in here, above the
+                                        stacks that defend it - the same order
+                                        the Security player's board reads in,
+                                        because a Runner is coming for the
+                                        technologies. Every Corporate seat sees
+                                        them: 3.4.2 keeps a Facility's contents
+                                        Secret from outside the Corporation, not
+                                        from the people who put them there. Only
+                                        Security may move them, which is why
+                                        this tier has no menu. */}
+                                    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                                        <span className="text-muted-foreground">
+                                            Technologies{' '}
+                                            {facility.technologies.length} of{' '}
+                                            {facility.technology_capacity}
+                                        </span>
+                                        {facility.technologies.map(
+                                            (technology) => (
+                                                <Badge
+                                                    key={technology.id}
+                                                    variant={
+                                                        technology.usable
+                                                            ? 'outline'
+                                                            : 'secondary'
+                                                    }
+                                                    title={`${technology.status_label} · ${technology.origin_label}${
+                                                        technology.usable
+                                                            ? ''
+                                                            : ' · does nothing yet'
+                                                    }`}
+                                                >
+                                                    {technology.name}
+                                                    {!technology.usable &&
+                                                        ' ·\u00a0inert'}
+                                                </Badge>
+                                            ),
+                                        )}
+                                        {facility.technologies.length === 0 && (
+                                            <span className="text-muted-foreground">
+                                                — empty
+                                            </span>
+                                        )}
+                                    </div>
+
                                     <div className="mt-3 grid gap-4 lg:grid-cols-2">
                                         {facility.stacks.map((stack) => (
                                             <div

@@ -30,6 +30,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
+use App\Http\Controllers\FacilityTechnologyController;
 use App\Http\Controllers\ResearchBoardController;
 use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
@@ -71,6 +72,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('facilities.cards.quote');
     Route::delete('facilities/{facility}/cards/{card}', [FacilityDefenceController::class, 'remove'])
         ->name('facilities.cards.remove');
+
+    // Where a technology is stored (3.2.2). Security's, for the reason the
+    // stacks are: which building holds what is a decision about what a Run
+    // would come away with. The Facility in the path is the destination, which
+    // is both what the gesture names and what is authorised.
+    Route::patch('facilities/{facility}/technologies/{holding}', [FacilityTechnologyController::class, 'move'])
+        ->name('facilities.technologies.move');
 
     // What a Runner is carrying (rulebook 3.4.1). Names no character: a
     // player sees the hands of whoever they have claimed, and Control sees
