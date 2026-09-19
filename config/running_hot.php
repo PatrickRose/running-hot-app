@@ -211,6 +211,13 @@ return [
      * Freelancers belong to no gang - 3.4 hands the Facility game to a side
      * rather than to a roster - so they are named directly rather than through
      * a faction, and they have a briefing of their own.
+     *
+     * Empty is the right answer for the three the game ships with, not an
+     * unfinished one. Jack Scanton, Mandel Reso and Yale Pirit are each given
+     * "Special rules" in place of a kit - all three may Direct Security from a
+     * Facility and spend their own money doing it - and none of those is an
+     * Equipment card. They are Control's to run, exactly as a Facility type's
+     * effect is.
      */
     'freelancer_equipment' => [],
 
@@ -222,25 +229,71 @@ return [
             // printed on the card. A Runner the config says nothing about opens
             // with nothing, which is the same choice CreateDefaultFacilities
             // makes about Facilities.
+            //
+            // A briefing heads that list either "Equipment" or "Ability", and
+            // both are cards. Ballet, Bitter and Z3R0 are the three given an
+            // Ability, and what is printed under it is the effect text of a
+            // card in the catalogue - EEP014 to EEP016, the three
+            // Reconnaissance cards - reproduced almost word for word rather
+            // than described. So they are seeded as the cards they are, and a
+            // Runner with an innate power the catalogue does not print would be
+            // the thing that needed somewhere else to live.
+            //
+            // Z3R0's is the one that is not word for word: their Facility
+            // Protection reconnaissance is once a turn, views two cards, and
+            // warns the Facility's owner on a failure, where EEP014 looks at
+            // one card per success and says nothing about being noticed. The
+            // card is seeded and Control reads the briefing, which is what
+            // Control does with every other printed effect in the game.
             'name' => 'Facers',
             'notoriety' => 0,
             'runners' => [
-                ['name' => 'Con', 'brawn' => 3, 'hack' => 3, 'charisma' => 5, 'body' => 4],
-                ['name' => 'Ghost', 'brawn' => 2, 'hack' => 1, 'charisma' => 1, 'body' => 7],
-                ['name' => 'Next', 'brawn' => 1, 'hack' => 2, 'charisma' => 3, 'body' => 7],
-                ['name' => 'Vampire', 'brawn' => 1, 'hack' => 1, 'charisma' => 6, 'body' => 7],
-                ['name' => 'Wicker', 'brawn' => 2, 'hack' => 2, 'charisma' => 3, 'body' => 6],
+                [
+                    'name' => 'Con', 'brawn' => 3, 'hack' => 3, 'charisma' => 5, 'body' => 4,
+                    'equipment' => ['ESP003' => 1, 'ESP004' => 1, 'EEP017' => 1],
+                ],
+                [
+                    'name' => 'Ghost', 'brawn' => 2, 'hack' => 1, 'charisma' => 1, 'body' => 7,
+                    'equipment' => ['ESP001' => 1, 'ESP004' => 1],
+                ],
+                [
+                    'name' => 'Next', 'brawn' => 1, 'hack' => 2, 'charisma' => 3, 'body' => 7,
+                    'equipment' => ['EES004' => 2],
+                ],
+                [
+                    'name' => 'Vampire', 'brawn' => 1, 'hack' => 1, 'charisma' => 6, 'body' => 7,
+                    'equipment' => ['EEP002' => 1],
+                ],
+                [
+                    'name' => 'Wicker', 'brawn' => 2, 'hack' => 2, 'charisma' => 3, 'body' => 6,
+                    'equipment' => ['ESP003' => 1, 'ESP004' => 1],
+                ],
             ],
         ],
         [
             'name' => 'g33ks',
             'notoriety' => 0,
             'runners' => [
-                ['name' => '$0FTW4R3', 'brawn' => 2, 'hack' => 2, 'charisma' => 3, 'body' => 5],
-                ['name' => '$TUX', 'brawn' => 3, 'hack' => 0, 'charisma' => 2, 'body' => 6],
-                ['name' => 'CYCLE3', 'brawn' => 1, 'hack' => 3, 'charisma' => 3, 'body' => 5],
-                ['name' => 'G1T', 'brawn' => 1, 'hack' => 2, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Z3R0', 'brawn' => 1, 'hack' => 3, 'charisma' => 3, 'body' => 5],
+                [
+                    'name' => '$0FTW4R3', 'brawn' => 2, 'hack' => 2, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['EEP002' => 1, 'EES004' => 1],
+                ],
+                [
+                    'name' => '$TUX', 'brawn' => 3, 'hack' => 0, 'charisma' => 2, 'body' => 6,
+                    'equipment' => ['ESS009' => 4],
+                ],
+                [
+                    'name' => 'CYCL3', 'brawn' => 1, 'hack' => 3, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['EEP021' => 1],
+                ],
+                [
+                    'name' => 'G1T', 'brawn' => 1, 'hack' => 2, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['EEP021' => 1],
+                ],
+                [
+                    'name' => 'Z3R0', 'brawn' => 1, 'hack' => 3, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['EEP014' => 1],
+                ],
             ],
         ],
         [
@@ -252,20 +305,44 @@ return [
                 // are in nobody's chair, which would have seated two Runners
                 // nobody is playing and given a gang two extra bodies in every
                 // dice pool. Their briefings do not exist either.
-                ['name' => 'Ballet', 'brawn' => 1, 'hack' => 1, 'charisma' => 6, 'body' => 3],
-                ['name' => 'Hustle', 'brawn' => 2, 'hack' => 3, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Swing', 'brawn' => 3, 'hack' => 2, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Tap', 'brawn' => 2, 'hack' => 2, 'charisma' => 1, 'body' => 7],
+                [
+                    'name' => 'Ballet', 'brawn' => 1, 'hack' => 1, 'charisma' => 6, 'body' => 3,
+                    'equipment' => ['EEP015' => 1, 'EEP016' => 1],
+                ],
+                [
+                    'name' => 'Hustle', 'brawn' => 2, 'hack' => 3, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['ESP003' => 1, 'ESP004' => 1, 'EEP017' => 1],
+                ],
+                [
+                    'name' => 'Swing', 'brawn' => 3, 'hack' => 2, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['EES004' => 2, 'ESS006' => 1],
+                ],
+                [
+                    'name' => 'Tap', 'brawn' => 2, 'hack' => 2, 'charisma' => 1, 'body' => 7,
+                    'equipment' => ['ESP001' => 1, 'ESP003' => 1],
+                ],
             ],
         ],
         [
             'name' => 'Gruffsters',
             'notoriety' => 0,
             'runners' => [
-                ['name' => 'Bitter', 'brawn' => 3, 'hack' => 1, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Groucho', 'brawn' => 1, 'hack' => 3, 'charisma' => 3, 'body' => 5],
-                ['name' => 'Pale', 'brawn' => 3, 'hack' => 1, 'charisma' => 6, 'body' => 5],
-                ['name' => 'Scorer', 'brawn' => 3, 'hack' => 3, 'charisma' => 3, 'body' => 3],
+                [
+                    'name' => 'Bitter', 'brawn' => 3, 'hack' => 1, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['EEP014' => 1],
+                ],
+                [
+                    'name' => 'Groucho', 'brawn' => 1, 'hack' => 3, 'charisma' => 3, 'body' => 5,
+                    'equipment' => ['ERP027' => 1],
+                ],
+                [
+                    'name' => 'Pale', 'brawn' => 3, 'hack' => 1, 'charisma' => 6, 'body' => 5,
+                    'equipment' => ['ESP003' => 1, 'ESS006' => 1],
+                ],
+                [
+                    'name' => 'Scorer', 'brawn' => 3, 'hack' => 3, 'charisma' => 3, 'body' => 3,
+                    'equipment' => ['EST005' => 3],
+                ],
             ],
         ],
     ],

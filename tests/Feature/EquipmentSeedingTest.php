@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CreateDefaultRoster;
 use App\Actions\SeedEquipmentHoldings;
 use App\Enums\CharacterRole;
 use App\Models\Character;
@@ -161,6 +162,102 @@ class EquipmentSeedingTest extends TestCase
         $action->handle($game);
 
         $this->assertSame(0, $con->equipmentCopiesOf($typeId));
+    }
+
+    /**
+     * Every code the shipped roster names is really a card in the catalogue.
+     *
+     * The seeder skips a code it cannot find, which is right when Control has
+     * deleted a card and wrong when somebody has fat-fingered a digit - and the
+     * two are indistinguishable at run time. A Runner would simply open the
+     * game one card lighter than their briefing, which nobody would notice
+     * until they went looking for it mid-session. So the configuration is
+     * checked against the catalogue here instead, where a typo fails loudly.
+     */
+    public function test_every_configured_code_is_a_card_in_the_catalogue(): void
+    {
+        $game = Game::factory()->create();
+        $catalogue = $game->equipmentCardTypes()->pluck('code')->all();
+
+        /** @var array<int, array<string, mixed>> $gangs */
+        $gangs = config('running_hot.gangs', []);
+        /** @var array<string, array<string, int>> $freelancers */
+        $freelancers = config('running_hot.freelancer_equipment', []);
+
+        /** @var array<string, array<string, int>> $kits */
+        $kits = [];
+
+        foreach ($gangs as $gang) {
+            /** @var array<int, array<string, mixed>> $runners */
+            $runners = $gang['runners'] ?? [];
+
+            foreach ($runners as $runner) {
+                /** @var array<string, int> $equipment */
+                $equipment = $runner['equipment'] ?? [];
+
+                if ($equipment !== []) {
+                    $kits[(string) $runner['name']] = $equipment;
+                }
+            }
+        }
+
+        foreach ($freelancers as $name => $equipment) {
+            $kits[$name] = $equipment;
+        }
+
+        $this->assertNotSame([], $kits, 'The shipped roster hands out no Equipment at all.');
+
+        foreach ($kits as $name => $equipment) {
+            foreach ($equipment as $code => $copies) {
+                $this->assertContains(
+                    $code,
+                    $catalogue,
+                    sprintf('%s is configured to start with %s, which is not a card.', $name, $code),
+                );
+                $this->assertGreaterThan(
+                    0,
+                    $copies,
+                    sprintf('%s is configured to start with %d copies of %s.', $name, $copies, $code),
+                );
+            }
+        }
+    }
+
+    /**
+     * And the shipped roster really hands them out, off the briefings.
+     *
+     * Spot-checked rather than transcribed again: a test restating all eighteen
+     * kits would be the configuration written twice, and would agree with
+     * itself rather than with the briefing. What is worth pinning is that the
+     * path from a briefing to a Runner's hand is joined up at all, and the
+     * three shapes it has to carry - one copy, several copies, and a card whose
+     * briefing calls it an Ability rather than Equipment.
+     */
+    public function test_the_shipped_roster_hands_out_the_briefings_kit(): void
+    {
+        $game = Game::factory()->create();
+
+        app(CreateDefaultRoster::class)->handle($game);
+
+        // Vampire's briefing is a single Katana.
+        $this->assertSame(1, $this->copiesFor($game, 'Vampire', 'EEP002'));
+
+        // $TUX opens with "4x H4cking 4 Dummies".
+        $this->assertSame(4, $this->copiesFor($game, '$TUX', 'ESS009'));
+
+        // Bitter's is headed Ability, and is the Reconnaissance card whose
+        // printed effect their briefing reproduces.
+        $this->assertSame(1, $this->copiesFor($game, 'Bitter', 'EEP014'));
+
+        // And a Freelancer carries none: all three are given Special rules.
+        $this->assertSame(0, $this->copiesFor($game, 'Jack Scanton', 'EEP002'));
+    }
+
+    private function copiesFor(Game $game, string $character, string $code): int
+    {
+        $runner = $game->characters()->where('name', $character)->firstOrFail();
+
+        return $runner->equipmentCopiesOf($this->codeId($game, $code));
     }
 
     /**
