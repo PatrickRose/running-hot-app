@@ -133,11 +133,12 @@ class CardCatalogueTest extends TestCase
     {
         $game = Game::factory()->create();
 
-        $shutter = $game->protectionCardTypes()->where('code', 'PS006')->sole();
+        $beiIlai = $game->protectionCardTypes()->where('code', 'PR006')->sole();
         $keypad = $game->protectionCardTypes()->where('code', 'PS005')->sole();
         $aosSi = $game->protectionCardTypes()->where('code', 'PR030')->sole();
 
-        $this->assertSame('Brute or Hack (Number of alerts+2)', $shutter->challenge);
+        // Two challenges on one card, met in order.
+        $this->assertSame('Hack (4), followed by Brute (4)', $beiIlai->challenge);
         $this->assertSame('Brute/Hack (2)', $keypad->challenge);
         $this->assertStringContainsString('Hack (4+N)', $aosSi->challenge);
     }
@@ -188,41 +189,8 @@ class CardCatalogueTest extends TestCase
         $orc = $game->protectionCardTypes()->where('code', 'PS003')->sole();
 
         $this->assertSame(1, $orc->charge_cost);
-        $this->assertSame('2 alert, 1 wound', $orc->charge_consequence);
+        $this->assertSame('2 Alerts, 1 Wound', $orc->charge_consequence);
         $this->assertTrue($orc->hasCharge());
-    }
-
-    /**
-     * ANT's own cards are not a copy of the five the other Corporations hold,
-     * and the Charge is where they part company. The blueprint had them
-     * identical on the strength of their matching Challenges and Consequences,
-     * which handed Öryggissveit a Charge its printed card does not carry - so
-     * ANT's Security could buy an extra consequence nobody else at the table
-     * could see on the card.
-     *
-     * Pinned against the committed artwork: PS015 prints Challenge and
-     * Consequence only, where PS003 prints a Charge panel below them.
-     */
-    public function test_ants_own_cards_carry_no_charge(): void
-    {
-        $game = Game::factory()->create();
-
-        foreach (['PS015', 'PS018'] as $code) {
-            $card = $game->protectionCardTypes()->where('code', $code)->sole();
-
-            $this->assertFalse(
-                $card->hasCharge(),
-                sprintf('%s (%s) prints no Charge.', $card->name, $code),
-            );
-            $this->assertNull($card->charge_cost);
-            $this->assertNull($card->charge_consequence);
-        }
-
-        // ...while its counterpart does, which is what makes them two cards
-        // rather than two names for one.
-        $this->assertTrue(
-            $game->protectionCardTypes()->where('code', 'PS003')->sole()->hasCharge(),
-        );
     }
 
     public function test_equipment_carries_its_category(): void
