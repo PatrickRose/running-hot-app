@@ -299,11 +299,69 @@ class RunnerEquipmentTest extends TestCase
     }
 
     /**
+     * Mind jack: "Retry any failed rolls once."
+     *
+     * The failures are thrown again and the new faces stand - a reroll that
+     * kept the better of the two would be a different card.
+     */
+    public function test_a_reroll_throws_the_failures_again(): void
+    {
+        $runner = $this->runner(['brawn' => 4]);
+        $run = $this->begun($runner);
+
+        $this->engine()->activate($run->refresh());
+        $this->dice->willRoll(1, 1);
+        $this->engine()->defend($run->refresh(), 1);
+
+        // Four dice: one hits, three miss. The three are thrown again and all
+        // three land, so four successes off a roll that started with one.
+        $this->dice->will([8, 1, 1, 1]);
+        $this->dice->will([8, 8, 8]);
+
+        $outcome = $this->engine()->challenge(
+            $run->refresh(),
+            RunnerSkill::Brawn,
+            new RollModifiers(rerollFailures: true),
+        );
+
+        $this->assertSame(4, $outcome->runnersRoll->successes);
+    }
+
+    /**
+     * Both on one roll, in the order they happen: the misses are thrown again
+     * first, and only then is a face nudged. A +1 put on a die that was about
+     * to be rerolled would be spent on a face nobody keeps.
+     */
+    public function test_a_reroll_happens_before_a_plus_one_lands(): void
+    {
+        $runner = $this->runner(['brawn' => 3]);
+        $run = $this->begun($runner);
+
+        $this->engine()->activate($run->refresh());
+        $this->dice->willRoll(1, 1);
+        $this->engine()->defend($run->refresh(), 1);
+
+        // One hit and two misses; the two come back as a 4 and a 1.
+        $this->dice->will([8, 1, 1]);
+        $this->dice->will([4, 1]);
+
+        $outcome = $this->engine()->challenge(
+            $run->refresh(),
+            RunnerSkill::Brawn,
+            new RollModifiers(rerollFailures: true, bumps: 1),
+        );
+
+        // The +1 lands on the rerolled 4, which is the die it can rescue.
+        $this->assertSame([8, 5, 1], $outcome->runnersRoll->faces);
+        $this->assertSame(2, $outcome->runnersRoll->successes);
+    }
+
+    /**
      * Armour, and the cards like it: "Add +1 to one of your dice."
      *
      * A face nudged after it has been thrown rather than a die added to the
      * pool - which is the only way a 4 becomes the success it was one short
-     * of. Nothing on the sheet rerolls a failure.
+     * of, and it is a different thing from Mind jack's reroll above.
      */
     public function test_a_plus_one_lands_on_the_die_it_can_turn_into_a_success(): void
     {

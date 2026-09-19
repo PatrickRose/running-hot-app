@@ -2022,6 +2022,7 @@ function LeaderDesk({ run }: { run: RunView }) {
     // invented mid-game would get nothing. See App\Support\Runs\RollModifiers.
     const [extraDice, setExtraDice] = useState('');
     const [dieFaces, setDieFaces] = useState('');
+    const [reroll, setReroll] = useState(false);
     const [bumps, setBumps] = useState('');
     const { busy, refusal, post } = useRunAction();
 
@@ -2056,6 +2057,7 @@ function LeaderDesk({ run }: { run: RunView }) {
                                 extraDice === '' ? 0 : Number(extraDice),
                             die_faces:
                                 dieFaces === '' ? null : Number(dieFaces),
+                            reroll_failures: reroll,
                             bumps: bumps === '' ? 0 : Number(bumps),
                         });
                     }}
@@ -2123,6 +2125,16 @@ function LeaderDesk({ run }: { run: RunView }) {
                                 ))}
                             </select>
                         </div>
+                        <label className="flex items-center gap-2 pb-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={reroll}
+                                onChange={(event) =>
+                                    setReroll(event.target.checked)
+                                }
+                            />
+                            Reroll failures once
+                        </label>
                         <div className="flex flex-col gap-1">
                             <Label htmlFor={`bumps-${run.id}`}>
                                 +1 on a die
@@ -2145,10 +2157,11 @@ function LeaderDesk({ run }: { run: RunView }) {
                         Security has already thrown theirs. The dice are rolled
                         on the server and every face is kept. Anything your
                         Equipment grants goes in the three boxes above — the
-                        cards are not read for you. A &ldquo;+1 on a die&rdquo;
-                        lands after the roll, on whichever die it can turn into
-                        a success; a card that raises a <em>skill</em> goes on
-                        your own desk below instead.
+                        cards are not read for you. A reroll throws the misses
+                        again and a &ldquo;+1 on a die&rdquo; lands after that,
+                        on whichever die it can turn into a success; a card that
+                        raises a <em>skill</em> goes on your own desk below
+                        instead.
                     </p>
                 </form>
             )}

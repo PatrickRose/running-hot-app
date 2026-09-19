@@ -825,7 +825,7 @@ places it in front of you, and the engine refuses it once the run has gone in.
 A This-run or Single-use card is played during a step, one per Runner per
 *step* rather than per run, which is what the worked examples make it. And what
 either card then *does* is declared on the challenge form, in three boxes:
-extra dice, die size, and +1s to put on dice already rolled.
+extra dice, die size, rerolling the misses once, and +1s to put on dice already rolled.
 
 **Declared rather than parsed, for the reason nothing else here is parsed
 either.** The seventy-four printed effects would be a second rulebook to keep
@@ -856,11 +856,16 @@ something and is also optimal play, so applying it rather than asking takes no
 decision off anybody. One per die, because the card says "one of your dice";
 whether two may stack on one die is printed nowhere and is Control's call.
 
-**Nothing on the sheet rerolls a failure.** A `rerollFailures` flag was built
-off `EEP001` Mind jack's "Retry any failed rolls once" and has been taken out -
-that is not a mechanic this game has. Note the catalogue still carries that
-sentence as the card's printed effect, which wants checking against the card
-sheet.
+**A reroll and a +1 are both real, and they happen in that order.** `EEP001`
+Mind jack retries the failures once and the new faces stand - a reroll keeping
+the better of the two would be a different card - and Armour's +1 lands after
+it. That order is not arbitrary: a +1 put on a die that is about to be thrown
+again would be spent on a face nobody keeps. The wound Mind jack costs per use
+is taken at the end of the run and is Control's, because nothing here counts
+how many times a card was leaned on.
+
+Both rules live on `RollModifiers` beside the other two, so what the dice did
+is described in one class and `RunEngine::challenge` only says when.
 
 **Both acts are `act` plus a check that the character named is one you hold.**
 `RunPolicy::act` only asks whether you are on this run, which every Runner on

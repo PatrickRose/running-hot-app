@@ -267,6 +267,7 @@ class RunController extends Controller
             // effects - see App\Support\Runs\RollModifiers.
             'extra_dice' => ['nullable', 'integer', 'min:-9', 'max:9'],
             'die_faces' => ['nullable', 'integer', Rule::in(RollModifiers::ALLOWED_FACES)],
+            'reroll_failures' => ['nullable', 'boolean'],
             // +1s put on dice already rolled, not dice added to the pool.
             'bumps' => ['nullable', 'integer', 'min:0', 'max:20'],
         ]);
@@ -277,6 +278,7 @@ class RunController extends Controller
             new RollModifiers(
                 dice: (int) ($validated['extra_dice'] ?? 0),
                 dieFaces: isset($validated['die_faces']) ? (int) $validated['die_faces'] : null,
+                rerollFailures: (bool) ($validated['reroll_failures'] ?? false),
                 bumps: (int) ($validated['bumps'] ?? 0),
             ),
             $request->user(),

@@ -2,6 +2,7 @@
 
 namespace App\Support\Runs;
 
+use App\Services\Dice;
 use InvalidArgumentException;
 
 /**
@@ -25,6 +26,7 @@ use InvalidArgumentException;
  *   one"
  * - **die size**, which covers "Roll d8 for Brute" and "The next time you roll
  *   dice, roll d8s" - both of which are a Wounded Runner buying their d8s back
+ * - **rerolling failures once**, which is Mind jack
  * - **+1 to a die already rolled**, which is Armour's "Add +1 to one of your
  *   dice" - not a die added to the pool but a face nudged after it has been
  *   thrown, which is what turns a 4 into the success it was one short of
@@ -40,6 +42,12 @@ readonly class RollModifiers
     public function __construct(
         public int $dice = 0,
         public ?int $dieFaces = null,
+        /**
+         * Mind jack: "Retry any failed rolls once." The wound it costs per use
+         * is taken at the end of the run and is Control's to apply, because
+         * nothing here counts how many times a card was leaned on.
+         */
+        public bool $rerollFailures = false,
         /**
          * How many +1s the Runners are putting on dice they have already
          * rolled. One per die: the card says "one of your dice", so two cards
@@ -64,7 +72,10 @@ readonly class RollModifiers
 
     public function isEmpty(): bool
     {
-        return $this->dice === 0 && $this->dieFaces === null && $this->bumps === 0;
+        return $this->dice === 0
+            && $this->dieFaces === null
+            && ! $this->rerollFailures
+            && $this->bumps === 0;
     }
 
     /**
@@ -97,6 +108,41 @@ readonly class RollModifiers
         $chosen = $this->dieFaces ?? $faces;
 
         return $chosen;
+    }
+
+    /**
+     * Throw the failures again, once.
+     *
+     * Mind jack, and the new faces stand: a reroll that kept the better of the
+     * two would be a different card. The successes are held back and only the
+     * misses go in the cup, which is what "retry any failed rolls" means.
+     *
+     * Takes the roller rather than the faces alone, because a reroll needs
+     * dice thrown - and they are thrown on the server like every other die
+     * here, so a browser cannot decide what the second throw gave.
+     *
+     * @param  array<int, int>  $faces
+     * @param  int<2, max>  $dieFaces  never a d1 - a one-sided die is not a die
+     * @return array<int, int>
+     */
+    public function reroll(array $faces, int $successOn, Dice $dice, int $dieFaces): array
+    {
+        if (! $this->rerollFailures) {
+            return $faces;
+        }
+
+        $kept = array_values(array_filter(
+            $faces,
+            static fn (int $face): bool => $face >= $successOn,
+        ));
+
+        $failed = count($faces) - count($kept);
+
+        if ($failed < 1) {
+            return $faces;
+        }
+
+        return [...$kept, ...$dice->roll($failed, $dieFaces)];
     }
 
     /**
@@ -151,6 +197,10 @@ readonly class RollModifiers
             $parts[] = sprintf('rolled as d%d', $this->dieFaces);
         }
 
+        if ($this->rerollFailures) {
+            $parts[] = 'failures rerolled once';
+        }
+
         if ($this->bumps > 0) {
             $parts[] = sprintf(
                 '%+d on %s',
@@ -163,13 +213,14 @@ readonly class RollModifiers
     }
 
     /**
-     * @return array{dice: int, die_faces: int|null, bumps: int}
+     * @return array{dice: int, die_faces: int|null, reroll_failures: bool, bumps: int}
      */
     public function toArray(): array
     {
         return [
             'dice' => $this->dice,
             'die_faces' => $this->dieFaces,
+            'reroll_failures' => $this->rerollFailures,
             'bumps' => $this->bumps,
         ];
     }

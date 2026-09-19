@@ -1121,10 +1121,18 @@ class RunEngine
 
             $runnerFaces = $this->dice->roll($count, $faces);
 
-            // Armour, and the cards like it: "Add +1 to one of your dice". A
-            // face nudged after it has been thrown rather than a die added to
-            // the pool, so the faces kept below are the ones that decided the
-            // challenge. Nothing on the sheet rerolls a failure.
+            // Mind jack first, then Armour, which is the order they happen
+            // in: a +1 put on a die that is about to be thrown again would be
+            // spent on a face nobody keeps. So the failures are retried, and
+            // only then is a face nudged. Either way the faces kept below are
+            // the ones that decided the challenge.
+            $runnerFaces = $modifiers->reroll(
+                $runnerFaces,
+                DicePool::SUCCESS_ON,
+                $this->dice,
+                $faces,
+            );
+
             $runnerFaces = $modifiers->bump($runnerFaces, DicePool::SUCCESS_ON);
 
             $runnerSuccesses = DicePool::countSuccesses($runnerFaces);
