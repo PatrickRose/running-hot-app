@@ -20,6 +20,7 @@ use App\Http\Controllers\Control\ResearchController;
 use App\Http\Controllers\Control\ResearchEquationController;
 use App\Http\Controllers\Control\ResearchSessionController;
 use App\Http\Controllers\Control\ShopController as ControlShopController;
+use App\Http\Controllers\Control\StatsController;
 use App\Http\Controllers\Control\TechnologyHoldingController;
 use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
@@ -248,9 +249,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::post('games/{game}/phase/resume', [PhaseController::class, 'resume'])->name('phase.resume');
                 Route::post('games/{game}/phase/extend', [PhaseController::class, 'extend'])->name('phase.extend');
 
+                // Every number in the game, in one place. The trackers move
+                // through TrackerService as they always did; the four printed
+                // stats on a character sheet are edited nowhere else.
+                Route::get('games/{game}/stats', [StatsController::class, 'index'])
+                    ->name('stats.index');
+
                 Route::post('games/{game}/trackers', [TrackerController::class, 'store'])->name('trackers.store');
                 Route::post('games/{game}/characters/{character}/remove-tag', [TrackerController::class, 'removeTag'])
                     ->name('characters.remove-tag');
+                Route::patch('games/{game}/characters/{character}/stats', [CharacterController::class, 'updateStats'])
+                    ->name('characters.stats');
 
                 // Facility Defence (rulebook 3.3). Facilities and their Protection
                 // Card stacks, plus the catalogues both are built from.

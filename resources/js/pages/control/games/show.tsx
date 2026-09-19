@@ -2,12 +2,10 @@ import { Head, router, usePage, usePoll } from '@inertiajs/react';
 import { CharacterLogo } from '@/components/character-logo';
 import { ControlTeam } from '@/components/control-team';
 import { DiscordHandle } from '@/components/discord-handle';
-import { FactionBadge } from '@/components/faction-badge';
 import { GameDiscordPanel } from '@/components/game-discord';
 import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
-import { TrackerValue } from '@/components/tracker-value';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,13 +16,13 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { index as cardsIndex } from '@/routes/control/cards';
-import { removeTag } from '@/routes/control/characters';
 import { index as councilIndex } from '@/routes/control/council';
 import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import { index as researchIndex } from '@/routes/control/research';
 import { index as shopIndex } from '@/routes/control/shop';
+import { index as statsIndex } from '@/routes/control/stats';
 import type {
     CharacterSubject,
     ControlMember,
@@ -32,37 +30,19 @@ import type {
     DiscordMemberSync,
     GameSummary,
     GameTrackers,
-    NamedSubject,
-    TrackerAdjustment,
 } from '@/types/game';
 
 type Props = {
     game: GameSummary;
     trackers: GameTrackers;
-    adjustments: TrackerAdjustment[];
     controlMembers: ControlMember[];
     discordSyncs: DiscordMemberSync[];
     discordGuilds?: DiscordBotGuilds;
 };
 
-const CORPORATION_TRACKERS: Array<[string, string]> = [
-    ['income', 'Income'],
-    ['political_will', 'Political Will'],
-    ['corporation_credits', 'Credits'],
-    // The four Research Point suits (rulebook 3.2.1). They are Trackers like
-    // the three above, so Control moves them from the same dialog and every
-    // change lands in the same ledger — which is what makes a research score
-    // overridable without a back door.
-    ['research_cog', 'Cog'],
-    ['research_brain', 'Brain'],
-    ['research_leaf', 'Leaf'],
-    ['research_maths', 'Maths'],
-];
-
 export default function ControlGameShow({
     game,
     trackers,
-    adjustments,
     controlMembers,
     discordSyncs,
     discordGuilds,
@@ -71,13 +51,7 @@ export default function ControlGameShow({
     // fresh without anyone having to reload during a live game. Provisioning
     // runs on the queue, so this poll is also how its progress arrives.
     usePoll(5000, {
-        only: [
-            'game',
-            'trackers',
-            'adjustments',
-            'controlMembers',
-            'discordSyncs',
-        ],
+        only: ['game', 'trackers', 'controlMembers', 'discordSyncs'],
     });
 
     const { props } = usePage<{ errors: Record<string, string> }>();
@@ -101,6 +75,14 @@ export default function ControlGameShow({
                         }`}
                     />
                     <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(statsIndex.url({ game: game.id }))
+                            }
+                        >
+                            Stats
+                        </Button>
                         <Button
                             variant="outline"
                             onClick={() =>
@@ -155,11 +137,6 @@ export default function ControlGameShow({
                 {props.errors?.phase && (
                     <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
                         {props.errors.phase}
-                    </p>
-                )}
-                {props.errors?.tags && (
-                    <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                        {props.errors.tags}
                     </p>
                 )}
 
@@ -274,60 +251,6 @@ export default function ControlGameShow({
                     </CardContent>
                 </Card>
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Procatorion</CardTitle>
-                            <CardDescription>
-                                Stability reaching zero starts the shutdown.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 gap-4">
-                            {[
-                                ['stability', 'Stability'],
-                                ['civil_unrest', 'Civil Unrest'],
-                            ].map(([key, label]) => (
-                                <div
-                                    key={key}
-                                    className="rounded-lg border p-3"
-                                >
-                                    <p className="text-sm text-muted-foreground">
-                                        {label}
-                                    </p>
-                                    <TrackerValue
-                                        gameId={game.id}
-                                        subjectType={
-                                            trackers.global.subject_type
-                                        }
-                                        subjectId={trackers.global.subject_id}
-                                        subjectName="Procatorion"
-                                        tracker={key}
-                                        trackerLabel={label}
-                                        value={trackers.global.values[key] ?? 0}
-                                    />
-                                </div>
-                            ))}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Gangs</CardTitle>
-                            <CardDescription>
-                                Notoriety per gang.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <SubjectTable
-                                gameId={game.id}
-                                subjects={trackers.gangs}
-                                columns={[['notoriety', 'Notoriety']]}
-                                emptyMessage="No gangs yet."
-                            />
-                        </CardContent>
-                    </Card>
-                </div>
-
                 <Card>
                     <CardHeader>
                         <CardTitle>Announcements</CardTitle>
@@ -357,25 +280,6 @@ export default function ControlGameShow({
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Corporations</CardTitle>
-                        <CardDescription>
-                            Income is paid into Credits when Team Time opens. It
-                            is the abstraction of a corporation's stock price,
-                            so move it as the fiction demands.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <SubjectTable
-                            gameId={game.id}
-                            subjects={trackers.corporations}
-                            columns={CORPORATION_TRACKERS}
-                            emptyMessage="No corporations yet."
-                        />
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
                         <CardTitle>Characters</CardTitle>
                         <CardDescription>
                             Put a player's Discord handle against their
@@ -383,8 +287,9 @@ export default function ControlGameShow({
                             automatically. Once claimed, the link survives a
                             Discord rename.
                             <br />
-                            Runners and Freelancers heal one Wound automatically
-                            each Team Time. Tags cost 3 Credits to buy off.
+                            Their numbers — Wounds, Tags, Credits and the four
+                            stats on the character sheet — are on the Stats
+                            screen.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="overflow-x-auto">
@@ -400,19 +305,7 @@ export default function ControlGameShow({
                                     <th className="py-2 pr-4 font-medium">
                                         Team
                                     </th>
-                                    <th className="py-2 pr-4 font-medium">
-                                        Player
-                                    </th>
-                                    <th className="py-2 pr-4 text-right font-medium">
-                                        Wounds
-                                    </th>
-                                    <th className="py-2 pr-4 text-right font-medium">
-                                        Tags
-                                    </th>
-                                    <th className="py-2 pr-4 text-right font-medium">
-                                        Credits
-                                    </th>
-                                    <th className="py-2 font-medium" />
+                                    <th className="py-2 font-medium">Player</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -446,7 +339,7 @@ export default function ControlGameShow({
                                             <td className="py-2 pr-4 text-muted-foreground">
                                                 {character.team ?? '—'}
                                             </td>
-                                            <td className="py-2 pr-4">
+                                            <td className="py-2">
                                                 <DiscordHandle
                                                     gameId={game.id}
                                                     characterId={
@@ -463,96 +356,13 @@ export default function ControlGameShow({
                                                     }
                                                 />
                                             </td>
-                                            <td className="py-2 pr-4">
-                                                <TrackerValue
-                                                    gameId={game.id}
-                                                    subjectType={
-                                                        character.subject_type
-                                                    }
-                                                    subjectId={
-                                                        character.subject_id
-                                                    }
-                                                    subjectName={character.name}
-                                                    tracker="wounds"
-                                                    trackerLabel={`Wounds (Body ${character.body})`}
-                                                    value={
-                                                        character.values
-                                                            .wounds ?? 0
-                                                    }
-                                                    tone="warn"
-                                                />
-                                            </td>
-                                            <td className="py-2 pr-4">
-                                                <TrackerValue
-                                                    gameId={game.id}
-                                                    subjectType={
-                                                        character.subject_type
-                                                    }
-                                                    subjectId={
-                                                        character.subject_id
-                                                    }
-                                                    subjectName={character.name}
-                                                    tracker="tags"
-                                                    trackerLabel="Tags"
-                                                    value={
-                                                        character.values.tags ??
-                                                        0
-                                                    }
-                                                    tone="warn"
-                                                />
-                                            </td>
-                                            <td className="py-2 pr-4">
-                                                <TrackerValue
-                                                    gameId={game.id}
-                                                    subjectType={
-                                                        character.subject_type
-                                                    }
-                                                    subjectId={
-                                                        character.subject_id
-                                                    }
-                                                    subjectName={character.name}
-                                                    tracker="character_credits"
-                                                    trackerLabel="Credits"
-                                                    value={
-                                                        character.values
-                                                            .character_credits ??
-                                                        0
-                                                    }
-                                                />
-                                            </td>
-                                            <td className="py-2 text-right">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    disabled={
-                                                        (character.values
-                                                            .tags ?? 0) < 1 ||
-                                                        (character.values
-                                                            .character_credits ??
-                                                            0) < 3 ||
-                                                        phase?.type !==
-                                                            'team_time'
-                                                    }
-                                                    onClick={() =>
-                                                        post(
-                                                            removeTag.url({
-                                                                game: game.id,
-                                                                character:
-                                                                    character.subject_id,
-                                                            }),
-                                                        )
-                                                    }
-                                                >
-                                                    Buy off Tag (3cr)
-                                                </Button>
-                                            </td>
                                         </tr>
                                     ),
                                 )}
                                 {trackers.characters.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={8}
+                                            colSpan={4}
                                             className="py-4 text-muted-foreground"
                                         >
                                             No characters yet.
@@ -563,142 +373,8 @@ export default function ControlGameShow({
                         </table>
                     </CardContent>
                 </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Game log</CardTitle>
-                        <CardDescription>
-                            The last {adjustments.length} tracker movements.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b text-left text-muted-foreground">
-                                    <th className="py-2 pr-4 font-medium">
-                                        Subject
-                                    </th>
-                                    <th className="py-2 pr-4 font-medium">
-                                        Tracker
-                                    </th>
-                                    <th className="py-2 pr-4 text-right font-medium">
-                                        Change
-                                    </th>
-                                    <th className="py-2 pr-4 font-medium">
-                                        Reason
-                                    </th>
-                                    <th className="py-2 font-medium">By</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {adjustments.map((adjustment) => (
-                                    <tr
-                                        key={adjustment.id}
-                                        className="border-b last:border-0"
-                                    >
-                                        <td className="py-2 pr-4">
-                                            {adjustment.subject}
-                                        </td>
-                                        <td className="py-2 pr-4 text-muted-foreground">
-                                            {adjustment.tracker_label}
-                                        </td>
-                                        <td className="py-2 pr-4 text-right font-mono tabular-nums">
-                                            {adjustment.value_before} →{' '}
-                                            {adjustment.value_after}
-                                        </td>
-                                        <td className="py-2 pr-4 text-muted-foreground">
-                                            {adjustment.reason ?? '—'}
-                                        </td>
-                                        <td className="py-2 text-muted-foreground">
-                                            {adjustment.automated
-                                                ? 'Upkeep'
-                                                : (adjustment.actor ?? '—')}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {adjustments.length === 0 && (
-                                    <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="py-4 text-muted-foreground"
-                                        >
-                                            Nothing has moved yet.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </CardContent>
-                </Card>
             </div>
         </>
-    );
-}
-
-function SubjectTable({
-    gameId,
-    subjects,
-    columns,
-    emptyMessage,
-}: {
-    gameId: number;
-    subjects: NamedSubject[];
-    columns: Array<[string, string]>;
-    emptyMessage: string;
-}) {
-    if (subjects.length === 0) {
-        return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
-    }
-
-    return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-                <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                        <th className="py-2 pr-4 font-medium">Name</th>
-                        {columns.map(([key, label]) => (
-                            <th
-                                key={key}
-                                className="py-2 pr-4 text-right font-medium"
-                            >
-                                {label}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {subjects.map((subject) => (
-                        <tr
-                            key={subject.subject_id}
-                            className="border-b last:border-0"
-                        >
-                            <td className="py-2 pr-4">
-                                <span className="flex items-center gap-2">
-                                    <FactionBadge
-                                        faction={subject}
-                                        size="small"
-                                    />
-                                    {subject.name}
-                                </span>
-                            </td>
-                            {columns.map(([key, label]) => (
-                                <td key={key} className="py-2 pr-4">
-                                    <TrackerValue
-                                        gameId={gameId}
-                                        subjectType={subject.subject_type}
-                                        subjectId={subject.subject_id}
-                                        subjectName={subject.name}
-                                        tracker={key}
-                                        trackerLabel={label}
-                                        value={subject.values[key] ?? 0}
-                                    />
-                                </td>
-                            ))}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
     );
 }
 

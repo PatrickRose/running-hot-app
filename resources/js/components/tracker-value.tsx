@@ -73,7 +73,11 @@ export function TrackerValue({
                 <button
                     type="button"
                     className={cn(
-                        'w-full rounded px-2 py-1 text-right font-mono tabular-nums hover:bg-accent',
+                        // Underlined, because it is a button that looks like a
+                        // number: nothing about a bare figure in a table says
+                        // it can be clicked, and this is the only way Control
+                        // moves one.
+                        'w-full cursor-pointer rounded px-2 py-1 text-right font-mono tabular-nums underline decoration-muted-foreground/60 decoration-dotted underline-offset-4 hover:bg-accent hover:decoration-foreground',
                         tone === 'warn' &&
                             value > 0 &&
                             'text-amber-600 dark:text-amber-500',
