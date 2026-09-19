@@ -13,14 +13,17 @@ use Tests\TestCase;
 /**
  * The Equipment each Runner opens the game carrying (rulebook 3.4.1).
  *
- * The briefings are written per faction, so the common case is a gang-level
- * list every Runner in it starts with; a named Runner's own list adds to it.
+ * Given per player: the briefings are one document per Runner, so a kit is
+ * configured beside that Runner's own stats and nobody else's.
  */
 class EquipmentSeedingTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_every_runner_in_a_gang_gets_the_gangs_kit(): void
+    /**
+     * Each Runner's kit is their own, and a gangmate's is not theirs.
+     */
+    public function test_a_runner_gets_the_kit_configured_against_their_name(): void
     {
         $game = Game::factory()->create();
         $gang = Gang::factory()->create(['game_id' => $game->id, 'name' => 'Facers']);
@@ -28,37 +31,44 @@ class EquipmentSeedingTest extends TestCase
         $con = $this->runner($game, $gang, 'Con');
         $ghost = $this->runner($game, $gang, 'Ghost');
 
-        $this->configure([['name' => 'Facers', 'equipment' => ['EEP002' => 1]]]);
+        $this->configure([[
+            'name' => 'Facers',
+            'runners' => [
+                ['name' => 'Con', 'equipment' => ['EEP002' => 1]],
+                ['name' => 'Ghost', 'equipment' => ['EEP003' => 2]],
+            ],
+        ]]);
 
         $seeded = app(SeedEquipmentHoldings::class)->handle($game);
 
-        // A copy each rather than one between them: a holding is per Character.
         $this->assertSame(2, $seeded['runners']);
         $this->assertSame(1, $con->equipmentCopiesOf($this->codeId($game, 'EEP002')));
-        $this->assertSame(1, $ghost->equipmentCopiesOf($this->codeId($game, 'EEP002')));
+        $this->assertSame(0, $con->equipmentCopiesOf($this->codeId($game, 'EEP003')));
+        $this->assertSame(2, $ghost->equipmentCopiesOf($this->codeId($game, 'EEP003')));
+        $this->assertSame(0, $ghost->equipmentCopiesOf($this->codeId($game, 'EEP002')));
     }
 
     /**
-     * "Everyone carries a Medkit, and Ghost also has a Katana" reads that way
-     * in the configuration.
+     * A Runner in a configured gang who has no list of their own starts with
+     * nothing: there is no gang-level kit to fall back on, because the
+     * briefings do not work that way.
      */
-    public function test_a_runners_own_kit_adds_to_the_gangs(): void
+    public function test_a_runner_with_no_list_of_their_own_starts_with_nothing(): void
     {
         $game = Game::factory()->create();
         $gang = Gang::factory()->create(['game_id' => $game->id, 'name' => 'Facers']);
 
-        $ghost = $this->runner($game, $gang, 'Ghost');
+        $this->runner($game, $gang, 'Next');
 
         $this->configure([[
             'name' => 'Facers',
-            'equipment' => ['EEP002' => 1],
-            'runners' => [['name' => 'Ghost', 'equipment' => ['EEP002' => 1, 'EEP003' => 2]]],
+            'runners' => [['name' => 'Con', 'equipment' => ['EEP002' => 1]]],
         ]]);
 
-        app(SeedEquipmentHoldings::class)->handle($game);
+        $seeded = app(SeedEquipmentHoldings::class)->handle($game);
 
-        $this->assertSame(2, $ghost->equipmentCopiesOf($this->codeId($game, 'EEP002')));
-        $this->assertSame(2, $ghost->equipmentCopiesOf($this->codeId($game, 'EEP003')));
+        $this->assertSame(0, $seeded['runners']);
+        $this->assertDatabaseCount('equipment_holdings', 0);
     }
 
     /**
@@ -114,7 +124,10 @@ class EquipmentSeedingTest extends TestCase
 
         $this->runner($game, $gang, 'Con');
 
-        $this->configure([['name' => 'Facers', 'equipment' => ['NOPE999' => 3]]]);
+        $this->configure([[
+            'name' => 'Facers',
+            'runners' => [['name' => 'Con', 'equipment' => ['NOPE999' => 3]]],
+        ]]);
 
         $seeded = app(SeedEquipmentHoldings::class)->handle($game);
 
@@ -133,7 +146,10 @@ class EquipmentSeedingTest extends TestCase
 
         $con = $this->runner($game, $gang, 'Con');
 
-        $this->configure([['name' => 'Facers', 'equipment' => ['EEP002' => 2]]]);
+        $this->configure([[
+            'name' => 'Facers',
+            'runners' => [['name' => 'Con', 'equipment' => ['EEP002' => 2]]],
+        ]]);
 
         $action = app(SeedEquipmentHoldings::class);
         $action->handle($game);

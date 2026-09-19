@@ -216,17 +216,12 @@ return [
 
     'gangs' => [
         [
-            // Equipment a gang starts with (rulebook 3.4.1), keyed by the code
-            // printed on the card. Every Runner in the gang gets these copies -
-            // five Runners each carrying their own Medkit, not five sharing
-            // one - because a holding lives on the Character. A named Runner
-            // may also carry an 'equipment' list of their own, which adds to
-            // this rather than replacing it.
-            //
-            // Empty until the briefings are transcribed: a gang the config says
-            // nothing about opens with nothing, which is the same choice
-            // CreateDefaultFacilities makes about Facilities.
-            'equipment' => [],
+            // Equipment (rulebook 3.4.1) is given **per player**: the briefings
+            // are one document per Runner, so a Runner's kit goes in an
+            // 'equipment' list beside their own stats below, keyed by the code
+            // printed on the card. A Runner the config says nothing about opens
+            // with nothing, which is the same choice CreateDefaultFacilities
+            // makes about Facilities.
             'name' => 'Facers',
             'notoriety' => 0,
             'runners' => [

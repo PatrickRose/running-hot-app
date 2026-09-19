@@ -28,10 +28,12 @@ use Illuminate\Support\Facades\DB;
  * Equipment to Security when you are carried out. Neither sentence means
  * anything about a shared pile.
  *
- * The briefings are written per faction, so the common case is a gang-level list
- * that every Runner in it starts with - five Runners each carrying their own
- * copy of the same card, not five sharing one. A per-Runner list adds to that,
- * for the kit one named Runner has and their gangmates do not.
+ * The briefings are **per player**: one document per Runner, with their own kit
+ * in it. So the configuration is too - an `equipment` list beside that Runner's
+ * stats in `config/running_hot.php`, where it cannot be mis-keyed against
+ * somebody else. There is deliberately no gang-level list: a first pass had one
+ * on the guess that a faction briefing would cover the whole gang, and it does
+ * not, so it went rather than sitting there reading as though kit were shared.
  *
  * Runs once, as part of writing a game's starting position. Re-running only ever
  * adds a card a Runner has no row for at all, so it cannot quietly refill a hand
@@ -94,8 +96,7 @@ class SeedEquipmentHoldings
     }
 
     /**
-     * What one Runner starts with: their gang's kit, plus anything the
-     * configuration gives them by name on top of it.
+     * What one Runner starts with, off their own briefing.
      *
      * @return array<string, int>
      */
@@ -104,8 +105,8 @@ class SeedEquipmentHoldings
         $gangName = $character->gang?->name;
 
         if ($gangName === null) {
-            // A Freelancer belongs to no gang and has a briefing of their own,
-            // so they are named directly rather than through a faction.
+            // A Freelancer belongs to no gang, so there is no roster entry to
+            // hang their kit off and they are named directly.
             /** @var array<string, array<string, int>> $freelancers */
             $freelancers = config('running_hot.freelancer_equipment', []);
 
@@ -120,31 +121,19 @@ class SeedEquipmentHoldings
                 continue;
             }
 
-            /** @var array<string, int> $shared */
-            $shared = $gang['equipment'] ?? [];
-
             /** @var array<int, array<string, mixed>> $runners */
             $runners = $gang['runners'] ?? [];
 
             foreach ($runners as $runner) {
-                if (($runner['name'] ?? null) !== $character->name) {
-                    continue;
+                if (($runner['name'] ?? null) === $character->name) {
+                    /** @var array<string, int> $own */
+                    $own = $runner['equipment'] ?? [];
+
+                    return $own;
                 }
-
-                /** @var array<string, int> $own */
-                $own = $runner['equipment'] ?? [];
-
-                // Their own kit adds to the gang's rather than replacing it, so
-                // a briefing that says "everyone carries a Medkit, and Ghost
-                // also has a Katana" reads that way in the configuration.
-                foreach ($own as $code => $count) {
-                    $shared[$code] = ($shared[$code] ?? 0) + (int) $count;
-                }
-
-                break;
             }
 
-            return $shared;
+            return [];
         }
 
         return [];
