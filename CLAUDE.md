@@ -1485,6 +1485,18 @@ marking the rules could not enforce would be worse on a card than no marking. A
 third marking is a case, a `minimumSetSize()` or a `demandsOfTheOtherSide()`, and
 a line in `CardMarking`.
 
+**A marking is written four ways, because the tile it is drawn on is 56 pixels
+wide.** `CardMarking` answers with the printed words (`label`), what they do
+(`description`), the word the tile has room for (`shortLabel`) and the icon of
+the suit it names (`glyph`) — and `ResearchPresenter` sends all four. "Other side
+must be Cog" truncated on a card tile loses the suit at the end of it, which is
+the only part a player cannot work out for themselves, so the tile draws "Other"
+and the Cog icon and the tooltip says the sentence. A marking naming no suit has
+no glyph rather than a blank one. The full wording stays in the card button's
+`aria-label` rather than being left to the tooltip: a tooltip is only in the page
+while it is open, so a keyboard user tabbing a hand would otherwise reach a card
+with nothing said about what it may not do.
+
 **A blank slot on a form is not a half-written marking.** The marking form has a
 slot per kind and an untouched Restricted posts an empty suit, so
 `ShapesCardMarkings::filterBlankMarkings()` drops it at the HTTP edge — while
