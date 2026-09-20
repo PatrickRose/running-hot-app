@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Auth;
 use App\Actions\ClaimCharactersByEmail;
 use App\Http\Controllers\Controller;
 use App\Models\Character;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * "I signed up to this game with this email address."
@@ -43,7 +43,12 @@ class CharacterClaimController extends Controller
         return Inertia::render('auth/claim');
     }
 
-    public function store(Request $request): RedirectResponse
+    /**
+     * The return type covers both halves: a Symfony response because
+     * Inertia::location answers a 409 to an Inertia request, and the ordinary
+     * redirect on the branch that stays inside the application.
+     */
+    public function store(Request $request): SymfonyResponse
     {
         $validated = $request->validate([
             'email' => ['required', 'string', 'email', 'max:255'],
@@ -78,7 +83,16 @@ class CharacterClaimController extends Controller
         if ($user === null) {
             $request->session()->put(self::PENDING, $email);
 
-            return to_route('auth.discord');
+            // Inertia::location rather than a redirect, and this is the whole
+            // of why: this form posts over XHR, and `auth.discord` answers with
+            // a redirect to discord.com. An XHR follows that hop itself,
+            // carrying the X-XSRF-TOKEN header Inertia puts on every request -
+            // so the browser preflights it against Discord, Discord does not
+            // allow that header, and the submit dies as a CORS failure with
+            // nothing on screen to say so. A 409 with X-Inertia-Location hands
+            // the navigation back to the browser, which is what the login
+            // page's own Discord button gets for free by being a plain link.
+            return Inertia::location(route('auth.discord'));
         }
 
         $claimed = $this->claim->handle($user, $email);

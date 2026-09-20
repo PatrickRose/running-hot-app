@@ -89,6 +89,34 @@ class CharacterClaimTest extends TestCase
     }
 
     /**
+     * The same submit over XHR, which is how the form actually posts.
+     *
+     * The test above passes either way, and that is exactly how this shipped
+     * broken: a test request without Inertia's own headers takes the ordinary
+     * redirect path, while the browser takes the other one. An XHR follows the
+     * hop to discord.com itself, carrying the X-XSRF-TOKEN header Inertia puts
+     * on every request - so the browser preflights it against Discord, Discord
+     * does not allow that header, and the submit dies as a CORS failure with
+     * nothing on screen to say so.
+     *
+     * A 409 with X-Inertia-Location hands the navigation back to the browser.
+     * Asserting the target rather than only the status matters: an asset
+     * version mismatch answers 409 with this header too, and names the current
+     * URL rather than Discord's.
+     */
+    public function test_an_inertia_submit_hands_the_navigation_back_to_the_browser(): void
+    {
+        $this->seat(['email' => 'jack@example.com']);
+
+        $this->withHeaders(['X-Inertia' => 'true'])
+            ->post(route('claim.store'), ['email' => 'jack@example.com'])
+            ->assertStatus(409)
+            ->assertHeader('X-Inertia-Location', route('auth.discord'));
+
+        $this->assertSame('jack@example.com', session(CharacterClaimController::PENDING));
+    }
+
+    /**
      * Somebody already signed in - because signing in worked, it just found
      * them nothing - is bound on the spot rather than sent round again.
      */
