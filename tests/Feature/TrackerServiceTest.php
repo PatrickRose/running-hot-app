@@ -107,14 +107,69 @@ class TrackerServiceTest extends TestCase
         $this->trackers()->adjust($gang, Tracker::Stability, 1);
     }
 
-    public function test_notoriety_is_tracked_on_the_gang(): void
+    /**
+     * Notoriety is the Runner's, which is the designer's ruling over a rulebook
+     * section headed "Gang Notoriety": it is earned by the person who did the
+     * thing, and the gang's figure is the total of its members'.
+     */
+    public function test_notoriety_is_tracked_on_the_character(): void
     {
         $game = Game::factory()->create();
-        $gang = Gang::factory()->for($game)->create(['notoriety' => 0]);
+        $runner = Character::factory()->for($game)->create(['notoriety' => 0]);
 
-        $this->trackers()->adjust($gang, Tracker::Notoriety, 2, 'Hit Corvid Biotics');
+        $this->trackers()->adjust($runner, Tracker::Notoriety, 2, 'Hit Corvid Biotics');
 
-        $this->assertSame(2, $gang->fresh()->notoriety);
+        $this->assertSame(2, $runner->fresh()->notoriety);
+    }
+
+    /**
+     * And a gang has none of its own to move, so the tracker refuses it rather
+     * than writing a number nothing would read.
+     */
+    public function test_a_gang_carries_no_notoriety_of_its_own(): void
+    {
+        $game = Game::factory()->create();
+        $gang = Gang::factory()->for($game)->create();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->trackers()->adjust($gang, Tracker::Notoriety, 2);
+    }
+
+    /**
+     * What a gang shows is summed from its members, so moving one Runner's
+     * Notoriety moves the gang's without anything keeping a total in step.
+     */
+    public function test_a_gangs_notoriety_is_the_total_of_its_members(): void
+    {
+        $game = Game::factory()->create();
+        $gang = Gang::factory()->for($game)->create();
+
+        $first = Character::factory()->for($game)->runner($gang)->create(['notoriety' => 0]);
+        $second = Character::factory()->for($game)->runner($gang)->create(['notoriety' => 4]);
+
+        $this->assertSame(4, $gang->fresh()->notoriety);
+
+        $this->trackers()->adjust($first, Tracker::Notoriety, 3, 'Walked out of Sheffield Corporate');
+
+        $this->assertSame(7, $gang->fresh()->notoriety);
+
+        // And a Runner losing face takes the gang down with them - the press
+        // running bad stories is 2.3.2's own example, and nothing clamps it.
+        $this->trackers()->adjust($second, Tracker::Notoriety, -6);
+
+        $this->assertSame(1, $gang->fresh()->notoriety);
+        $this->assertSame(-2, $second->fresh()->notoriety);
+    }
+
+    /**
+     * A gang nobody has joined totals nought rather than failing to answer.
+     */
+    public function test_a_gang_with_no_members_is_unknown(): void
+    {
+        $gang = Gang::factory()->for(Game::factory()->create())->create();
+
+        $this->assertSame(0, $gang->notoriety);
     }
 
     public function test_corporation_and_character_credits_write_to_their_own_rows(): void

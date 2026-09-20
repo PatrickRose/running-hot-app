@@ -1,6 +1,7 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
 import { CharacterLogo } from '@/components/character-logo';
 import { CharacterStatsForm } from '@/components/character-stats-form';
+import { FactionBadge } from '@/components/faction-badge';
 import Heading from '@/components/heading';
 import { SubjectTrackerTable } from '@/components/subject-tracker-table';
 import { TrackerValue } from '@/components/tracker-value';
@@ -145,15 +146,61 @@ export default function ControlGameStats({
                 <Card>
                     <CardHeader>
                         <CardTitle>Gangs</CardTitle>
-                        <CardDescription>Notoriety per gang.</CardDescription>
+                        <CardDescription>
+                            Notoriety is the Runner's, so a gang's figure is the
+                            total of its members' and is read here rather than
+                            edited. Move it on the Runner below and this
+                            follows.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <SubjectTrackerTable
-                            gameId={game.id}
-                            subjects={trackers.gangs}
-                            columns={[['notoriety', 'Notoriety']]}
-                            emptyMessage="No gangs yet."
-                        />
+                        {trackers.gangs.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                No gangs yet.
+                            </p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b text-left text-muted-foreground">
+                                            <th className="py-2 pr-4 font-medium">
+                                                Name
+                                            </th>
+                                            <th className="w-24 py-2 pr-4 text-right font-medium">
+                                                Runners
+                                            </th>
+                                            <th className="w-24 py-2 text-right font-medium">
+                                                Notoriety
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {trackers.gangs.map((gang) => (
+                                            <tr
+                                                key={gang.id}
+                                                className="border-b last:border-0"
+                                            >
+                                                <td className="py-2 pr-4">
+                                                    <span className="flex items-center gap-2">
+                                                        <FactionBadge
+                                                            faction={gang}
+                                                            size="small"
+                                                        />
+                                                        {gang.name}
+                                                    </span>
+                                                </td>
+                                                <td className="w-24 py-2 pr-4 text-right font-mono text-muted-foreground tabular-nums">
+                                                    {gang.members}
+                                                </td>
+                                                <td className="w-24 py-2 text-right font-mono tabular-nums">
+                                                    {gang.notoriety}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -163,6 +210,8 @@ export default function ControlGameStats({
                         <CardDescription>
                             Click a number to move it — every change is written
                             to the log below with whatever reason you give it.
+                            Notoriety is the Runner's own, and what each gang's
+                            total above is made of.
                             <br />
                             Brawn, Hack, Charisma and Body are the character
                             sheet rather than the game's running total, so they
@@ -190,6 +239,9 @@ export default function ControlGameStats({
                                     </th>
                                     <th className="w-20 py-2 pr-4 text-right font-medium">
                                         Credits
+                                    </th>
+                                    <th className="w-20 py-2 pr-4 text-right font-medium">
+                                        Notoriety
                                     </th>
                                     <th className="py-2 pr-4 font-medium">
                                         Character sheet
@@ -289,6 +341,24 @@ export default function ControlGameStats({
                                                     }
                                                 />
                                             </td>
+                                            <td className="w-20 py-2 pr-4">
+                                                <TrackerValue
+                                                    gameId={game.id}
+                                                    subjectType={
+                                                        character.subject_type
+                                                    }
+                                                    subjectId={
+                                                        character.subject_id
+                                                    }
+                                                    subjectName={character.name}
+                                                    tracker="notoriety"
+                                                    trackerLabel="Notoriety"
+                                                    value={
+                                                        character.values
+                                                            .notoriety ?? 0
+                                                    }
+                                                />
+                                            </td>
                                             <td className="py-2 pr-4">
                                                 <CharacterStatsForm
                                                     gameId={game.id}
@@ -331,7 +401,7 @@ export default function ControlGameStats({
                                 {trackers.characters.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={7}
+                                            colSpan={8}
                                             className="py-4 text-muted-foreground"
                                         >
                                             No characters yet.

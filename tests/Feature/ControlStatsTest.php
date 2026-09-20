@@ -60,7 +60,7 @@ class ControlStatsTest extends TestCase
             'credits' => 40,
             'political_will' => 7,
         ]);
-        $gang = Gang::factory()->for($this->game)->create(['name' => 'g33ks', 'notoriety' => 3]);
+        $gang = Gang::factory()->for($this->game)->create(['name' => 'g33ks']);
         // Handed the gang rather than letting the factory make one: a second
         // gang with a random name would sort either side of this one, and the
         // assertions below read the tables in the order the page draws them.
@@ -71,6 +71,7 @@ class ControlStatsTest extends TestCase
             'charisma' => 4,
             'body' => 3,
             'wounds' => 1,
+            'notoriety' => 3,
         ]);
 
         $this->actingAs($this->control())
@@ -81,8 +82,12 @@ class ControlStatsTest extends TestCase
                 ->where('trackers.global.values.stability', $this->game->stability)
                 ->where('trackers.corporations.0.values.corporation_credits', 40)
                 ->where('trackers.corporations.0.values.political_will', 7)
-                ->where('trackers.gangs.0.values.notoriety', 3)
+                // The gang carries no tracker of its own: its figure is the
+                // total of its members', and the Runner's is the editable one.
+                ->where('trackers.gangs.0.notoriety', 3)
+                ->where('trackers.gangs.0.members', 1)
                 ->where('trackers.characters.0.values.wounds', 1)
+                ->where('trackers.characters.0.values.notoriety', 3)
                 // The four printed stats, which were editable nowhere at all
                 // before this screen.
                 ->where('trackers.characters.0.brawn', 5)

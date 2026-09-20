@@ -15,6 +15,7 @@ use App\Models\Character;
 use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\Game;
+use App\Models\Gang;
 use App\Models\ProtectionCardType;
 use App\Models\Run;
 use App\Models\RunEvent;
@@ -141,6 +142,44 @@ class RunEngineTest extends TestCase
         $this->assertSame(1, $solo->refresh()->order_index);
         $this->assertSame('Fewest Runners', $solo->order_reason);
         $this->assertSame(2, $pair->refresh()->order_index);
+    }
+
+    /**
+     * Rule 2 of 3.4.1 reads "the gang with the highest Notoriety", and a gang's
+     * Notoriety is now the total of its members' rather than a column of its
+     * own - so the tiebreak is decided by summing the roster.
+     *
+     * Both groups are two Runners here, so rule 1 settles nothing and rule 2 is
+     * what is being read.
+     */
+    public function test_the_most_notorious_gang_is_found_by_summing_its_members(): void
+    {
+        [$turn, $facility] = $this->facility();
+
+        // Quiet on its own, loud together: three Runners at 2 each out-total
+        // one Runner at 5, which a per-gang column could never have shown.
+        $loud = Gang::factory()->for($turn->game)->create(['name' => 'Aaa Collective']);
+        $quiet = Gang::factory()->for($turn->game)->create(['name' => 'Bbb Syndicate']);
+
+        $loudLeader = $this->runner($turn->game_id, ['gang_id' => $loud->id, 'notoriety' => 2]);
+        $loudMate = $this->runner($turn->game_id, ['gang_id' => $loud->id, 'notoriety' => 2]);
+        $this->runner($turn->game_id, ['gang_id' => $loud->id, 'notoriety' => 2]);
+
+        $quietLeader = $this->runner($turn->game_id, ['gang_id' => $quiet->id, 'notoriety' => 5]);
+        $quietMate = $this->runner($turn->game_id, ['gang_id' => $quiet->id, 'notoriety' => 0]);
+
+        $this->assertSame(6, $loud->fresh()->notoriety);
+        $this->assertSame(5, $quiet->fresh()->notoriety);
+
+        $quietRun = $this->engine()->submit($turn, $facility, $quietLeader, [$quietMate->id]);
+        $loudRun = $this->engine()->submit($turn, $facility, $loudLeader, [$loudMate->id]);
+
+        $this->dice->will([4, 7]);
+
+        $ordered = $this->engine()->orderRuns($facility, $turn);
+
+        $this->assertSame([$loudRun->id, $quietRun->id], $ordered->pluck('id')->all());
+        $this->assertSame('Most Runners from the most notorious gang', $loudRun->refresh()->order_reason);
     }
 
     // ------------------------------------------------------------------

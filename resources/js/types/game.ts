@@ -132,10 +132,23 @@ export type CharacterSubject = TrackerSubject & {
 
 export type NamedSubject = TrackerSubject & Faction;
 
+/**
+ * A gang and what its members add up to.
+ *
+ * Not a TrackerSubject, and deliberately: Notoriety is the Runner's, and a
+ * gang's figure is the total of its members' — so there is no subject to post
+ * an adjustment at, and the page reads it rather than editing it.
+ */
+export type GangRollup = Faction & {
+    id: number;
+    notoriety: number;
+    members: number;
+};
+
 export type GameTrackers = {
     global: TrackerSubject;
     corporations: NamedSubject[];
-    gangs: NamedSubject[];
+    gangs: GangRollup[];
     characters: CharacterSubject[];
 };
 

@@ -18,6 +18,7 @@ use App\Models\Facility;
 use App\Models\FacilityProtectionCard;
 use App\Models\FacilityType;
 use App\Models\Game;
+use App\Models\Gang;
 use App\Models\Phase;
 use App\Models\ProtectionCardHolding;
 use App\Models\ProtectionCardType;
@@ -327,14 +328,21 @@ class GamePresenter
                     Tracker::ResearchMaths->value => $corporation->maths_points,
                 ],
             ])->all(),
-            'gangs' => $game->gangs()->orderBy('name')->get()->map(fn ($gang): array => [
-                'subject_type' => $gang->getMorphClass(),
-                'subject_id' => $gang->id,
-                ...FactionBadge::for($gang->name),
-                'values' => [
-                    Tracker::Notoriety->value => $gang->notoriety,
-                ],
-            ])->all(),
+            // A gang carries no tracker of its own any more: Notoriety is the
+            // Runner's, and the gang's figure is the total of its members'. So
+            // this is a read-out rather than something Control edits here, and
+            // it names no subject - there is nothing to post an adjustment at.
+            'gangs' => $game->gangs()
+                ->withSum('characters', 'notoriety')
+                ->withCount('characters')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (Gang $gang): array => [
+                    'id' => $gang->id,
+                    ...FactionBadge::for($gang->name),
+                    'notoriety' => $gang->notoriety,
+                    'members' => $gang->characters_count,
+                ])->all(),
             'characters' => $game->characters()
                 ->with('gang:id,name', 'corporation:id,name', 'user:id,name,discord_username')
                 ->orderBy('name')
@@ -367,6 +375,8 @@ class GamePresenter
                         Tracker::Wounds->value => $character->wounds,
                         Tracker::Tags->value => $character->tags,
                         Tracker::CharacterCredits->value => $character->credits,
+                        // Theirs, and what their gang's total is made of.
+                        Tracker::Notoriety->value => $character->notoriety,
                     ],
                 ])->all(),
         ];

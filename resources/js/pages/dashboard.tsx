@@ -25,6 +25,8 @@ type PlayerCharacter = {
     credits: number;
     wounds: number;
     tags: number;
+    /** Theirs; the gang's below is the total across its members. */
+    notoriety: number;
     body: number;
     brawn: number;
     hack: number;
@@ -194,6 +196,10 @@ export default function Dashboard({
                             />
                             <Stat label="Brawn" value={character.brawn} />
                             <Stat label="Hack" value={character.hack} />
+                            <Stat
+                                label="Notoriety"
+                                value={character.notoriety}
+                            />
                             {character.gang && (
                                 <Stat
                                     label="Gang notoriety"

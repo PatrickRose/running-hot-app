@@ -19,7 +19,6 @@ class GangFactory extends Factory
         return [
             'game_id' => Game::factory(),
             'name' => fake()->unique()->words(2, true),
-            'notoriety' => 0,
         ];
     }
 }
