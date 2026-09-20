@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property int $game_id
  * @property int|null $user_id
  * @property string|null $discord_username
+ * @property string|null $email
  * @property int|null $corporation_id
  * @property int|null $gang_id
  * @property string $name
@@ -39,7 +40,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'game_id', 'user_id', 'discord_username', 'corporation_id', 'gang_id',
+    'game_id', 'user_id', 'discord_username', 'email', 'corporation_id', 'gang_id',
     'name', 'role', 'brawn', 'hack', 'charisma', 'body', 'credits', 'wounds', 'tags',
     'notoriety', 'council_votes',
 ])]
@@ -164,6 +165,22 @@ class Character extends Model
     }
 
     /**
+     * Reduce an email address to the form claims are matched on.
+     *
+     * Trimmed and lower-cased, and nothing cleverer. The local part of an
+     * address is case-sensitive by the letter of the RFC and by nobody's
+     * practice, and Control is typing these off a sign-up sheet - so the
+     * address that matches has to be the address somebody would have written,
+     * not the one a parser would insist on.
+     */
+    public static function normaliseEmail(?string $email): ?string
+    {
+        $email = trim((string) $email);
+
+        return $email === '' ? null : mb_strtolower($email);
+    }
+
+    /**
      * Reduce a Discord handle to the form claims are matched on.
      */
     public static function normaliseDiscordUsername(?string $handle): ?string
@@ -178,5 +195,14 @@ class Character extends Model
     protected function setDiscordUsernameAttribute(?string $value): void
     {
         $this->attributes['discord_username'] = self::normaliseDiscordUsername($value);
+    }
+
+    /**
+     * Keep stored addresses in the shape claims are matched on, for the reason
+     * the handle above is normalised: the row is what a lookup compares to.
+     */
+    protected function setEmailAttribute(?string $value): void
+    {
+        $this->attributes['email'] = self::normaliseEmail($value);
     }
 }
