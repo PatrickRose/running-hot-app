@@ -574,8 +574,15 @@ the pile that was only on the panel was a card that had visibly vanished.
 **Custom agendas are a three-step handshake, and all three steps are real.** A
 player writes the card, Control adds its remarks and gives it *back*, and only
 then does the player submit it to the Chair — the rulebook has the player submit
-it once they and Control agree, so agreeing is the player's to do too. Any
-player may write one: 3.1.3 hands blank cards to players rather than to CEOs.
+it once they and Control agree, so agreeing is the player's to do too.
+
+**Writing one takes a seat at the Council.** 3.1.3 hands blank cards to
+"players" rather than to "CEOs" and this was read literally at first — any
+character in the game could write one. It is the designer's ruling that it
+takes a seat, and that somebody without one who wants an agenda raised has to
+convince somebody who has one. `Character::scopeOnTheCouncil` is who that is,
+and the whole of the Chamber is behind it now: see *The front door, and the
+theme* below for the four places that ask the one predicate.
 
 **The Chamber polls, for the reason the research table does.** It is a room full
 of other people: the Chair puts a card up, somebody declares a vote secret, a
@@ -1950,14 +1957,37 @@ Discord-only page. The heading follows the state through `setLayoutProps` —
 telling somebody to enter a password above a page with no password box is how
 people end up hunting for a form that is not there.
 
-**It governs what is drawn, not what the endpoints accept**, and that is a
-decision rather than an oversight. Turning Fortify's features off instead would
-take the `register` route out of the Wayfinder modules, so `tsc` would pass or
-fail depending on which way the flag was set when somebody last ran
-`wayfinder:generate` — a build that breaks on an environment variable. The flag
-is a signpost for players, not an access control; if it ever needs to be one,
-`Fortify::authenticateUsing()` is the hook, and the passkey route would need its
-own answer because it does not go through that callback.
+**And `POST /login` is refused, not merely unlinked.** A hidden form whose
+endpoint still takes credentials is a signpost pretending to be a lock.
+`App\Actions\Fortify\EnsureDirectLoginIsEnabled` is the first pipe in
+Fortify's login pipeline, and it is a *pipe* rather than a check inside
+`Fortify::authenticateUsing()` for a specific reason: that callback replaces the
+credential check outright, so using it would mean reimplementing password
+verification, remember-me and rehashing here in order to refuse one case.
+Refusing early and letting Fortify's own actions do the work is the whole point.
+The refusal names Discord, because a bare "these credentials do not match our
+records" has somebody retyping a password that was never going to be looked at.
+
+The pipeline is installed with `Fortify::authenticateThrough()`, which is
+evaluated per request — that is what lets the setting be changed in a test
+without rebooting the application. Everything after the first pipe is Fortify's
+own default list, reproduced; if Fortify ever gains a pipe it has to be added
+there too, and `AuthenticationTest` is what would notice.
+
+**The suite runs on the shipped default, which is off.** Only three test files
+actually post to the login route — `AuthenticationTest`, `TwoFactorChallengeTest`
+and `DemoGameSeederTest` — and each turns the setting back on in its own
+`setUp()`. That is deliberate rather than convenient: it means the other
+eleven hundred tests prove the application works in the posture a deployment
+ships with, and `actingAs()` does not go near the route anyway.
+
+**What is still open is the passkey endpoint.** The button is hidden with the
+form, but `POST /passkeys/login` has no callback hook of Fortify's to hang a
+refusal on, so it would need a middleware. It is the lesser case — a passkey
+only exists if that user registered one while signed in, so it is not a way in
+for somebody Control has never set up — but it is not closed, and turning
+Fortify's features off instead is still the wrong lever for the Wayfinder
+reason above.
 
 **Dark is the default, and "follow the system" is still a setting.** The game is
 played in the evening and the application is themed off a neon sign, so dark is
@@ -1992,24 +2022,42 @@ Runners (a Corporate seat is refused Equipment outright), Research to any
 Corporate seat, Council to a CEO or to a character Control has written
 `council_votes` on. Control gets the lot, as everywhere.
 
-**Two of those are narrower than the rest of this file**, and it is the
-designer's ruling rather than a reading of the rulebook. 3.1.3 hands blank
-agenda cards to *players* rather than to CEOs, and `CouncilPresenter` still
-sends `my_cards` to anybody — so a Runner can write a custom agenda and now has
-no link to the page where they would. The research table's public tier is
-described above as "everybody's" and a Runner is no longer offered it either.
-Both were deliberate: a link to a room you hold no seat in is the application
-offering something it will not give. If a Runner ever needs the agenda
-composer back, the one-line change is `'council'` on any seat rather than on a
-Council seat — the rest of the page already decides for itself what that
-viewer may see.
+**Research is narrower than the rest of this file describes it**, and that is
+the designer's ruling rather than a reading. The table's public tier is called
+"everybody's" in the research section above; a Runner is no longer offered the
+link to it. Hiding a link is not closing a door, though — the page still
+filters its own payload, so somebody typing `/research` gets what they always
+got. That is a curiosity; a link nobody can use is a bug.
 
-**Hiding a link is not closing a door**, which is why this lives in a
-presenter rather than in the policies. Every page behind these links already
-filters its own payload — two tiers on the Facility board, a hand that is only
-its owner's, a run Security cannot see until it starts — so somebody typing
-`/research` gets exactly what they would have got before. That is a curiosity;
-a link nobody can use is a bug.
+**The Council went further, and is properly closed.** 3.1.3 hands blank agenda
+cards to "players" rather than to "CEOs", and this application read that
+literally at first: any character in a running game could open the Chamber and
+write one. The designer's ruling is that a seat is what it takes, and that
+somebody without one who wants an agenda raised has to convince somebody who
+has one — which is the conversation the Council is for. So the Chamber returns
+403 without a seat, `AgendaCardPolicy::create` asks for one, and the sidebar
+link follows.
+
+**A seat is one predicate, asked in four places.**
+`Character::scopeOnTheCouncil` is it: a CEO, whose vote is their Corporation's
+Political Will, or anybody Control has written a `council_votes` bloc on.
+`CouncilService::hasSeat()` wraps it, and the Chamber, `CouncilSessionPolicy::vote`,
+`AgendaCardPolicy::create` and `Navigation` all ask *that* rather than keeping
+four copies — `vote` used to carry its own and no longer does. Control is
+deliberately not in the predicate: the override belongs in the policies'
+`before()`, and a service that answered "yes, Control" would put it in two
+places.
+
+Note the instance method `Character::sitsOnCouncil()` is the *narrower*
+question and stays that way — it asks about the `council_votes` kind alone,
+because a CEO has no bloc of their own and never should.
+
+**Holding a seat is not the same as signing with it.** A player holding both a
+CEO chair and a Runner may raise an agenda, but as the CEO:
+`StoreAgendaCardRequest` checks the *character* named on the card, because
+otherwise the Chair is handed a card from somebody who is not in the room. The
+policy asks whether this user may write one at all; the request asks which of
+their seats is signing it.
 
 **The palette is sampled off the logo rather than chosen.** The neon tube in
 `public/images/running-hot.webp` sits at hue 33–40 with a chroma of about 0.24

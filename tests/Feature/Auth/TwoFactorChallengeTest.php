@@ -17,6 +17,10 @@ class TwoFactorChallengeTest extends TestCase
         parent::setUp();
 
         $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+
+        // The challenge is reached through the password form, which a real
+        // game turns off - see RUNNING_HOT_DIRECT_LOGIN.
+        config(['running_hot.direct_login' => true]);
     }
 
     public function test_two_factor_challenge_redirects_to_login_when_not_authenticated(): void

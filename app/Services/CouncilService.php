@@ -790,6 +790,26 @@ class CouncilService
      * votes with the bloc Control gave them - HM Government's six - which is
      * not Political Will and is not a tracker: nothing in the game spends it.
      */
+    /**
+     * Whether this user is entitled to be at the Council at all.
+     *
+     * The one question behind who may open the Chamber, who may vote and who
+     * may write a custom agenda. Control is not asked about here: Control
+     * reaches all of it through the policies' before(), and a service that
+     * answered "yes, Control" would have the override in two places.
+     */
+    public function hasSeat(Game $game, ?User $user): bool
+    {
+        if ($user === null || ! $game->isRunning()) {
+            return false;
+        }
+
+        return $game->characters()
+            ->where('user_id', $user->id)
+            ->onTheCouncil()
+            ->exists();
+    }
+
     public function votesFor(Corporation|Character $voter): int
     {
         return $voter instanceof Corporation

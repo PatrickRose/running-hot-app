@@ -77,7 +77,15 @@ class CouncilTest extends TestCase
         );
     }
 
-    public function test_the_council_page_shows_the_agenda_to_every_player(): void
+    /**
+     * A seat is what it takes to read the Chamber at all.
+     *
+     * This was everyone's page once, on the reading that the agenda is read
+     * out and 3.1.3 hands blank cards to "players". It is the designer's
+     * ruling that it is not: somebody with no seat who wants an agenda raised
+     * has to convince somebody who has one.
+     */
+    public function test_a_player_with_no_seat_cannot_read_the_chamber(): void
     {
         $this->tabledItem();
 
@@ -85,15 +93,97 @@ class CouncilTest extends TestCase
 
         $this->actingAs($runner)
             ->get(route('council'))
+            ->assertForbidden();
+    }
+
+    /**
+     * And a seat is what it takes to raise one. A Runner who wants an agenda
+     * put up has to convince somebody who is at the table.
+     */
+    public function test_a_player_with_no_seat_cannot_raise_an_agenda(): void
+    {
+        $runner = $this->player(CharacterRole::Runner, null);
+        $character = $this->game->characters()->where('user_id', $runner->id)->sole();
+
+        $this->actingAs($runner)
+            ->post(route('council.agenda-cards.store'), [
+                'character_id' => $character->id,
+                'title' => 'Ban the drones',
+                'resolutions' => ['Ban them', 'Licence them'],
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(0, $this->game->agendaCards()->whereNotNull('submitted_by_character_id')->count());
+    }
+
+    /**
+     * Holding a seat is not the same as signing with it. A player who holds
+     * both a CEO chair and a Runner may raise an agenda - but as the CEO, or
+     * the Chair is handed a card from somebody who is not in the room.
+     */
+    public function test_an_agenda_cannot_be_signed_by_an_unseated_character(): void
+    {
+        $user = $this->player(CharacterRole::Ceo, $this->dtc);
+
+        $runner = Character::factory()->for($this->game)->create([
+            'user_id' => $user->id,
+            'role' => CharacterRole::Runner,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('council.agenda-cards.store'), [
+                'character_id' => $runner->id,
+                'title' => 'Ban the drones',
+                'resolutions' => ['Ban them', 'Licence them'],
+            ])
+            ->assertSessionHasErrors('character_id');
+    }
+
+    public function test_the_chamber_shows_the_agenda_to_a_seated_player(): void
+    {
+        $this->tabledItem();
+
+        // DTC's CEO: at the Council, but not in the Chair this turn.
+        $ceo = $this->player(CharacterRole::Ceo, $this->dtc);
+
+        $this->actingAs($ceo)
+            ->get(route('council'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('council')
                 ->where('council.items.0.card.title', 'Water levy')
-                // A Runner is not at the Council: no vote, and no sight of the
-                // Chair's hand.
-                ->where('council.viewer.can_vote', false)
+                ->where('council.viewer.can_vote', true)
+                // The Chair's hand is the Chair's until two of them are read
+                // out, and this is not the Chair.
                 ->where('council.hand', [])
             );
+    }
+
+    /**
+     * Not every seat is a Corporation's. HM Government's bloc of six is a
+     * count Control writes on the character, and it carries the same right to
+     * be in the room.
+     */
+    public function test_a_seat_control_wrote_reads_the_chamber_too(): void
+    {
+        $this->tabledItem();
+
+        $government = $this->player(CharacterRole::Other, null, ['council_votes' => 6]);
+
+        $this->actingAs($government)
+            ->get(route('council'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('council.viewer.can_vote', true));
+    }
+
+    public function test_control_reads_the_chamber_without_holding_a_seat(): void
+    {
+        $this->tabledItem();
+
+        $this->actingAs($this->control())
+            ->get(route('council'))
+            ->assertOk();
     }
 
     public function test_a_ceo_votes_for_their_own_corporation(): void
@@ -248,7 +338,10 @@ class CouncilTest extends TestCase
     {
         $session = $this->game->currentTurn()->councilSession()->first();
 
-        $author = $this->player(CharacterRole::Runner, null);
+        // Somebody with a seat, because writing a blank card is the Council's
+        // now: a bloc Control seated rather than a CEO, so the card comes from
+        // a different desk than the Chair's.
+        $author = $this->player(CharacterRole::Other, null, ['council_votes' => 6]);
         $character = $this->game->characters()->where('user_id', $author->id)->sole();
 
         $this->actingAs($author)

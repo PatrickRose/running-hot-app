@@ -182,10 +182,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // is what checks the seat matches the counter, and that the shop is open.
     Route::post('shop/{listing}/buy', [ShopController::class, 'buy'])->name('shop.buy');
 
-    // The Council (rulebook 3.1). Everyone playing may read it, because the
-    // agenda is read out and any player may write a custom one. Who may vote,
-    // and who may chair, is the CouncilSessionPolicy's answer rather than a
-    // middleware's - the Chair is a Corporation that changes every turn.
+    // The Council (rulebook 3.1). A seat is what it takes to read it at all -
+    // the controller refuses without one - and who may vote, and who may
+    // chair, narrows from there in the CouncilSessionPolicy rather than in a
+    // middleware: the Chair is a Corporation that changes every turn.
     Route::get('council', CouncilController::class)->name('council');
 
     Route::post('council/items/{item}/ballots', [CouncilBallotController::class, 'store'])

@@ -2,10 +2,10 @@
 
 namespace App\Support;
 
-use App\Enums\CharacterRole;
 use App\Models\Character;
 use App\Models\Game;
 use App\Models\User;
+use App\Services\CouncilService;
 
 /**
  * Which sections of the application a player is offered.
@@ -27,6 +27,8 @@ use App\Models\User;
  */
 class Navigation
 {
+    public function __construct(private readonly CouncilService $council) {}
+
     /**
      * Every section, in the order the sidebar draws them.
      *
@@ -75,13 +77,10 @@ class Navigation
             fn (Character $seat): bool => $seat->role->goesOnRuns(),
         );
 
-        // A CEO votes with their Corporation's Political Will; anybody else at
-        // the table votes with a bloc Control has written on them. Those two
-        // are the whole of who sits there - see characters.council_votes.
-        $council = $seats->contains(
-            fn (Character $seat): bool => $seat->role === CharacterRole::Ceo
-                || $seat->sitsOnCouncil(),
-        );
+        // The same predicate the Chamber and the agenda policy ask, rather
+        // than a third copy of it: a CEO, or anybody Control has written a
+        // bloc on.
+        $council = $this->council->hasSeat($game, $user);
 
         return array_values(array_filter([
             'dashboard',

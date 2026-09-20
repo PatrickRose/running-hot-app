@@ -5,13 +5,20 @@ namespace App\Policies;
 use App\Models\AgendaCard;
 use App\Models\Game;
 use App\Models\User;
+use App\Services\CouncilService;
 
 /**
  * Who may write and hand on a custom agenda card (rulebook 3.1.3).
  *
- * Any player may take a blank card from the Council Chamber and fill it out -
- * the rulebook says "players", not "CEOs" - so writing one is not a Corporate
- * privilege. What is restricted is somebody else's card: it stays theirs
+ * A seat at the Council is what it takes. 3.1.3 hands blank cards to "players"
+ * rather than to "CEOs", and this application read that literally at first -
+ * any character in the game could write one. It is the designer's ruling that
+ * it should not: somebody with no seat who wants an agenda raised has to
+ * convince somebody who has one, which is the conversation the Council is for.
+ * So the blank cards are the Council's, and Character::scopeOnTheCouncil is
+ * the whole of who that is.
+ *
+ * What is restricted beyond that is somebody else's card: it stays theirs
  * through Control's remarks and back, because the card that reaches the Chair
  * has to be the one its author agreed to.
  */
@@ -53,15 +60,12 @@ class AgendaCardPolicy
     }
 
     /**
-     * Write a card at all: anybody holding a character in this running game.
+     * Write a card at all: anybody holding a seat at the Council in this
+     * running game. Control comes through before().
      */
     public function create(User $user, Game $game): bool
     {
-        if (! $game->isRunning()) {
-            return false;
-        }
-
-        return $game->characters()->where('user_id', $user->id)->exists();
+        return app(CouncilService::class)->hasSeat($game, $user);
     }
 
     /**

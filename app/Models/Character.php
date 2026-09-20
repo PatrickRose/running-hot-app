@@ -6,6 +6,7 @@ use App\Enums\CharacterRole;
 use App\Support\DiscordHandle;
 use Database\Factories\CharacterFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -136,6 +137,30 @@ class Character extends Model
     public function sitsOnCouncil(): bool
     {
         return $this->council_votes !== null;
+    }
+
+    /**
+     * Characters entitled to be at the Council at all.
+     *
+     * Two kinds and only two: a CEO, whose vote is their Corporation's weighted
+     * by its Political Will, and anybody Control has written a bloc on. The
+     * instance method above is deliberately the narrower question - it asks
+     * about the second kind alone, because a CEO has no `council_votes` of
+     * their own and never should.
+     *
+     * One expression, because four things ask it: who may open the Chamber, who
+     * may vote, who may write a custom agenda, and whether the sidebar offers
+     * the Council at all.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeOnTheCouncil(Builder $query): void
+    {
+        $query->where(fn (Builder $seat) => $seat
+            ->where(fn (Builder $ceo) => $ceo
+                ->where('role', CharacterRole::Ceo)
+                ->whereNotNull('corporation_id'))
+            ->orWhereNotNull('council_votes'));
     }
 
     /**

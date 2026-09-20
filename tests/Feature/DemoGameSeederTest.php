@@ -29,6 +29,20 @@ class DemoGameSeederTest extends TestCase
     use RefreshDatabase;
 
     /**
+     * These exercise the application's own login, which a real game turns off:
+     * a seat is claimed by Discord handle, so RUNNING_HOT_DIRECT_LOGIN is off
+     * by default and POST /login is refused. The rest of the suite runs on that
+     * default on purpose - it is the posture a deployment ships with - so the
+     * few tests whose subject *is* the password form opt back in here.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['running_hot.direct_login' => true]);
+    }
+
+    /**
      * Run the seeder the way `$this->call()` does, which is the only path that
      * can pass it an argument. It reports to a console, so it is given one
      * writing into a buffer rather than the test's output.

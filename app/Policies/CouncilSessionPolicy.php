@@ -6,6 +6,7 @@ use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Models\CouncilSession;
 use App\Models\User;
+use App\Services\CouncilService;
 
 /**
  * Who may act at one sitting of the Council (rulebook 3.1).
@@ -65,25 +66,7 @@ class CouncilSessionPolicy
      */
     public function vote(User $user, CouncilSession $session): bool
     {
-        return $this->holdsCeoSeat($user, $session, null)
-            || $this->holdsOwnSeat($user, $session);
-    }
-
-    /**
-     * A seat that belongs to the character rather than to a Corporation.
-     */
-    private function holdsOwnSeat(User $user, CouncilSession $session): bool
-    {
-        $game = $session->turn->game;
-
-        if ($game->status !== GameStatus::Running) {
-            return false;
-        }
-
-        return $game->characters()
-            ->where('user_id', $user->id)
-            ->whereNotNull('council_votes')
-            ->exists();
+        return app(CouncilService::class)->hasSeat($session->turn->game, $user);
     }
 
     private function holdsCeoSeat(User $user, CouncilSession $session, ?int $corporationId): bool
