@@ -527,12 +527,19 @@ export type FacilityBoard = {
  *
  * `label` is the words on the card — "No single", "Other side must be Cog" —
  * and `note` is what they do. Both travel because neither explains itself at
- * the size a card tile is drawn, so the label is shown and the note is what a
- * tooltip and a screen reader get.
+ * the size a card tile is drawn, so the tooltip and the screen reader get the
+ * pair of them.
+ *
+ * `short` and `glyph` are the same marking at tile size, where there is room
+ * for one word: "Other" and the demanded suit's icon says what "Other side
+ * must be Cog" truncated to nothing useful. `glyph` is null for a marking that
+ * names no suit.
  */
 export type CardMarkingSummary = {
     label: string;
     note: string;
+    short: string;
+    glyph: string | null;
 };
 
 export type DeckGrant = {

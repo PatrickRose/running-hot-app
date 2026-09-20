@@ -519,18 +519,23 @@ class ResearchPresenter
     /**
      * What a card is printed with, as the page needs it.
      *
-     * Both halves travel: the label is the words on the card and the note is
-     * what they do, because neither "No single" nor "Other side must be Cog"
-     * explains itself at the size a card tile is drawn.
+     * Four things, because a marking has to read at three different sizes. The
+     * label is the words on the card and the note is what they do - neither
+     * "No single" nor "Other side must be Cog" explains itself, so the note is
+     * what the tooltip and the screen reader get. The short label and the glyph
+     * are the tile: 56 pixels has room for a word and an icon, and the icon is
+     * how the demanded suit survives a width that truncates its name.
      *
      * @param  array<int, CardMarking>  $markings
-     * @return array<int, array{label: string, note: string}>
+     * @return array<int, array{label: string, note: string, short: string, glyph: string|null}>
      */
     private static function markings(array $markings): array
     {
         return array_values(array_map(fn (CardMarking $marking): array => [
             'label' => $marking->label(),
             'note' => $marking->description(),
+            'short' => $marking->shortLabel(),
+            'glyph' => $marking->glyph(),
         ], $markings));
     }
 }

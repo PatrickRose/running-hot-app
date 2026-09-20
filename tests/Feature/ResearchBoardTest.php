@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\ResearchTableService;
 use App\Services\TrackerService;
 use App\Services\TurnEngine;
+use App\Support\CardMarking;
 use App\Support\FacilityTypeBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -112,6 +113,53 @@ class ResearchBoardTest extends TestCase
             ->has('research.own.hand', 5)
             ->has('research.session.pool', 6)
             ->has('research.session.seats', 2)
+        );
+    }
+
+    public function test_a_marking_reaches_the_page_in_every_size_it_is_drawn_at(): void
+    {
+        $this->table()->openSession($this->game);
+
+        $card = $this->table()->hand($this->gordon)->firstOrFail();
+        $card->forceFill(['markings' => CardMarking::listToArray([
+            CardMarking::restrictedTo(ResearchSuit::Cog),
+        ])])->save();
+
+        $response = $this->actingAs($this->seat($this->gordon, CharacterRole::Research))
+            ->get(route('research'));
+
+        $response->assertInertia(fn (AssertableJson $page) => $page
+            ->has('research.own.hand', 5, fn (AssertableJson $hand) => $hand
+                // The words on the card, and what they mean: the tooltip.
+                ->where('markings.0.label', 'Other side must be Cog')
+                ->where('markings.0.note', 'The other side of the equation has to be Cog.')
+                // The tile, which is 56 pixels wide: a word, and the suit as
+                // its own icon rather than as a name that would truncate away.
+                ->where('markings.0.short', 'Other')
+                ->where('markings.0.glyph', ResearchSuit::Cog->glyph())
+                ->etc()
+            )
+        );
+    }
+
+    public function test_a_marking_that_names_no_suit_asks_for_no_icon(): void
+    {
+        $this->table()->openSession($this->game);
+
+        $card = $this->table()->hand($this->gordon)->firstOrFail();
+        $card->forceFill(['markings' => CardMarking::listToArray([
+            CardMarking::noSingle(),
+        ])])->save();
+
+        $response = $this->actingAs($this->seat($this->gordon, CharacterRole::Research))
+            ->get(route('research'));
+
+        $response->assertInertia(fn (AssertableJson $page) => $page
+            ->has('research.own.hand', 5, fn (AssertableJson $hand) => $hand
+                ->where('markings.0.short', 'No single')
+                ->where('markings.0.glyph', null)
+                ->etc()
+            )
         );
     }
 

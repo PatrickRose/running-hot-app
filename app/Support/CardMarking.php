@@ -69,6 +69,34 @@ final readonly class CardMarking
     }
 
     /**
+     * The same marking in the space a card tile has for it.
+     *
+     * A research card is drawn 56 pixels wide, which is about five characters
+     * of the smallest type the application uses - so "Other side must be Cog"
+     * truncated to "Other side m..." and lost the one word that matters, which
+     * is the suit. The short form says only the half that cannot be drawn, and
+     * glyph() draws the other half as the suit's own icon beside it.
+     */
+    public function shortLabel(): string
+    {
+        return match ($this->marking) {
+            ResearchCardMarking::NoSingle => 'No single',
+            ResearchCardMarking::Restricted => 'Other',
+        };
+    }
+
+    /**
+     * The character that draws the suit this marking names, where it names one.
+     *
+     * Null for a marking that is only words, which is what keeps a caller from
+     * drawing a blank icon for "No single".
+     */
+    public function glyph(): ?string
+    {
+        return $this->suit?->glyph();
+    }
+
+    /**
      * What the marking actually does, for a page with room to say so.
      */
     public function description(): string
