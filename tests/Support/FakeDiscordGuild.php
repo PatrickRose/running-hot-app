@@ -6,6 +6,7 @@ use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -27,6 +28,17 @@ class FakeDiscordGuild
 
     /** @var array<string, array<string, mixed>> */
     public array $webhooks = [];
+
+    /**
+     * Messages per channel, oldest first.
+     *
+     * Kept as state for the reason the permission overwrites are: the
+     * interesting question about clearing a run channel is what is *left* in it
+     * afterwards, and a pinned message is supposed to be.
+     *
+     * @var array<string, array<int, array<string, mixed>>>
+     */
+    public array $messages = [];
 
     /**
      * Whether to behave like a Discord that refuses the bot's grants.
@@ -166,6 +178,39 @@ class FakeDiscordGuild
         $this->members[$userId] = $roleIds;
 
         return $this;
+    }
+
+    /**
+     * Put a message in a channel, as a player or the bot would have.
+     *
+     * @return string the message's snowflake
+     */
+    public function postMessage(
+        string $channelId,
+        string $content = 'something said during a run',
+        bool $pinned = false,
+        ?string $timestamp = null,
+    ): string {
+        $id = (string) $this->nextId++;
+
+        $this->messages[$channelId][] = [
+            'id' => $id,
+            'content' => $content,
+            'pinned' => $pinned,
+            'timestamp' => $timestamp ?? now()->toIso8601String(),
+        ];
+
+        return $id;
+    }
+
+    /**
+     * What is still in a channel, oldest first.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function messagesIn(string $channelId): array
+    {
+        return array_values($this->messages[$channelId] ?? []);
     }
 
     public function roleNamed(string $name): ?array
@@ -397,6 +442,81 @@ class FakeDiscordGuild
             $this->channels[$channelId]['permission_overwrites'] = $overwrites;
 
             return Http::response(null, 204);
+        }
+
+        // Deleting up to 100 at once. Discord refuses a batch of one outright,
+        // and refuses the whole batch if anything in it is over two weeks old -
+        // both of which a caller clearing a channel has to work around, so the
+        // fake refuses them too.
+        if (preg_match('#^/channels/(\d+)/messages/bulk-delete$#', $path, $matches) === 1) {
+            $channelId = $matches[1];
+            $ids = $body['messages'] ?? [];
+
+            if (count($ids) < 2 || count($ids) > 100) {
+                return Http::response(['message' => 'Invalid Form Body', 'code' => 50035], 400);
+            }
+
+            $fortnightAgo = now()->subDays(14);
+
+            foreach ($this->messages[$channelId] ?? [] as $message) {
+                if (in_array($message['id'], $ids, true)
+                    && Carbon::parse($message['timestamp'])->lessThan($fortnightAgo)) {
+                    return Http::response(
+                        ['message' => 'You can only bulk delete messages that are under 14 days old.', 'code' => 50034],
+                        400,
+                    );
+                }
+            }
+
+            $this->messages[$channelId] = array_values(array_filter(
+                $this->messages[$channelId] ?? [],
+                fn (array $message): bool => ! in_array($message['id'], $ids, true),
+            ));
+
+            return Http::response(null, 204);
+        }
+
+        if (preg_match('#^/channels/(\d+)/messages/(\d+)$#', $path, $matches) === 1) {
+            [, $channelId, $messageId] = $matches;
+
+            if ($method === 'DELETE') {
+                $this->messages[$channelId] = array_values(array_filter(
+                    $this->messages[$channelId] ?? [],
+                    fn (array $message): bool => $message['id'] !== $messageId,
+                ));
+
+                return Http::response(null, 204);
+            }
+
+            return Http::response(['id' => $messageId]);
+        }
+
+        if (preg_match('#^/channels/(\d+)/messages$#', $path, $matches) === 1) {
+            $channelId = $matches[1];
+
+            if ($method === 'POST') {
+                $id = $this->postMessage($channelId, (string) ($body['content'] ?? ''));
+
+                return Http::response(['id' => $id, 'channel_id' => $channelId], 200);
+            }
+
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $limit = (int) ($query['limit'] ?? 50);
+            $before = $query['before'] ?? null;
+
+            // Newest first, which is the order Discord answers in.
+            $messages = array_reverse($this->messagesIn($channelId));
+
+            if (is_string($before) && $before !== '') {
+                $messages = array_values(array_filter(
+                    $messages,
+                    // Snowflakes fit in a 64-bit int, and paging by one is a
+                    // numeric comparison rather than a string one.
+                    fn (array $message): bool => (int) $message['id'] < (int) $before,
+                ));
+            }
+
+            return Http::response(array_slice($messages, 0, max(1, min(100, $limit))));
         }
 
         if (preg_match('#^/channels/(\d+)$#', $path, $matches) === 1) {

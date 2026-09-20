@@ -283,6 +283,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Building and reconciling that server | `App\Actions\ProvisionDiscordGuild` |
 | A Facility's own channels | `App\Actions\ProvisionFacilityChannels`, `App\Jobs\SyncFacilityChannels` |
 | Letting the Runners into the Facility they are hitting | `App\Actions\GrantRunChannelAccess`, `App\Jobs\SyncRunChannelAccess` |
+| Emptying that channel when the turn ends | `App\Actions\ClearRunChannels`, `App\Jobs\ClearRunChannels` |
 | Handing a player their Discord roles | `App\Actions\SyncDiscordRolesForUser` |
 | Discord REST calls as the bot | `App\Services\Discord\DiscordApi` |
 | Inertia payload shaping | `App\Support\GamePresenter` |
@@ -1136,6 +1137,46 @@ only to hand over what the Runner has already won.
 
 The Runners are also let into their target Facility's Discord channels for the
 length of the run, which is the Discord half above.
+
+**And the channel is emptied when the turn ends.** A Facility's channels are
+permanent and every Run against it happens in the same pair, so without this a
+group hitting Attercliffe Yard on turn 4 opens the channel and reads turn 3's
+group working out exactly what was in the stack, in what order, and what each
+card cost to get past. 3.4.2 makes that Secret and reconnaissance is what you
+spend an action to find out, so last turn's transcript sitting in the room is a
+free recon action for everybody who comes after. `App\Actions\ClearRunChannels`
+is the sweep and `App\Jobs\ClearRunChannels` the fail-soft wrapper.
+
+**What is worth reading is kept somewhere better, which is why deleting is
+safe.** The run's own log is `run_events` - every card, roll, consequence and
+departure, with who did it and when - and it is on the run screen and Control's
+panel for the rest of the game. Nothing here touches it. What goes is the
+conversation around it, which is the half that leaks. (This is the one place
+that qualifies "a Facility Control removes keeps its channel, because the Run
+that happened in it is still worth reading": the *channel* still outlives the
+Facility, and the run is still readable - in the application, where it always
+was.)
+
+**A pinned message survives**, which is the override: Control pins whatever
+should outlive the turn and the sweep leaves it exactly where it is.
+
+**At the end of the turn, not the end of the Action phase**, so the group has
+Team Time to read back over how it went. `TurnEngine::advance()` dispatches it
+on the branch where Team Time ends and a new turn is created.
+
+**Only the Facilities a group actually went into.** Read off the runs rather
+than the roster, and only those with a `started_at`: a run submitted and never
+begun put nobody in the channel. Sweeping every channel in the guild every turn
+would be a pile of requests against a rate limit Discord enforces hard, for
+channels where nothing was said.
+
+**Two things about Discord's bulk delete, and both are load-bearing.** It
+refuses a batch of one outright, and it refuses the *whole batch* if anything in
+it is over a fortnight old - so one stale message would otherwise take the rest
+of the channel's tidy-up down with it. `ClearRunChannels` splits the page and
+falls back to single deletes for both cases. Paging is by snowflake and the
+`before` id is taken *before* anything is deleted, because paging from a deleted
+id returns nothing at all.
 
 ## The card lists
 

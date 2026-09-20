@@ -348,6 +348,57 @@ class DiscordApi
         return $this->patch("/channels/{$channelId}/messages/{$messageId}", $payload);
     }
 
+    /**
+     * The most recent messages in a channel, newest first.
+     *
+     * `$before` is a message id rather than a page number: Discord pages by
+     * snowflake, so reading a channel out is asking again for what came before
+     * the oldest message of the last answer.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function channelMessages(string $channelId, int $limit = 100, ?string $before = null): array
+    {
+        $query = 'limit='.max(1, min(100, $limit));
+
+        if ($before !== null) {
+            $query .= '&before='.$before;
+        }
+
+        /** @var array<int, array<string, mixed>> */
+        return $this->get("/channels/{$channelId}/messages?{$query}");
+    }
+
+    /**
+     * Delete between 2 and 100 messages in one call.
+     *
+     * Discord refuses the whole batch if any message in it is more than two
+     * weeks old, and refuses a batch of one outright - so a caller clearing a
+     * channel has to fall back to {@see deleteMessage()} for both cases rather
+     * than treating this as the general way to delete something.
+     *
+     * @param  array<int, string>  $messageIds
+     */
+    public function bulkDeleteMessages(string $channelId, array $messageIds, ?string $reason = null): void
+    {
+        $this->post(
+            "/channels/{$channelId}/messages/bulk-delete",
+            ['messages' => array_values($messageIds)],
+            $reason,
+        );
+    }
+
+    /**
+     * Delete one message.
+     *
+     * The single-message path, and the only one that works on a message older
+     * than two weeks.
+     */
+    public function deleteMessage(string $channelId, string $messageId, ?string $reason = null): void
+    {
+        $this->send('delete', "/channels/{$channelId}/messages/{$messageId}", null, $reason);
+    }
+
     public function addRoleToMember(string $guildId, string $userId, string $roleId, ?string $reason = null): void
     {
         $this->send('put', "/guilds/{$guildId}/members/{$userId}/roles/{$roleId}", null, $reason);
