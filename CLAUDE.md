@@ -697,6 +697,28 @@ towards a capacity the server was not enforcing it against. It filters on
 `TechnologyHoldingStatus::occupiesStorage()` now, which is the predicate the Run
 side already used.
 
+**Control installs through the shop's picker, not a `select`.** The list a stack
+offers is the whole catalogue of its kind minus what is already in the
+Facility - forty-odd cards, and a native `select` holding that is a list nobody
+finds anything in, which is the reasoning the shop's `SearchPicker` already
+carries. It searches the printed code and the card's *words* as well as its
+name, because the question Control is answering here is "what do I want the
+Runners to hit": typing "end the run" and seeing which thirteen cards do it is
+the point of having a search. The kind is deliberately not searchable - a stack
+only ever offers its own, so the term would match everything.
+
+**And the refusal is drawn per stack, which is what made the picker usable.**
+Installing spends a copy out of the Corporation's hand and the picker offers
+cards it may hold none of, so "no copies left to install" is the refusal Control
+actually meets - and nothing rendered it, so the Install button simply did
+nothing. It is kept on the stack rather than read off the page, for the reason
+the research table's `ScoreForm` and the run screen's `useRunAction` do: a
+Facility has two stacks and a game has a page full of Facilities, and every one
+of those posts reports against the same `protection_card_type_id` key, so a
+page-level `errors` would put one stack's refusal under every stack on screen.
+`ProtectionCardStackTest` pins the key the panel reads, because reporting it
+anywhere else puts the button back to doing nothing quietly.
+
 **The rules did not move with the routes.** `App\Http\Controllers\FacilityDefenceController` is a thin thing: every write goes through `FacilityDefenceService`, so a full stack is still refused, a card the Corporation does not hold is still refused, and every Credit still lands in the `tracker_adjustments` ledger with the Security player's name against it rather than Control's. Do not let a player-facing route grow its own copy of a rule.
 
 **Installing and removing commit at once; arranging does not.** They are not the same kind of act. Installing costs no Credits and spends a copy out of the hand, and removing hands one back — things you either did or did not do. Reordering costs 1 Credit per card that moves, and at the table you lay the cards out and *then* pay once, so dragging within a stack only arranges: nothing is charged until Confirm. A stack with an unconfirmed arrangement refuses installs and removals until it is confirmed or undone, because the order on screen and the order on the server would otherwise disagree about what is in it.
