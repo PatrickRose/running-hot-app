@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityType;
+use App\Models\Game;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -32,9 +33,22 @@ class FacilityFactory extends Factory
     {
         return $this->afterMaking(function (Facility $facility): void {
             if ($facility->getAttribute('game_id') === null) {
-                $facility->setAttribute('game_id', $facility->corporation->game_id);
+                $facility->setAttribute('game_id', $facility->corporation?->game_id);
             }
         });
+    }
+
+    /**
+     * A Plot Facility: one Control built, belonging to nobody.
+     *
+     * The game has to be given, because there is no Corporation to read it off.
+     */
+    public function plot(Game $game): static
+    {
+        return $this->state(fn (): array => [
+            'game_id' => $game->id,
+            'corporation_id' => null,
+        ]);
     }
 
     /**

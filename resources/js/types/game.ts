@@ -411,7 +411,12 @@ export type ProtectionStack = {
     kind: ProtectionKind;
     kind_label: string;
     kind_glyph: string;
-    slots: number;
+    /**
+     * Null means no limit, which is what a Plot Facility has: the cap exists to
+     * make Security Facilities worth building, and Control is not playing that
+     * economy.
+     */
+    slots: number | null;
     cards: InstalledProtectionCard[];
 };
 
@@ -434,7 +439,9 @@ export type FacilityChannels = {
 export type FacilitySummary = {
     id: number;
     name: string;
-    corporation_id: number;
+    /** Null for a Plot Facility: Control built it and nobody in the roster owns it. */
+    corporation_id: number | null;
+    is_plot: boolean;
     facility_type_id: number;
     facility_type: string;
     available_from_turn: number;
@@ -571,6 +578,13 @@ export type PublicCorporationFacilities = Faction & {
 export type FacilityBoard = {
     turn: number | null;
     public: PublicCorporationFacilities[];
+    /**
+     * The Facilities belonging to nobody, as one more owner on the public list.
+     * Everybody sees them and nobody gets a second tier on them, because no
+     * player is inside one — they are Control's buildings, listed so that a
+     * group can name one as a target. Null when the game has none.
+     */
+    plot: (Faction & { facilities: PublicFacility[] }) | null;
     own: CorporationFacilities | null;
 };
 

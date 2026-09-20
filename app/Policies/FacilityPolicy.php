@@ -55,6 +55,15 @@ class FacilityPolicy
             return false;
         }
 
+        // A Plot Facility is Control's building. No roster seat defends it, so
+        // there is no Security player to let through - and the question has to
+        // be refused explicitly rather than left to the query below, where a
+        // null corporation_id would match every character holding no
+        // Corporation at all.
+        if ($facility->isPlotFacility()) {
+            return false;
+        }
+
         return $facility->game->characters()
             ->where('user_id', $user->id)
             ->where('corporation_id', $facility->corporation_id)

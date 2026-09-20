@@ -178,6 +178,14 @@ class RunPolicy
             return false;
         }
 
+        // Nobody defends a Plot Facility but Control, which before() has
+        // already let through. Refused by name rather than by the query: a null
+        // corporation_id would read as "characters in no Corporation", which is
+        // every Runner in the game.
+        if ($run->facility->isPlotFacility()) {
+            return false;
+        }
+
         return $run->game->characters()
             ->where('user_id', $user->id)
             ->where('corporation_id', $run->facility->corporation_id)

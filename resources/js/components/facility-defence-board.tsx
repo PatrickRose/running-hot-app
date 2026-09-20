@@ -467,7 +467,7 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
 
         // Checked here as well as on the server so the refusal is instant and
         // says which Facility. The server is still the one that decides.
-        if (stack.cards.length >= stack.slots) {
+        if (stack.slots !== null && stack.cards.length >= stack.slots) {
             toast.error(
                 `${facility.name} already holds its ${stack.slots} ${stack.kind_label} cards.`,
             );
@@ -1300,7 +1300,8 @@ function StackPanel({
                 <GameIcon glyph={stack.kind_glyph} label={stack.kind_label} />
                 <span aria-hidden="true">{stack.kind_label}</span>
                 <span className="font-normal text-muted-foreground">
-                    {stack.cards.length}/{stack.slots}
+                    {stack.cards.length}
+                    {stack.slots === null ? ' installed' : `/${stack.slots}`}
                 </span>
             </p>
 

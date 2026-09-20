@@ -247,6 +247,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | The shop's list, its stock, and what a purchase moves | `App\Services\ShopService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
+| A Facility Control builds for the Runners to hit | `Facility::isPlotFacility()`, `RequisitionFacility::buildForControl()` |
 | A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
 | The game's agenda deck | `App\Support\AgendaCardBlueprint`, `App\Actions\SeedAgendaCards` |
 | A game's starting Facilities and card holdings | `config/running_hot.php`, `App\Actions\CreateDefaultFacilities` |
@@ -723,6 +724,34 @@ Anything still printed on a card that mentions directing security — the Intern
 **Every Facility is named in `config/running_hot.php`, not labelled from its type.** A Facility's name is what players call it all game, and "Gordon Corporate 2" is a label. The names there are flavour rather than briefing data — places near Sheffield, since that is where Procatorion was bought — so rename them freely; nothing keys off them. An entry with no name falls back to the Corporation's short name and the type, so a Corporation added later still works.
 
 **Starting Facilities are per Corporation and the differences are mechanical**, not decorative. They live beside each Corporation in `config/running_hot.php`, from the briefing documents: DTC's second Security Facility widens every one of its stacks, Gordon's three Corporate Facilities make it the only Corporation storing six technologies per Facility, and Genetic Equity's three Research Facilities are its whole strategy. A Corporation the config says nothing about opens with none rather than a guessed set.
+
+### Plot Facilities
+
+**A Plot Facility is a Facility with no Corporation.** Control builds it for the Runners to run against, so the rulebook has nothing to say about it — it belongs to no roster seat, serves no Corporation's economy, and exists because the story wants somewhere to break into. `facilities.corporation_id` is nullable and that is the whole of the mechanism: `Facility::isPlotFacility()` reads the column, and everything a Run already operates on — the ordered stacks, the four steps, the accesses, the Discord channels it happens in — goes on working because it is the same table. A second model would have been the entire Run loop written twice.
+
+The delete rule stays cascading. A Corporation removed from the roster still takes its Facilities with it, because turning them into Plot Facilities would quietly hand Control buildings it never built.
+
+**What changes is everything that was a Corporation's.** Each of these is a consequence of there being nobody to charge rather than a rule of its own:
+
+| | A Corporation's Facility | A Plot Facility |
+|---|---|---|
+| Stack slots | 3 of each, widened by Security Facilities | **no limit at all** |
+| Installing a card | spends a copy out of the hand | spends nothing; the catalogue is enough |
+| Removing a card | 1 Credit after the first each turn | free, and no copy comes back |
+| Reordering | 1 Credit per card that moves | free |
+| Security budget | escrowed off the Corporation, returned unspent | a number Control writes; no escrow, no ledger row |
+| Technologies stored | 2 per Corporate Facility | **none, ever** |
+| Who defends it | the Corporation's Security seat, and Control | Control alone |
+
+**No slot limit is the one that is not an accident.** The cap exists to make Security Facilities worth building, which is a decision inside a Corporation's economy — Control is not playing it, so a plot building is as deep as the story needs. `FacilityDefenceService::slotsFor()` answers null for one, and null means no limit everywhere it travels, including the `slots` field the board draws.
+
+**It stores no technologies**, so a technology access inside one finds empty racks and the Credits card pays on its installed cards alone. `TechnologyService::capacityFor()` returns nought and `place()` refuses by name rather than letting the "not your Facility" message stand in for it.
+
+**Players see it as "Independent", never as a Plot Facility.** `Facility::INDEPENDENT_OWNER` is the one place that word is written. It is on `#facility-list`, on `/facilities` and on the target list every Runner chooses from — they have to see it, or Control has built a target nobody can aim at — and it is drawn with a `FactionBadge` like any other owner, so committing `public/images/logos/independent.webp` gives it a logo with no further code. Calling it a Plot Facility in public would announce Control's own hand: that name is Control's panel and this file.
+
+**Refusing a defender by name, not by query.** `FacilityPolicy::defend` and `RunPolicy::isDefending` both return false for a Plot Facility before they go near the database. Left to the query, `where('corporation_id', null)` becomes `whereNull`, which reads as "characters in no Corporation" — every Runner in the game. `RunEngine::securitySeatOf()` is the same trap and the same answer.
+
+**Its Discord channels sit in one shared category, locked to Control.** `GuildBlueprint::CATEGORY_PLOT_FACILITIES` — one category for all of them rather than one each, because what they share is that Control built them and there is no team to group them under. The category is only in the blueprint when the game has a Plot Facility, so a game without one grows no empty category. Everything else is unchanged: the pair is created by the same job, reconciled by the same provision run, and the Runners hitting one are let in by the same per-member overwrites for the length of their run.
 
 ## Runs
 

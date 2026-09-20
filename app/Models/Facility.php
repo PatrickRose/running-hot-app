@@ -13,18 +13,27 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * One of a Corporation's Facilities (rulebook 3.3).
+ * One of a Corporation's Facilities (rulebook 3.3) - or one belonging to
+ * nobody, which is a Plot Facility.
+ *
+ * A Plot Facility has no Corporation. Control builds it for the Runners to hit,
+ * so there is no roster seat defending it, no hand of card copies to install
+ * out of and no Credits to charge a reorder against. It is a Facility in every
+ * other respect, which is the whole reason it is this model with a null column
+ * rather than a second one: a Run cares about a building with cards in it, and
+ * the four steps, the accesses and the Discord channels all already work
+ * against this table.
  *
  * @property int $id
  * @property int $game_id
- * @property int $corporation_id
+ * @property int|null $corporation_id
  * @property int $facility_type_id
  * @property string $name
  * @property int $available_from_turn
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read Corporation $corporation
+ * @property-read Corporation|null $corporation
  * @property-read FacilityType $facilityType
  */
 #[Fillable([
@@ -40,6 +49,18 @@ class Facility extends Model
      * The turn a game that has not started yet is treated as being on.
      */
     public const FIRST_TURN = 1;
+
+    /**
+     * What a Plot Facility is called where a Corporation's name would go.
+     *
+     * Public-facing: it is in #facility-list and on the target list every
+     * Runner chooses from, and telling them a building is a *plot* Facility
+     * would announce Control's own intent. "Independent" says the true and
+     * useful half - that nobody in the roster owns it - and it reads as a badge
+     * like any other, so a logo committed at images/logos/independent.webp is
+     * picked up with no further code.
+     */
+    public const INDEPENDENT_OWNER = 'Independent';
 
     /**
      * Give a new Facility its Discord channels.
@@ -68,6 +89,32 @@ class Facility extends Model
     public function corporation(): BelongsTo
     {
         return $this->belongsTo(Corporation::class);
+    }
+
+    /**
+     * Whether this is a Plot Facility: one Control built, owned by nobody.
+     *
+     * Asked of the column rather than of the loaded relation, so a Facility
+     * read back without `corporation` eager-loaded still answers correctly
+     * instead of lazily fetching a row it is about to discover is not there.
+     */
+    public function isPlotFacility(): bool
+    {
+        return $this->corporation_id === null;
+    }
+
+    /**
+     * Whose Facility this is, for anywhere a name is drawn.
+     *
+     * One implementation so that the Control panel, the Facility board, the
+     * #facility-list embed and the run screen cannot drift on what to call a
+     * building nobody owns.
+     */
+    public function ownerName(): string
+    {
+        return $this->isPlotFacility()
+            ? self::INDEPENDENT_OWNER
+            : $this->corporation->name;
     }
 
     /** @return BelongsTo<FacilityType, $this> */
@@ -128,6 +175,15 @@ class Facility extends Model
     {
         /** @var FacilityTurnState */
         return $this->turnStates()->firstOrCreate(['turn_id' => $turn->id]);
+    }
+
+    /**
+     * @param  Builder<Facility>  $query
+     * @return Builder<Facility>
+     */
+    public function scopePlot(Builder $query): Builder
+    {
+        return $query->whereNull('corporation_id');
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\Facility;
 use App\Models\Game;
 use App\Support\LogoImage;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * The Discord embeds for #facility-list: who owns what.
@@ -43,16 +44,18 @@ class FacilityListEmbed
     public const MAX_TOTAL_CHARACTERS = 6000;
 
     /**
-     * One embed per Corporation, coloured to match the Discord role its players
-     * already wear and carrying its logo, so a Corporation is the same colour
-     * and the same badge everywhere.
+     * One embed per group - a Corporation, or the Facilities belonging to
+     * nobody - coloured to match the Discord role its players already wear and
+     * carrying its logo, so a Corporation is the same colour and the same badge
+     * everywhere.
      *
      * An embed each rather than one embed of fields because a Corporation with
      * five Facilities is a block of text either way, and separating them gives
      * each a heading, a colour and its own space. The cost is Discord's cap of
-     * ten embeds per message: a game with more Corporations than that gets the
-     * first ten and a line saying so, which is a limit worth living with for a
-     * game whose roster is five.
+     * ten embeds per message: a game with more groups than that gets the first
+     * ten and a line saying so, which is a limit worth living with for a game
+     * whose roster is five and a Plot Facility list that is one group however
+     * long it grows.
      *
      * @return array<string, mixed>
      */
@@ -63,18 +66,42 @@ class FacilityListEmbed
             ->orderBy('name')
             ->get();
 
-        if ($corporations->isEmpty()) {
+        // The Facilities belonging to nobody, as one more group at the end.
+        // Runners choose their target off this list (3.4.1), so a Plot Facility
+        // left off it is a building Control built for nobody to find - and it
+        // is drawn under the same neutral name the rest of the application uses
+        // for one, because "Control put this here" is not something the public
+        // list knows.
+        $plot = $game->facilities()
+            ->plot()
+            ->with('facilityType')
+            ->orderBy('name')
+            ->get();
+
+        /** @var array<int, array{name: string, facilities: mixed}> $groups */
+        $groups = $corporations
+            ->map(fn (Corporation $corporation): array => [
+                'name' => $corporation->name,
+                'facilities' => $corporation->facilities,
+            ])
+            ->all();
+
+        if ($plot->isNotEmpty()) {
+            $groups[] = ['name' => Facility::INDEPENDENT_OWNER, 'facilities' => $plot];
+        }
+
+        if ($groups === []) {
             return ['embeds' => [self::emptyEmbed($game)]];
         }
 
-        $shown = $corporations->take(self::MAX_EMBEDS);
-        $hidden = $corporations->count() - $shown->count();
+        $shown = array_slice($groups, 0, self::MAX_EMBEDS);
+        $hidden = count($groups) - count($shown);
         $turnNumber = $game->currentTurn()?->number;
 
-        $embeds = $shown
-            ->values()
-            ->map(fn (Corporation $corporation): array => self::corporationEmbed($corporation, $turnNumber))
-            ->all();
+        $embeds = array_map(
+            fn (array $group): array => self::groupEmbed($group['name'], $group['facilities'], $turnNumber),
+            $shown,
+        );
 
         // The heading goes on the first embed and the timestamp on the last, so
         // the message reads as one list rather than as several.
@@ -88,14 +115,23 @@ class FacilityListEmbed
     }
 
     /**
+     * One group of Facilities under the name of whoever has them.
+     *
+     * Named rather than taking a Corporation, so that the Facilities belonging
+     * to nobody are drawn by exactly the same code: they get a colour from the
+     * same hash and artwork from the same directory, so committing
+     * images/logos/independent-wide.webp gives them a lockup with no change
+     * here.
+     *
+     * @param  Collection<int, Facility>|\Illuminate\Database\Eloquent\Collection<int, Facility>  $facilities
      * @return array<string, mixed>
      */
-    private static function corporationEmbed(Corporation $corporation, ?int $turnNumber): array
+    private static function groupEmbed(string $name, mixed $facilities, ?int $turnNumber): array
     {
         $embed = [
-            'title' => $corporation->name,
-            'color' => GuildBlueprint::colourFor($corporation->name),
-            'description' => self::facilityLines($corporation, $turnNumber),
+            'title' => $name,
+            'color' => GuildBlueprint::colourFor($name),
+            'description' => self::facilityLines($facilities, $turnNumber),
         ];
 
         // The wide lockup where there is one, as the embed's image: it is the
@@ -108,8 +144,8 @@ class FacilityListEmbed
         // than empty where there is no artwork at all: a Corporation Control
         // invented mid-game has none, and neither does a checkout that has not
         // had the logos added to it.
-        $wide = LogoImage::urlFor($corporation->name, LogoImage::WIDE);
-        $icon = LogoImage::urlFor($corporation->name, LogoImage::ICON);
+        $wide = LogoImage::urlFor($name, LogoImage::WIDE);
+        $icon = LogoImage::urlFor($name, LogoImage::ICON);
 
         if ($wide !== null) {
             $embed['image'] = ['url' => $wide];
@@ -123,10 +159,12 @@ class FacilityListEmbed
     /**
      * One line per Facility, truncated on a line boundary rather than
      * mid-Facility: half a name reads as a different Facility.
+     *
+     * @param  Collection<int, Facility>|\Illuminate\Database\Eloquent\Collection<int, Facility>  $facilities
      */
-    private static function facilityLines(Corporation $corporation, ?int $turnNumber): string
+    private static function facilityLines(mixed $facilities, ?int $turnNumber): string
     {
-        $lines = $corporation->facilities
+        $lines = $facilities
             // Grouped by type, so a Corporation's two Security Facilities sit
             // together rather than either end of an alphabetical list.
             ->sortBy(fn (Facility $facility): string => $facility->facilityType->name.' '.$facility->name)
@@ -165,7 +203,7 @@ class FacilityListEmbed
             : sprintf('As of turn %d', $turnNumber);
 
         if ($hidden > 0) {
-            $text .= sprintf(' · %d more Corporation(s) not shown', $hidden);
+            $text .= sprintf(' · %d more not shown', $hidden);
         }
 
         return $text;
@@ -179,7 +217,7 @@ class FacilityListEmbed
         return [
             'author' => ['name' => 'Facilities in Procatorion'],
             'title' => 'Nothing built yet',
-            'description' => 'No Corporation has opened a Facility.',
+            'description' => 'Nobody has opened a Facility.',
             'color' => 0x2B6CB0,
             'footer' => ['text' => self::footerText($game->currentTurn()?->number, 0)],
             'timestamp' => Carbon::now()->toIso8601String(),

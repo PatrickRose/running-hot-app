@@ -316,15 +316,53 @@ class RunPresenter
             ->get()
             ->flatMap(fn (Corporation $corporation): array => $corporation->facilities
                 ->filter(fn (Facility $facility): bool => $facility->isAvailableOnTurn($turn?->number))
-                ->map(fn (Facility $facility): array => [
-                    'id' => $facility->id,
-                    'name' => $facility->name,
-                    'facility_type' => $facility->facilityType->name,
-                    'corporation' => FactionBadge::for($corporation->name),
-                ])
+                ->map(fn (Facility $facility): array => $this->target($facility))
                 ->values()
                 ->all())
+            ->merge($this->plotTargets($game, $turn))
             ->all();
+    }
+
+    /**
+     * The Facilities belonging to nobody, which are choosable like any other.
+     *
+     * Control builds a Plot Facility precisely so that a group will name it, so
+     * leaving it off this list would be building a target nobody can aim at.
+     * They are drawn under {@see Facility::INDEPENDENT_OWNER} rather than as
+     * Plot Facilities: the Runners are choosing in Secret and have earned no
+     * more than the public list knows, and "Control put this here" is not on
+     * the public list.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function plotTargets(Game $game, ?Turn $turn): array
+    {
+        return $game->facilities()
+            ->plot()
+            ->with('facilityType')
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (Facility $facility): bool => $facility->isAvailableOnTurn($turn?->number))
+            ->map(fn (Facility $facility): array => $this->target($facility))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One Facility as a group choosing a target sees it: who has it, what it is
+     * called and what type it is. Nothing else - reconnaissance is supposed to
+     * cost something.
+     *
+     * @return array<string, mixed>
+     */
+    private function target(Facility $facility): array
+    {
+        return [
+            'id' => $facility->id,
+            'name' => $facility->name,
+            'facility_type' => $facility->facilityType->name,
+            'corporation' => FactionBadge::for($facility->ownerName()),
+        ];
     }
 
     /**
@@ -437,7 +475,7 @@ class RunPresenter
                 'id' => $run->facility->id,
                 'name' => $run->facility->name,
                 'facility_type' => $run->facility->facilityType->name,
-                'corporation' => FactionBadge::for($run->facility->corporation->name),
+                'corporation' => FactionBadge::for($run->facility->ownerName()),
             ],
             'order_index' => $run->order_index,
             'order_reason' => $run->order_reason,
@@ -522,7 +560,10 @@ class RunPresenter
                 // may reach it - it is what the screen's top-up button draws
                 // on, so Security can see whether raising the budget is even
                 // an option before the Facility runs dry.
-                'company' => $run->facility->corporation->credits,
+                // Null for a Plot Facility: there is no Corporation behind it
+                // to top a budget up out of, so the screen offers no top-up
+                // rather than a button that could only ever fail.
+                'company' => $run->facility->corporation?->credits,
             ] : null,
 
             'can_lead' => $gate->allows('lead', $run),
@@ -914,7 +955,7 @@ class RunPresenter
                 ->map(fn (mixed $group): array => [
                     'facility_id' => $group->first()->facility_id,
                     'facility' => $group->first()->facility->name,
-                    'corporation' => FactionBadge::for($group->first()->facility->corporation->name),
+                    'corporation' => FactionBadge::for($group->first()->facility->ownerName()),
                     'runs' => $group->count(),
                     'ordered' => $group->every(fn (Run $run): bool => $run->order_index !== null),
                 ])
@@ -944,7 +985,7 @@ class RunPresenter
                 'id' => $run->facility->id,
                 'name' => $run->facility->name,
                 'facility_type' => $run->facility->facilityType->name,
-                'corporation' => FactionBadge::for($run->facility->corporation->name),
+                'corporation' => FactionBadge::for($run->facility->ownerName()),
             ],
             'order_index' => $run->order_index,
             'order_reason' => $run->order_reason,

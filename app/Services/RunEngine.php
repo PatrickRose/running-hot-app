@@ -2563,7 +2563,7 @@ class RunEngine
         $surrendered = $this->surrenderEquipment($run, $character);
         $security = $this->securitySeatOf($run);
         $tookThem = $security === null
-            ? $run->facility->corporation->name."'s Security player"
+            ? $run->facility->ownerName()."'s Security player"
             : $security->name;
 
         $this->record(
@@ -2637,6 +2637,13 @@ class RunEngine
      */
     protected function securitySeatOf(Run $run): ?Character
     {
+        // A Plot Facility has no Corporation and so no seat. Answered here
+        // rather than left to the query, where a null corporation_id would
+        // match characters holding no Corporation at all.
+        if ($run->facility->isPlotFacility()) {
+            return null;
+        }
+
         return Character::query()
             ->where('corporation_id', $run->facility->corporation_id)
             ->where('role', CharacterRole::Security)

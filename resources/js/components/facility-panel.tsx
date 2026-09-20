@@ -60,7 +60,7 @@ export function FacilityPanel({
                         {facility.stacks
                             .map(
                                 (stack) =>
-                                    `${stack.cards.length}/${stack.slots} ${stack.kind}`,
+                                    `${stack.cards.length}${stack.slots === null ? '' : `/${stack.slots}`} ${stack.kind}`,
                             )
                             .join(' · ')}
                     </p>
@@ -165,7 +165,8 @@ function Stack({
             ),
     );
 
-    const full = stack.cards.length >= stack.slots;
+    // A Plot Facility has no slot limit at all, so nothing is ever full.
+    const full = stack.slots !== null && stack.cards.length >= stack.slots;
 
     /**
      * Swap two neighbours and send the whole stack. The server charges 1 Credit
@@ -194,7 +195,8 @@ function Stack({
                 <GameIcon glyph={stack.kind_glyph} label={stack.kind_label} />
                 <span aria-hidden="true">{stack.kind_label}</span>
                 <span className="font-normal text-muted-foreground">
-                    {stack.cards.length}/{stack.slots}
+                    {stack.cards.length}
+                    {stack.slots === null ? ' installed' : `/${stack.slots}`}
                 </span>
             </p>
 

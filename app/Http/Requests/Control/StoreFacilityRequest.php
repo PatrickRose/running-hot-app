@@ -22,8 +22,10 @@ class StoreFacilityRequest extends FormRequest
         $game = $this->route('game');
 
         return [
+            // Nullable is what makes a Plot Facility: Control's own building,
+            // belonging to nobody in the roster, built for the Runners to hit.
             'corporation_id' => [
-                'required', 'integer',
+                'nullable', 'integer',
                 Rule::exists('corporations', 'id')->where('game_id', $game->id),
             ],
             'facility_type_id' => [
