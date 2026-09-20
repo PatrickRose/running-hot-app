@@ -415,6 +415,12 @@ class ShopPresenter
      * still carries its availability, so a card Control might not have meant to
      * put out says what it is rather than being silently missing.
      *
+     * Shaped by protectionCard() rather than by a smaller list of its own, so
+     * the picker can draw the card Control has chosen before they price it.
+     * Pricing a card you cannot see is guesswork, and the artwork is what
+     * somebody at the table will be holding - a second, thinner shape here
+     * would be one more place for the two to disagree about what a card is.
+     *
      * @param  array<string, array<int, int>>  $listed
      * @return array<int, array<string, mixed>>
      */
@@ -427,14 +433,7 @@ class ShopPresenter
             ->orderBy('kind')
             ->orderBy('name')
             ->get()
-            ->map(fn (ProtectionCardType $card): array => [
-                'id' => $card->id,
-                'code' => $card->code,
-                'name' => $card->name,
-                'kind_label' => $card->kind->label(),
-                'availability' => $card->availability->value,
-                'availability_label' => $card->availability->label(),
-            ])
+            ->map(fn (ProtectionCardType $card): array => $this->protectionCard($card))
             ->all();
     }
 
@@ -450,12 +449,7 @@ class ShopPresenter
             ->whereNotIn('id', $taken)
             ->orderBy('name')
             ->get()
-            ->map(fn (EquipmentCardType $card): array => [
-                'id' => $card->id,
-                'code' => $card->code,
-                'name' => $card->name,
-                'category_label' => $card->category->label(),
-            ])
+            ->map(fn (EquipmentCardType $card): array => $this->equipmentCard($card))
             ->all();
     }
 

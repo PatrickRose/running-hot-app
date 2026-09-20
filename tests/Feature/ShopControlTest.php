@@ -185,6 +185,40 @@ class ShopControlTest extends TestCase
     }
 
     /**
+     * The picker carries the whole card, so the form can draw it before the
+     * price is typed.
+     *
+     * Pricing a card you cannot see is guesswork, and the thing somebody at
+     * the table will be holding is the artwork - so the payload has to carry
+     * what `CardFace` draws rather than just a name to put in a dropdown.
+     */
+    public function test_an_unlisted_card_carries_what_it_takes_to_draw_it(): void
+    {
+        $angel = $this->protectionCard('PS013');
+
+        $offered = app(ShopPresenter::class)->forControl($this->game)['unlisted'];
+
+        $card = collect($offered['protection'])->firstWhere('id', $angel->id);
+
+        $this->assertNotNull($card);
+        // The keys CardFace needs, whether or not this card has been drawn -
+        // artwork is committed for some codes and absent for others, and a
+        // card with none is a normal card that draws its own words instead.
+        $this->assertArrayHasKey('image_path', $card);
+        $this->assertSame($angel->challenge, $card['challenge']);
+        $this->assertSame($angel->consequence, $card['consequence']);
+        $this->assertSame($angel->kind->glyph(), $card['kind_glyph']);
+
+        $shiv = $this->equipmentCard('ESP003');
+        $equipment = collect($offered['equipment'])->firstWhere('id', $shiv->id);
+
+        $this->assertNotNull($equipment);
+        $this->assertArrayHasKey('image_path', $equipment);
+        $this->assertSame($shiv->effect, $equipment['effect']);
+        $this->assertSame($shiv->category->glyph(), $equipment['category_glyph']);
+    }
+
+    /**
      * A card already on the list is not offered again, because stocking it
      * would be an edit rather than a new line.
      */
