@@ -1,5 +1,7 @@
 import { Head, router, usePoll } from '@inertiajs/react';
 import { useState } from 'react';
+import { CardFace } from '@/components/card-face';
+import { GameIcon } from '@/components/game-icon';
 import Heading from '@/components/heading';
 import { SearchPicker } from '@/components/search-picker';
 import type { PickerOption } from '@/components/search-picker';
@@ -17,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { index } from '@/routes/control/games';
 import { buy, destroy, refund, stock } from '@/routes/control/shop';
+import { isProtectionCard } from '@/types/game';
 import type {
     GameSummary,
     ShopBuyerOption,
@@ -269,11 +272,13 @@ function TheList({ gameId, shop }: { gameId: number; shop: ShopControlBoard }) {
  */
 function cardOptions(cards: ShopUnlistedCard[]): PickerOption[] {
     return cards.map((card) => {
-        const notes = [
-            card.kind_label ?? card.category_label ?? '',
-            card.availability === 'rumoured' ? 'rumoured' : '',
-            card.availability === 'research_only' ? 'research only' : '',
-        ].filter(Boolean);
+        const notes = isProtectionCard(card)
+            ? [
+                  card.kind_label,
+                  card.availability === 'rumoured' ? 'rumoured' : '',
+                  card.availability === 'research_only' ? 'research only' : '',
+              ].filter(Boolean)
+            : [card.category_label];
 
         return {
             value: card.id,
@@ -282,6 +287,90 @@ function cardOptions(cards: ShopUnlistedCard[]): PickerOption[] {
             search: [card.code ?? '', card.name, ...notes].join(' '),
         };
     });
+}
+
+/**
+ * The card Control has picked, drawn as a card.
+ *
+ * Pricing a card you cannot see is guesswork, and the thing somebody at the
+ * table will be holding is the artwork — so the form shows it before the price
+ * is typed rather than after the line is on the list. `CardFace` draws the
+ * card's own words where no artwork exists, which for an invented card is the
+ * normal case rather than a failure.
+ *
+ * The family decides the shape, as it does everywhere else: Equipment is
+ * printed portrait and the Protection cards landscape, and forcing one ratio
+ * across both crops half of it.
+ */
+function CardPreview({ card }: { card: ShopUnlistedCard }) {
+    const protection = isProtectionCard(card);
+
+    return (
+        <div className="flex flex-wrap items-start gap-4 rounded-md border p-4">
+            <CardFace
+                shape={protection ? 'landscape' : 'portrait'}
+                name={card.name}
+                code={card.code}
+                imagePath={card.image_path}
+                lines={
+                    protection
+                        ? [
+                              { label: 'Challenge', value: card.challenge },
+                              { label: '', value: card.consequence },
+                              {
+                                  label: 'Charge',
+                                  value: card.charge_consequence
+                                      ? `${card.charge_cost}cr — ${card.charge_consequence}`
+                                      : null,
+                              },
+                          ]
+                        : [
+                              {
+                                  label: card.category_label,
+                                  value: card.effect,
+                                  glyph: card.category_glyph,
+                              },
+                          ]
+                }
+            />
+
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <p className="font-medium">
+                    {card.name}
+                    {card.code ? (
+                        <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                            {card.code}
+                        </span>
+                    ) : null}
+                </p>
+
+                <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <GameIcon
+                        glyph={
+                            protection ? card.kind_glyph : card.category_glyph
+                        }
+                        label={
+                            protection ? card.kind_label : card.category_label
+                        }
+                    />
+                    <span aria-hidden="true">
+                        {protection ? card.kind_label : card.category_label}
+                    </span>
+                    {protection && card.availability !== 'available' ? (
+                        <Badge variant="secondary">
+                            {card.availability_label}
+                        </Badge>
+                    ) : null}
+                </p>
+
+                {protection ? (
+                    <p className="text-sm">{card.challenge}</p>
+                ) : (
+                    <p className="text-sm">{card.effect}</p>
+                )}
+            </div>
+        </div>
+    );
 }
 
 /**
@@ -324,6 +413,7 @@ function StockForm({
     const [notes, setNotes] = useState('');
 
     const options: ShopUnlistedCard[] = unlisted[family];
+    const picked = options.find((card) => card.id === cardId) ?? null;
 
     return (
         <div className="flex flex-col gap-3">
@@ -385,6 +475,8 @@ function StockForm({
                     />
                 </div>
             </div>
+
+            {picked !== null && <CardPreview card={picked} />}
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="grid gap-1">

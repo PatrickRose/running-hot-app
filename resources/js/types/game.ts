@@ -1392,16 +1392,21 @@ export type ShopBoard = {
     equipment: ShopCounter | null;
 };
 
-/** A card not yet on the list, for Control's add form. */
-export type ShopUnlistedCard = {
-    id: number;
-    code: string | null;
-    name: string;
-    kind_label?: string;
-    category_label?: string;
-    availability?: string;
-    availability_label?: string;
-};
+/**
+ * A card not yet on the list, for Control's add form.
+ *
+ * The same shape a listed card carries, so the form can draw the card being
+ * priced — pricing one you cannot see is guesswork, and the artwork is what
+ * somebody at the table will be holding.
+ */
+export type ShopUnlistedCard = ShopProtectionCard | ShopEquipmentCard;
+
+/** Whether an unlisted card is the Protection sort, for the picker and preview. */
+export function isProtectionCard(
+    card: ShopUnlistedCard,
+): card is ShopProtectionCard {
+    return 'kind' in card;
+}
 
 /** One copy leaving the shop, as Control's till roll shows it. */
 export type ShopPurchase = {
