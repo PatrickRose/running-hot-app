@@ -115,6 +115,14 @@ export type CharacterSubject = TrackerSubject & {
     logo_path: string | null;
     role: string;
     role_label: string;
+    /**
+     * Whether this is a Corporate seat (CEO, Security, Research). They spend
+     * their Corporation's Credits and carry no personal numbers, so the Stats
+     * screen folds them away — shaped server-side from
+     * `CharacterRole::isCorporate()` rather than naming the three roles again
+     * here.
+     */
+    is_corporate: boolean;
     team: string | null;
     discord_username: string | null;
     claimed_by: string | null;

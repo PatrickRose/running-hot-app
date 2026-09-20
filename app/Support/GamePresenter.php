@@ -360,6 +360,13 @@ class GamePresenter
                     'logo_path' => LogoImage::pathFor($character->name),
                     'role' => $character->role->value,
                     'role_label' => $character->role->label(),
+                    // A Corporate seat has no personal numbers worth moving:
+                    // they spend their Corporation's Credits, they never walk
+                    // into a Facility to take a Wound or a Tag, and the roster
+                    // gives them no runner skills. The Stats screen folds them
+                    // away on the strength of this rather than naming the three
+                    // roles again in TypeScript.
+                    'is_corporate' => $character->role->isCorporate(),
                     'team' => $character->gang->name ?? $character->corporation?->name,
                     'discord_username' => $character->discord_username,
                     'claimed_by' => $character->user?->name,

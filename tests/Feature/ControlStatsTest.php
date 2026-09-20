@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CharacterRole;
 use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\Game;
@@ -94,6 +95,52 @@ class ControlStatsTest extends TestCase
                 ->where('trackers.characters.0.hack', 2)
                 ->where('trackers.characters.0.charisma', 4)
                 ->where('trackers.characters.0.body', 3));
+    }
+
+    /**
+     * A Corporate seat has no personal numbers worth moving - their Credits are
+     * the Corporation's, they never walk into a Facility to take a Wound or a
+     * Tag, and the roster gives them no runner skills - so the screen folds
+     * them away.
+     *
+     * The flag is shaped from CharacterRole::isCorporate() rather than the page
+     * naming the three roles again, which is what this asserts: the row still
+     * arrives, marked, so Control can still show it and move a number. Hiding
+     * it server-side would take away the one-off ruling the screen exists for.
+     */
+    public function test_a_corporate_seat_is_marked_so_the_screen_can_fold_it_away(): void
+    {
+        $corporation = Corporation::factory()->for($this->game)->create(['name' => 'Aaa Nucleotech']);
+
+        foreach ([CharacterRole::Ceo, CharacterRole::Security, CharacterRole::Research] as $role) {
+            Character::factory()
+                ->for($this->game)
+                ->corporate($role, $corporation)
+                ->create(['name' => 'Aaa Nucleotech '.$role->value]);
+        }
+
+        Character::factory()->for($this->game)->runner()->create(['name' => 'Zzz Runner']);
+        Character::factory()->for($this->game)->create([
+            'name' => 'Zzz Press Outlet',
+            'role' => CharacterRole::Press,
+        ]);
+
+        $response = $this->actingAs($this->control())
+            ->get(route('control.stats.index', $this->game))
+            ->assertOk();
+
+        $characters = collect($response->viewData('page')['props']['trackers']['characters'])
+            ->mapWithKeys(fn (array $row): array => [$row['name'] => $row['is_corporate']]);
+
+        $this->assertTrue($characters['Aaa Nucleotech ceo']);
+        $this->assertTrue($characters['Aaa Nucleotech security']);
+        $this->assertTrue($characters['Aaa Nucleotech research']);
+
+        // Everybody else stays on the list. A Runner obviously does; the Press
+        // and HM Government carry no runner skills either, but Control may well
+        // want to hand a newspaper some Credits, so they are not folded away.
+        $this->assertFalse($characters['Zzz Runner']);
+        $this->assertFalse($characters['Zzz Press Outlet']);
     }
 
     public function test_control_can_edit_a_characters_printed_stats(): void

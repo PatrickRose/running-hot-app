@@ -1,4 +1,5 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { useState } from 'react';
 import { CharacterLogo } from '@/components/character-logo';
 import { CharacterStatsForm } from '@/components/character-stats-form';
 import { FactionBadge } from '@/components/faction-badge';
@@ -69,6 +70,20 @@ export default function ControlGameStats({
 
     const { props } = usePage<{ errors: Record<string, string> }>();
     const phase = game.phase;
+
+    // Folded away rather than dropped. A Corporate seat has nothing here worth
+    // moving — their Credits are the Corporation's and the roster gives them no
+    // runner skills — but "Control always wins", so taking the row away
+    // outright would remove the one-off ruling this screen exists for.
+    const [showCorporate, setShowCorporate] = useState(false);
+
+    const corporateSeats = trackers.characters.filter(
+        (character) => character.is_corporate,
+    ).length;
+
+    const characters = showCorporate
+        ? trackers.characters
+        : trackers.characters.filter((character) => !character.is_corporate);
 
     return (
         <>
@@ -206,7 +221,22 @@ export default function ControlGameStats({
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Characters</CardTitle>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                            <CardTitle>Characters</CardTitle>
+                            {corporateSeats > 0 && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                        setShowCorporate(!showCorporate)
+                                    }
+                                >
+                                    {showCorporate
+                                        ? 'Hide corporate seats'
+                                        : `Show ${corporateSeats} corporate seat${corporateSeats === 1 ? '' : 's'}`}
+                                </Button>
+                            )}
+                        </div>
                         <CardDescription>
                             Click a number to move it — every change is written
                             to the log below with whatever reason you give it.
@@ -219,6 +249,13 @@ export default function ControlGameStats({
                             <br />
                             Runners and Freelancers heal one Wound automatically
                             each Team Time. Tags cost 3 Credits to buy off.
+                            <br />
+                            Corporate seats are folded away: a CEO, a Security
+                            or a Research player spends their Corporation's
+                            Credits, never walks into a Facility to take a Wound
+                            or a Tag, and carries no runner skills — their
+                            numbers are the Corporation's, above. Show them for
+                            the one-off ruling that needs it.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="overflow-x-auto">
@@ -250,7 +287,7 @@ export default function ControlGameStats({
                                 </tr>
                             </thead>
                             <tbody>
-                                {trackers.characters.map(
+                                {characters.map(
                                     (character: CharacterSubject) => (
                                         <tr
                                             key={character.subject_id}
@@ -398,13 +435,20 @@ export default function ControlGameStats({
                                         </tr>
                                     ),
                                 )}
-                                {trackers.characters.length === 0 && (
+                                {characters.length === 0 && (
                                     <tr>
                                         <td
                                             colSpan={8}
                                             className="py-4 text-muted-foreground"
                                         >
-                                            No characters yet.
+                                            {/* A roster of nothing but
+                                                Corporate seats is fully folded
+                                                away, and saying "no characters"
+                                                there would read as an empty
+                                                game. */}
+                                            {corporateSeats > 0
+                                                ? 'Every character in this game holds a corporate seat. Show them above to move their numbers.'
+                                                : 'No characters yet.'}
                                         </td>
                                     </tr>
                                 )}
