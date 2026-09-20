@@ -36,6 +36,20 @@ class GuildBlueprintTest extends TestCase
         $this->fail("No planned channel with key [{$key}].");
     }
 
+    /**
+     * @return array<string, PlannedOverwrite>
+     */
+    private function overwrites(PlannedChannel $channel): array
+    {
+        $targets = [];
+
+        foreach ($channel->overwrites as $overwrite) {
+            $targets[$overwrite->target] = $overwrite;
+        }
+
+        return $targets;
+    }
+
     public function test_a_bare_game_still_gets_control_and_the_common_channels(): void
     {
         $blueprint = new GuildBlueprint(Game::factory()->create());
@@ -202,6 +216,219 @@ class GuildBlueprintTest extends TestCase
         $this->assertSame(['role:gang:'.$gang->id], (new GuildBlueprint($game))->roleKeysForUser($user));
     }
 
+    public function test_every_faction_gets_a_public_text_channel_and_three_public_voice_rooms(): void
+    {
+        $game = Game::factory()->create();
+        $corporation = Corporation::factory()->for($game)->create(['name' => 'Aldermarch Dynamics']);
+        $gang = Gang::factory()->for($game)->create(['name' => 'Nightshift']);
+
+        $blueprint = new GuildBlueprint($game);
+
+        foreach (['corporation:'.$corporation->id => 'Aldermarch Dynamics', 'gang:'.$gang->id => 'Nightshift'] as $slug => $name) {
+            $text = $this->channel($blueprint, GuildBlueprint::publicTeamTextKey($slug));
+
+            $this->assertSame(DiscordResourceKind::TextChannel, $text->kind);
+            $this->assertSame('category:'.$slug, $text->parentKey);
+
+            $everyone = $this->overwrites($text)[PlannedOverwrite::EVERYONE];
+
+            $this->assertNotSame(0, $everyone->allow & DiscordApi::VIEW_CHANNEL);
+            $this->assertNotSame(0, $everyone->allow & DiscordApi::SEND_MESSAGES);
+            $this->assertSame(0, $everyone->deny, 'A public channel denies nobody anything.');
+
+            for ($room = 1; $room <= GuildBlueprint::PUBLIC_VOICE_ROOMS; $room++) {
+                $voice = $this->channel($blueprint, GuildBlueprint::publicTeamVoiceKey($slug, $room));
+
+                $this->assertSame(DiscordResourceKind::VoiceChannel, $voice->kind);
+                $this->assertSame($name.' '.$room, $voice->name);
+
+                $joiner = $this->overwrites($voice)[PlannedOverwrite::EVERYONE];
+
+                $this->assertNotSame(0, $joiner->allow & DiscordApi::CONNECT);
+                $this->assertNotSame(0, $joiner->allow & DiscordApi::SPEAK);
+            }
+        }
+    }
+
+    /**
+     * Discord takes a channel's permissions from its own overwrites, so a
+     * public channel inside a locked category is public. The names still have
+     * to differ, because the adoption pass tells two channels in one category
+     * apart by name, type and parent and nothing else.
+     */
+    public function test_a_teams_public_channels_share_its_category_without_sharing_a_name(): void
+    {
+        $game = Game::factory()->create();
+        $gang = Gang::factory()->for($game)->create(['name' => 'Nightshift']);
+
+        $inCategory = array_filter(
+            (new GuildBlueprint($game))->channels(),
+            fn (PlannedChannel $channel): bool => $channel->parentKey === 'category:gang:'.$gang->id,
+        );
+
+        $this->assertCount(6, $inCategory, 'Two private channels and four public ones.');
+
+        $seen = [];
+
+        foreach ($inCategory as $channel) {
+            $fingerprint = $channel->kind->value.'/'.mb_strtolower($channel->name);
+
+            $this->assertArrayNotHasKey($fingerprint, $seen, "Two [{$channel->name}] channels in one category.");
+
+            $seen[$fingerprint] = true;
+        }
+    }
+
+    public function test_an_unaffiliated_character_gets_a_role_and_a_private_text_channel(): void
+    {
+        $game = Game::factory()->create();
+        $freelancer = Character::factory()->for($game)->create([
+            'name' => 'Jack Scanton',
+            'role' => CharacterRole::Freelancer,
+            'corporation_id' => null,
+            'gang_id' => null,
+        ]);
+
+        $blueprint = new GuildBlueprint($game);
+
+        $roleKey = GuildBlueprint::characterRoleKey($freelancer);
+
+        $this->assertSame('Jack Scanton', $blueprint->roles()[$roleKey]->name);
+
+        $text = $this->channel($blueprint, GuildBlueprint::independentChannelKey($freelancer, 'text'));
+
+        $this->assertSame('jack-scanton', $text->name);
+        $this->assertSame(GuildBlueprint::CATEGORY_INDEPENDENTS, $text->parentKey);
+
+        $targets = $this->overwrites($text);
+
+        $this->assertNotSame(0, $targets[PlannedOverwrite::EVERYONE]->deny & DiscordApi::VIEW_CHANNEL);
+        $this->assertNotSame(0, $targets[GuildBlueprint::ROLE_CONTROL]->allow & DiscordApi::VIEW_CHANNEL);
+        $this->assertNotSame(0, $targets[$roleKey]->allow & DiscordApi::SEND_MESSAGES);
+    }
+
+    public function test_an_unaffiliated_characters_voice_channel_is_public(): void
+    {
+        $game = Game::factory()->create();
+        $government = Character::factory()->for($game)->create([
+            'name' => 'HM Government',
+            'role' => CharacterRole::Other,
+            'corporation_id' => null,
+            'gang_id' => null,
+        ]);
+
+        $voice = $this->channel(
+            new GuildBlueprint($game),
+            GuildBlueprint::independentChannelKey($government, 'voice'),
+        );
+
+        $this->assertSame(DiscordResourceKind::VoiceChannel, $voice->kind);
+        $this->assertSame('HM Government', $voice->name);
+
+        $everyone = $this->overwrites($voice)[PlannedOverwrite::EVERYONE];
+
+        $this->assertNotSame(0, $everyone->allow & DiscordApi::CONNECT);
+        $this->assertSame(0, $everyone->deny);
+    }
+
+    /**
+     * The publication takes the plain slug and the desk takes the suffix, so
+     * the channel everyone reads is the one named after the paper.
+     */
+    public function test_each_press_outlet_publishes_where_everyone_reads_and_only_they_write(): void
+    {
+        $game = Game::factory()->create();
+        $paper = Character::factory()->for($game)->create([
+            'name' => 'Business Times',
+            'role' => CharacterRole::Press,
+            'corporation_id' => null,
+            'gang_id' => null,
+        ]);
+
+        $blueprint = new GuildBlueprint($game);
+
+        $this->assertSame(
+            'business-times-desk',
+            $this->channel($blueprint, GuildBlueprint::independentChannelKey($paper, 'text'))->name,
+        );
+
+        $publication = $this->channel($blueprint, GuildBlueprint::independentChannelKey($paper, 'publication'));
+
+        $this->assertSame('business-times', $publication->name);
+
+        $targets = $this->overwrites($publication);
+        $everyone = $targets[PlannedOverwrite::EVERYONE];
+
+        $this->assertNotSame(0, $everyone->allow & DiscordApi::VIEW_CHANNEL);
+        $this->assertNotSame(0, $everyone->deny & DiscordApi::SEND_MESSAGES);
+        $this->assertNotSame(
+            0,
+            $targets[GuildBlueprint::characterRoleKey($paper)]->allow & DiscordApi::SEND_MESSAGES,
+            'The paper cannot write in its own channel.',
+        );
+    }
+
+    /**
+     * One per outlet rather than a shared #press: two rival papers must not
+     * run their copy together under one masthead.
+     */
+    public function test_two_press_outlets_get_a_publication_each(): void
+    {
+        $game = Game::factory()->create();
+
+        foreach (['Business Times', 'Th3 Undergr0und'] as $name) {
+            Character::factory()->for($game)->create([
+                'name' => $name,
+                'role' => CharacterRole::Press,
+                'corporation_id' => null,
+                'gang_id' => null,
+            ]);
+        }
+
+        $keys = array_map(
+            fn (PlannedChannel $channel): string => $channel->key,
+            (new GuildBlueprint($game))->channels(),
+        );
+
+        $publications = array_filter($keys, fn (string $key): bool => str_ends_with($key, ':publication'));
+
+        $this->assertCount(2, $publications);
+    }
+
+    public function test_a_character_on_a_team_gets_no_channels_of_their_own(): void
+    {
+        $game = Game::factory()->create();
+        $gang = Gang::factory()->for($game)->create();
+        $runner = Character::factory()->for($game)->for($gang)->create(['role' => CharacterRole::Runner]);
+
+        $blueprint = new GuildBlueprint($game);
+
+        $this->assertArrayNotHasKey(GuildBlueprint::characterRoleKey($runner), $blueprint->roles());
+
+        $keys = array_map(fn (PlannedChannel $channel): string => $channel->key, $blueprint->channels());
+
+        $this->assertNotContains(GuildBlueprint::CATEGORY_INDEPENDENTS, $keys);
+        $this->assertNotContains(GuildBlueprint::independentChannelKey($runner, 'text'), $keys);
+    }
+
+    public function test_an_unaffiliated_player_is_given_their_own_role(): void
+    {
+        $game = Game::factory()->create();
+        $user = User::factory()->create();
+
+        $paper = Character::factory()->for($game)->create([
+            'user_id' => $user->id,
+            'role' => CharacterRole::Press,
+            'corporation_id' => null,
+            'gang_id' => null,
+        ]);
+
+        $this->assertSame(
+            [GuildBlueprint::characterRoleKey($paper)],
+            (new GuildBlueprint($game))->roleKeysForUser($user),
+        );
+    }
+
     /**
      * Every permission the blueprint hands out is one the bot asks the server
      * for when it is added.
@@ -216,6 +443,11 @@ class GuildBlueprintTest extends TestCase
         $game = Game::factory()->create();
         Corporation::factory()->for($game)->create();
         Gang::factory()->for($game)->create();
+        Character::factory()->for($game)->create([
+            'role' => CharacterRole::Press,
+            'corporation_id' => null,
+            'gang_id' => null,
+        ]);
 
         $granted = 0;
 

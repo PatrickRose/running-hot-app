@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Actions\ProvisionDiscordGuild;
+use App\Enums\CharacterRole;
 use App\Enums\DiscordProvisionStatus;
 use App\Enums\DiscordResourceKind;
 use App\Enums\DiscordSyncStatus;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\DiscordMemberSync;
 use App\Models\DiscordResource;
@@ -15,6 +17,7 @@ use App\Models\Gang;
 use App\Models\User;
 use App\Services\Discord\DiscordApi;
 use App\Services\Discord\DiscordApiException;
+use App\Support\Discord\GuildBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\Support\FakeDiscordGuild;
@@ -206,9 +209,19 @@ class DiscordGuildProvisioningTest extends TestCase
         $this->assertNotNull($category);
         $this->assertSame(DiscordResourceKind::Category->channelType(), $category['type']);
 
-        // A text and a voice channel, both parented to the category.
+        // The team's own text and voice channels, plus the four public ones,
+        // all parented to the category.
         $children = $guild->childrenOf($category['id']);
-        $this->assertCount(2, $children);
+        $this->assertCount(6, $children);
+
+        $names = array_column($children, 'name');
+
+        $this->assertContains('the-kestrels', $names, 'The team\'s own room.');
+        $this->assertContains('the-kestrels-public', $names, 'Where the rest of the game talks to them.');
+
+        foreach ([1, 2, 3] as $room) {
+            $this->assertContains('The Kestrels '.$room, $names);
+        }
 
         // @everyone is denied sight of the category itself.
         $everyone = collect($category['permission_overwrites'])
@@ -234,6 +247,58 @@ class DiscordGuildProvisioningTest extends TestCase
                 "{$name} was not granted sight of the category.",
             );
         }
+    }
+
+    public function test_provisioning_houses_the_characters_who_belong_to_no_team(): void
+    {
+        $guild = (new FakeDiscordGuild)->bind();
+        $game = $this->gameWithRoster($guild);
+
+        $paper = Character::factory()->for($game)->create([
+            'name' => 'Business Times',
+            'role' => CharacterRole::Press,
+        ]);
+
+        app(ProvisionDiscordGuild::class)->handle($game);
+
+        $this->assertNotNull($guild->roleNamed('Business Times'));
+
+        $category = $guild->channelNamed('Independents');
+        $this->assertNotNull($category);
+
+        $names = array_column($guild->childrenOf($category['id']), 'name');
+
+        // The desk they plan in, the masthead everyone reads, and a voice
+        // channel anybody can walk into.
+        $this->assertContains('business-times-desk', $names);
+        $this->assertContains('business-times', $names);
+        $this->assertContains('Business Times', $names);
+
+        $desk = $guild->channelNamed('business-times-desk');
+        $everyone = collect($desk['permission_overwrites'])->firstWhere('id', $guild->guildId);
+
+        $this->assertSame(
+            DiscordApi::VIEW_CHANNEL,
+            (int) $everyone['deny'] & DiscordApi::VIEW_CHANNEL,
+            'The desk is private.',
+        );
+
+        $masthead = $guild->channelNamed('business-times');
+        $readers = collect($masthead['permission_overwrites'])->firstWhere('id', $guild->guildId);
+
+        $this->assertSame(DiscordApi::VIEW_CHANNEL, (int) $readers['allow'] & DiscordApi::VIEW_CHANNEL);
+        $this->assertSame(DiscordApi::SEND_MESSAGES, (int) $readers['deny'] & DiscordApi::SEND_MESSAGES);
+
+        $paperRoleId = $guild->roleNamed('Business Times')['id'];
+        $writers = collect($masthead['permission_overwrites'])->firstWhere('id', $paperRoleId);
+
+        $this->assertNotNull($writers);
+        $this->assertSame(DiscordApi::SEND_MESSAGES, (int) $writers['allow'] & DiscordApi::SEND_MESSAGES);
+
+        $this->assertDatabaseHas('discord_resources', [
+            'game_id' => $game->id,
+            'key' => GuildBlueprint::independentChannelKey($paper, 'publication'),
+        ]);
     }
 
     /**
