@@ -196,8 +196,10 @@ return [
     | Gangs
     |--------------------------------------------------------------------------
     |
-    | Notoriety is tracked per gang rather than per runner (rulebook 2.3.2) and
-    | every gang starts unknown.
+    | Notoriety is carried per Runner and a gang's figure is the total of its
+    | members' (rulebook 2.3.2, as the designer reads it), so there is nothing
+    | to set on the gang here. Every Runner starts unknown at nought, which is
+    | the column default, so none of them names it either.
     |
     | Runner skills are ordered Brawn, Hack, Charisma, Body. The rulebook calls
     | the first skill both "Brute" and "Brawn"; this application standardises on
@@ -246,7 +248,6 @@ return [
             // card is seeded and Control reads the briefing, which is what
             // Control does with every other printed effect in the game.
             'name' => 'Facers',
-            'notoriety' => 0,
             'runners' => [
                 [
                     'name' => 'Con', 'brawn' => 3, 'hack' => 3, 'charisma' => 5, 'body' => 4,
@@ -272,7 +273,6 @@ return [
         ],
         [
             'name' => 'g33ks',
-            'notoriety' => 0,
             'runners' => [
                 [
                     'name' => '$0FTW4R3', 'brawn' => 2, 'hack' => 2, 'charisma' => 3, 'body' => 5,
@@ -298,7 +298,6 @@ return [
         ],
         [
             'name' => 'Dancers',
-            'notoriety' => 0,
             'runners' => [
                 // Four, not six. The cast list is the roster of record and the
                 // Dancers are cast four deep; Rapper and Tango were in here and
@@ -325,7 +324,6 @@ return [
         ],
         [
             'name' => 'Gruffsters',
-            'notoriety' => 0,
             'runners' => [
                 [
                     'name' => 'Bitter', 'brawn' => 3, 'hack' => 1, 'charisma' => 3, 'body' => 5,

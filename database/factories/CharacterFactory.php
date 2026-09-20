@@ -33,6 +33,7 @@ class CharacterFactory extends Factory
             'credits' => 0,
             'wounds' => 0,
             'tags' => 0,
+            'notoriety' => 0,
         ];
     }
 

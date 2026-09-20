@@ -115,20 +115,82 @@ export type CharacterSubject = TrackerSubject & {
     logo_path: string | null;
     role: string;
     role_label: string;
+    /**
+     * Whether this is a Corporate seat (CEO, Security, Research). They spend
+     * their Corporation's Credits and carry no personal numbers, so the Stats
+     * screen folds them away — shaped server-side from
+     * `CharacterRole::isCorporate()` rather than naming the three roles again
+     * here.
+     */
+    is_corporate: boolean;
     team: string | null;
     discord_username: string | null;
     claimed_by: string | null;
+    /**
+     * The four printed stats. Not Trackers — they are what a character is
+     * rather than a number the game moves — so Control edits them outright and
+     * no ledger row is written.
+     */
+    brawn: number;
+    hack: number;
+    charisma: number;
     body: number;
     incapacitated: boolean;
 };
 
 export type NamedSubject = TrackerSubject & Faction;
 
+/**
+ * A gang and what its members add up to.
+ *
+ * Not a TrackerSubject, and deliberately: Notoriety is the Runner's, and a
+ * gang's figure is the total of its members' — so there is no subject to post
+ * an adjustment at, and the page reads it rather than editing it.
+ */
+export type GangRollup = Faction & {
+    id: number;
+    notoriety: number;
+    members: number;
+};
+
 export type GameTrackers = {
     global: TrackerSubject;
     corporations: NamedSubject[];
-    gangs: NamedSubject[];
+    gangs: GangRollup[];
     characters: CharacterSubject[];
+};
+
+/**
+ * What one of the player's characters is standing at, for the header strip.
+ *
+ * A Corporate player is shown their Corporation's Credits and nothing else, so
+ * `subject` is the Corporation's name there and the character's own everywhere
+ * else — it names whose numbers these are. Wounds, Tags and Body are null for
+ * that case rather than zero: a CEO does not have none, they do not have any.
+ */
+export type StandingCharacter = {
+    character_id: number;
+    character: string;
+    subject: string;
+    credits: number;
+    wounds: number | null;
+    tags: number | null;
+    body: number | null;
+    incapacitated: boolean;
+};
+
+/**
+ * Shared from HandleInertiaRequests on every page, beside the clock. Null when
+ * no game is running.
+ *
+ * Procatorion's two numbers belong to the game, so everybody is shown them —
+ * Control and the Press outlets included. `characters` is empty for anybody
+ * holding no character the header has numbers for.
+ */
+export type PlayerStanding = {
+    stability: number;
+    civil_unrest: number;
+    characters: StandingCharacter[];
 };
 
 export type TrackerAdjustment = {

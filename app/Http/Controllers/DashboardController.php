@@ -29,7 +29,12 @@ class DashboardController extends Controller
         $characters = $game === null ? [] : Character::query()
             ->where('game_id', $game->id)
             ->where('user_id', $request->user()?->id)
-            ->with('gang:id,name,notoriety', 'corporation:id,name,income,political_will')
+            // withSum because a gang's Notoriety is the total of its members'
+            // rather than a column of its own.
+            ->with([
+                'gang' => fn ($query) => $query->select('id', 'name')->withSum('characters', 'notoriety'),
+                'corporation:id,name,income,political_will',
+            ])
             ->orderBy('name')
             ->get()
             ->map(fn (Character $character): array => [
@@ -43,6 +48,9 @@ class DashboardController extends Controller
                 'credits' => $character->credits,
                 'wounds' => $character->wounds,
                 'tags' => $character->tags,
+                // Theirs. Their gang's figure below is the total of these
+                // across its members (rulebook 2.3.2).
+                'notoriety' => $character->notoriety,
                 'body' => $character->body,
                 'brawn' => $character->brawn,
                 'hack' => $character->hack,

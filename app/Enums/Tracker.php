@@ -5,7 +5,6 @@ namespace App\Enums;
 use App\Models\Character;
 use App\Models\Corporation;
 use App\Models\Game;
-use App\Models\Gang;
 
 /**
  * Every numeric value Control moves during the game.
@@ -39,6 +38,14 @@ enum Tracker: string
     case ResearchLeaf = 'research_leaf';
     case ResearchMaths = 'research_maths';
 
+    /**
+     * How well known a Runner is (rulebook 2.3.2).
+     *
+     * On the character rather than the gang, which is the designer's ruling
+     * over a section headed "Gang Notoriety": it is earned by the person, and
+     * a gang's figure is the total of its members'. That total is derived, so
+     * a gang carries no tracker of its own - see App\Models\Gang.
+     */
     case Notoriety = 'notoriety';
 
     case Wounds = 'wounds';
@@ -90,8 +97,8 @@ enum Tracker: string
             self::Income, self::PoliticalWill, self::CorporationCredits,
             self::ResearchCog, self::ResearchBrain,
             self::ResearchLeaf, self::ResearchMaths => Corporation::class,
-            self::Notoriety => Gang::class,
-            self::Wounds, self::Tags, self::CharacterCredits => Character::class,
+            self::Notoriety, self::Wounds,
+            self::Tags, self::CharacterCredits => Character::class,
             self::Stability, self::CivilUnrest => Game::class,
         };
     }

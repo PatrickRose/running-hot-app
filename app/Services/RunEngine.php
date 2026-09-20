@@ -2963,13 +2963,21 @@ class RunEngine
      * Counted across the whole game rather than only the gangs in the queue,
      * which is what "the gang with the highest Notoriety" says - so the
      * tiebreak can legitimately settle nothing. Where two gangs tie at the top
-     * the rulebook is silent, so members of either count.
+     * the rulebook is silent, so members of either count. A gang with no
+     * members totals nought, which is also what a gang nobody has heard of
+     * scores, and the two are the same answer to this rule.
      *
      * @return array<int, int>
      */
     protected function mostNotoriousGangIds(Turn $turn): array
     {
-        $gangs = Gang::query()->where('game_id', $turn->game_id)->get();
+        // withSum because a gang's Notoriety is the total of its members' and
+        // is not a column - reading it off an unloaded gang is a query each.
+        $gangs = Gang::query()
+            ->where('game_id', $turn->game_id)
+            ->withSum('characters', 'notoriety')
+            ->get();
+
         $highest = (int) $gangs->max('notoriety');
 
         return $gangs
