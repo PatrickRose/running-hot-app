@@ -40,12 +40,35 @@ class GuildBlueprint
     public const CHANNEL_FACILITY_LIST = 'channel:common:facility-list';
 
     /**
+     * Where the characters who belong to no team live.
+     *
+     * Deliberately not private: it holds the press's publications and a
+     * public voice room for each of its members, and only the private text
+     * channels inside it are locked. A category with no overwrites of its own
+     * is what {@see self::CATEGORY_COMMON} already is.
+     */
+    public const CATEGORY_INDEPENDENTS = 'category:independents';
+
+    /**
+     * How many public voice rooms a faction gets.
+     *
+     * Three because a faction is negotiating with several people at once for
+     * most of a turn, and one room means whoever got there first owns it: a
+     * Runner who wants a word has to wait out a Council deal. They are named
+     * with a number rather than a purpose, since what a room is for changes
+     * every fifteen minutes.
+     */
+    public const PUBLIC_VOICE_ROOMS = 3;
+
+    /**
      * Discord's limit on how many channels one category may hold.
      *
-     * A Corporation's category holds its two team channels plus a pair for each
-     * Facility, so it runs out at 24 Facilities — well past anything the game's
-     * economy allows one Corporation to build. Recorded rather than guarded
-     * against for that reason.
+     * A Corporation's category holds its two team channels, its four public
+     * ones and a pair for each Facility, so it runs out at 22 Facilities — well
+     * past anything the game's economy allows one Corporation to build. The
+     * Independents category holds two or three channels a head and so runs out
+     * at around twenty unaffiliated characters, against the six the roster
+     * ships. Recorded rather than guarded against for that reason.
      */
     public const MAX_CHANNELS_PER_CATEGORY = 50;
 
@@ -116,6 +139,22 @@ class GuildBlueprint
             );
         }
 
+        // A role per unaffiliated character, because their channels have to be
+        // permissioned against something and there is no team to hang them on.
+        // A role rather than a per-member overwrite for the reason a Runner's
+        // key to a Facility is the other way round: who the press are is a
+        // standing fact about the guild, not something true for ten minutes.
+        //
+        // Hoisted like a team's, since it is the only grouping these players
+        // have — the member list is where Control finds the Government player.
+        foreach ($this->independents() as $character) {
+            $roles[self::characterRoleKey($character)] = new PlannedRole(
+                key: self::characterRoleKey($character),
+                name: $character->name,
+                colour: self::colourFor($character->name),
+            );
+        }
+
         return $roles;
     }
 
@@ -132,6 +171,7 @@ class GuildBlueprint
             ...$this->controlChannels(),
             ...$this->functionChannels(),
             ...$this->teamChannels(),
+            ...$this->independentChannels(),
             ...$this->facilityChannels(),
         ];
     }
@@ -264,10 +304,8 @@ class GuildBlueprint
     }
 
     /**
-     * A private category per corporation and per gang, holding a text and a
-     * voice channel. This is the shape the Discord bot used for facilities:
-     *
-     * @everyone cannot see it, Control and the team can.
+     * A category per corporation and per gang: the team's own locked text and
+     * voice channels, and the public ones anybody may walk into.
      *
      * @return array<int, PlannedChannel>
      */
@@ -359,8 +397,8 @@ class GuildBlueprint
     }
 
     /**
-     * The category holding everything a Corporation owns: its two team channels
-     * and a pair for each of its Facilities.
+     * The category holding everything a Corporation owns: its two team channels,
+     * its four public ones, and a pair for each of its Facilities.
      */
     public static function corporationCategoryKey(Corporation $corporation): string
     {
@@ -387,13 +425,52 @@ class GuildBlueprint
     }
 
     /**
+     * Open to the whole game: read and write, or join and speak.
+     *
+     * Only @everyone is named, because a grant to everybody is a grant to
+     * Control as well — #general in the common category is the same shape. A
+     * channel the blueprint locks says so in its own overwrites, and a
+     * category's denial never reaches one of these.
+     *
+     * @return array<int, PlannedOverwrite>
+     */
+    private static function publicOverwrites(DiscordResourceKind $kind): array
+    {
+        return [
+            new PlannedOverwrite(
+                PlannedOverwrite::EVERYONE,
+                allow: $kind === DiscordResourceKind::VoiceChannel
+                    ? DiscordApi::VIEW_CHANNEL | DiscordApi::CONNECT | DiscordApi::SPEAK
+                    : DiscordApi::VIEW_CHANNEL | DiscordApi::SEND_MESSAGES,
+            ),
+        ];
+    }
+
+    /**
+     * One team's channels: the two only they can see, and the four anybody can.
+     *
+     * The category is locked and the public channels sit inside it anyway, which
+     * is not a contradiction — Discord computes a channel's permissions from its
+     * own overwrites, so a category's denial only reaches a channel that has
+     * nothing to say for itself. Keeping them together is the same reasoning
+     * that puts a Corporation's Facility channels here: everything a team owns
+     * is in one place, and a player looking for the Kestrels finds the whole of
+     * the Kestrels.
+     *
+     * The public text channel is where the rest of the game comes to talk to a
+     * team, which is the thing the private one cannot be: a faction that only
+     * had a locked room had to be approached by DM, and Control could not see
+     * any of it. It is named with a suffix rather than taking the plain slug
+     * because Discord would otherwise have two channels of the same name in the
+     * same category, which the adoption pass could not tell apart.
+     *
      * @return array<int, PlannedChannel>
      */
     private function channelsForTeam(string $slug, string $name, string $roleKey): array
     {
         $overwrites = self::teamOverwrites($roleKey);
 
-        return [
+        $channels = [
             new PlannedChannel(
                 key: 'category:'.$slug,
                 kind: DiscordResourceKind::Category,
@@ -415,7 +492,107 @@ class GuildBlueprint
                 parentKey: 'category:'.$slug,
                 overwrites: $overwrites,
             ),
+            new PlannedChannel(
+                key: self::publicTeamTextKey($slug),
+                kind: DiscordResourceKind::TextChannel,
+                name: Str::slug($name).'-public',
+                parentKey: 'category:'.$slug,
+                overwrites: self::publicOverwrites(DiscordResourceKind::TextChannel),
+                topic: $name.' — open to everyone. Their own room is private.',
+            ),
         ];
+
+        for ($room = 1; $room <= self::PUBLIC_VOICE_ROOMS; $room++) {
+            $channels[] = new PlannedChannel(
+                key: self::publicTeamVoiceKey($slug, $room),
+                kind: DiscordResourceKind::VoiceChannel,
+                name: $name.' '.$room,
+                parentKey: 'category:'.$slug,
+                overwrites: self::publicOverwrites(DiscordResourceKind::VoiceChannel),
+            );
+        }
+
+        return $channels;
+    }
+
+    /**
+     * The characters who belong to neither a Corporation nor a gang: the two
+     * press outlets, HM Government and the Freelancers.
+     *
+     * Read off the absence of a team rather than off a list of roles, so a
+     * character Control invents mid-game — a second Government department, the
+     * Runner Representative of the Council's own agenda card — is housed without
+     * new code. Naming HM Government here would be the same mistake
+     * `characters.council_votes` already avoids.
+     *
+     * Each gets a private text channel, which is the thing they had no way of
+     * having before: a gang has a locked room to plan in and a Freelancer had
+     * nowhere at all. The voice channel is public because the whole of a
+     * Freelancer's game is being available to whoever wants to hire them.
+     *
+     * @return array<int, PlannedChannel>
+     */
+    private function independentChannels(): array
+    {
+        $independents = $this->independents();
+
+        if ($independents->isEmpty()) {
+            return [];
+        }
+
+        $channels = [
+            new PlannedChannel(
+                key: self::CATEGORY_INDEPENDENTS,
+                kind: DiscordResourceKind::Category,
+                name: 'Independents',
+            ),
+        ];
+
+        foreach ($independents as $character) {
+            $roleKey = self::characterRoleKey($character);
+            $slug = Str::slug($character->name);
+            $isPress = $character->role === CharacterRole::Press;
+
+            $channels[] = new PlannedChannel(
+                key: self::independentChannelKey($character, 'text'),
+                kind: DiscordResourceKind::TextChannel,
+                // A press outlet has two text channels, and the plain slug goes
+                // to the one everybody reads — that is the masthead. So the
+                // private one takes the suffix, and only theirs needs one.
+                name: $isPress ? $slug.'-desk' : $slug,
+                parentKey: self::CATEGORY_INDEPENDENTS,
+                overwrites: self::teamOverwrites($roleKey),
+                topic: $character->name.' — private. Control reads this too.',
+            );
+
+            if ($isPress) {
+                $channels[] = new PlannedChannel(
+                    key: self::independentChannelKey($character, 'publication'),
+                    kind: DiscordResourceKind::TextChannel,
+                    name: $slug,
+                    parentKey: self::CATEGORY_INDEPENDENTS,
+                    // One per outlet rather than a shared #press: Business Times
+                    // and Th3 Undergr0und are rival papers, and a single feed
+                    // would run their copy together under one masthead.
+                    overwrites: [
+                        new PlannedOverwrite(PlannedOverwrite::EVERYONE, allow: DiscordApi::VIEW_CHANNEL, deny: DiscordApi::SEND_MESSAGES),
+                        new PlannedOverwrite(self::ROLE_CONTROL, allow: DiscordApi::VIEW_CHANNEL | DiscordApi::SEND_MESSAGES),
+                        new PlannedOverwrite($roleKey, allow: DiscordApi::VIEW_CHANNEL | DiscordApi::SEND_MESSAGES),
+                    ],
+                    topic: 'What '.$character->name.' publishes. Everyone reads it; only they write in it.',
+                );
+            }
+
+            $channels[] = new PlannedChannel(
+                key: self::independentChannelKey($character, 'voice'),
+                kind: DiscordResourceKind::VoiceChannel,
+                name: $character->name,
+                parentKey: self::CATEGORY_INDEPENDENTS,
+                overwrites: self::publicOverwrites(DiscordResourceKind::VoiceChannel),
+            );
+        }
+
+        return $channels;
     }
 
     /**
@@ -452,6 +629,10 @@ class GuildBlueprint
             if (in_array($character->role, self::functionRoles(), true)) {
                 $keys[] = self::functionRoleKey($character->role);
             }
+
+            if (self::isIndependent($character)) {
+                $keys[] = self::characterRoleKey($character);
+            }
         }
 
         return array_values(array_unique($keys));
@@ -473,6 +654,42 @@ class GuildBlueprint
     }
 
     /**
+     * The role an unaffiliated character holds. Nobody else has one: a Runner is
+     * addressed through their gang and a CEO through their Corporation.
+     */
+    public static function characterRoleKey(Character $character): string
+    {
+        return 'role:character:'.$character->id;
+    }
+
+    /**
+     * @param  string  $kind  'text', 'publication' or 'voice'
+     */
+    public static function independentChannelKey(Character $character, string $kind): string
+    {
+        return 'channel:character:'.$character->id.':'.$kind;
+    }
+
+    public static function publicTeamTextKey(string $slug): string
+    {
+        return 'channel:'.$slug.':public';
+    }
+
+    public static function publicTeamVoiceKey(string $slug, int $room): string
+    {
+        return 'channel:'.$slug.':public-voice:'.$room;
+    }
+
+    /**
+     * Whether this character belongs to no team, and so is housed in the
+     * Independents category under a role of their own.
+     */
+    public static function isIndependent(Character $character): bool
+    {
+        return $character->corporation_id === null && $character->gang_id === null;
+    }
+
+    /**
      * @return Collection<int, Corporation>
      */
     private function corporations()
@@ -486,6 +703,18 @@ class GuildBlueprint
     private function gangs()
     {
         return $this->game->gangs()->orderBy('id')->get();
+    }
+
+    /**
+     * @return Collection<int, Character>
+     */
+    private function independents()
+    {
+        return $this->game->characters()
+            ->whereNull('corporation_id')
+            ->whereNull('gang_id')
+            ->orderBy('id')
+            ->get();
     }
 
     /**
