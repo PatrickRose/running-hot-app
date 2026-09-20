@@ -60,8 +60,8 @@ use Illuminate\Validation\ValidationException;
  *
  * Who may buy, and when, is not asked here at all: that is
  * App\Policies\ShopListingPolicy's, which is also where Control's override lives. What
- * this class refuses, it refuses to Control as well - a Katana in a CEO's hand
- * is a row nothing reads whoever wrote it.
+ * this class refuses, it refuses to Control as well - a Corporate seat has no
+ * purse to buy out of whoever presses the button.
  */
 class ShopService
 {
@@ -377,13 +377,18 @@ class ShopService
         Character $buyer,
         ?User $actor,
     ): void {
-        // The same refusal App\Http\Controllers\Control\EquipmentHoldingController
-        // makes, and for the same reason: a CEO with a Katana in hand is a row
-        // nothing reads and a line on the page nobody can explain.
+        // The market is the Runners' (2.1), and the reason is mechanical
+        // rather than a ruling: this bills the buyer's *own* Credits, and a
+        // Corporate seat has none - they spend their Corporation's. Note this
+        // is no longer the refusal
+        // App\Http\Controllers\Control\EquipmentHoldingController makes, which
+        // has gone: anybody may *hold* an Equipment card, because 2.1 has
+        // Runners buying them "from other players" and a CEO may well be the
+        // player they bought it from. Control hands one over there.
         if (! in_array($buyer->role, [CharacterRole::Runner, CharacterRole::Freelancer], true)) {
             throw ValidationException::withMessages([
                 'character_id' => sprintf(
-                    '%s is %s, and Equipment is carried by Runners and Freelancers.',
+                    '%s is %s, and the market is bought from out of a purse of your own. Hand them the card instead.',
                     $buyer->name,
                     $buyer->role->label(),
                 ),

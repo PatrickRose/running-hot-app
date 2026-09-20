@@ -36,6 +36,7 @@ import type {
     AgendaCardView,
     CouncilBoard,
     CouncilControlBoard,
+    CouncilOwnSeat,
     CouncilSeatCandidate,
     CouncilSeatView,
     CouncilSessionView,
@@ -279,8 +280,10 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             their Corporation&rsquo;s Political Will. Anybody
                             else is here because you put them here — HM
                             Government and its bloc of six, or whoever a Runner
-                            Representative turns out to be. A seat votes and
-                            nothing else: it never takes the Chair.
+                            Representative turns out to be. A seat may take the
+                            Chair as readily as a Corporation: the rotation is
+                            an order you announce on the day, and the game opens
+                            with the Government chairing.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">
@@ -481,23 +484,27 @@ function DeckPicker({
  * changing it is the likely thing to want: a bloc is a judgement Control makes
  * and may revise mid-game.
  */
-function OwnSeat({
-    gameId,
-    seat,
-}: {
-    gameId: number;
-    seat: CouncilSeatCandidate;
-}) {
+function OwnSeat({ gameId, seat }: { gameId: number; seat: CouncilOwnSeat }) {
     const [votes, setVotes] = useState(String(seat.votes ?? ''));
     const changed = votes !== String(seat.votes ?? '');
 
     return (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
             <div>
-                <p className="font-medium">{seat.name}</p>
+                <p className="font-medium">
+                    {seat.name}
+                    {seat.is_chair && (
+                        <Badge variant="outline" className="ml-2">
+                            In the Chair this turn
+                        </Badge>
+                    )}
+                </p>
                 <p className="text-muted-foreground">
                     {seat.role_label}
                     {seat.team && ` · ${seat.team}`}
+                    {seat.chair_order === null
+                        ? ' · not in the Chair rotation'
+                        : ` · ${seat.chair_order} in the Chair rotation`}
                 </p>
             </div>
 
@@ -529,6 +536,20 @@ function OwnSeat({
                     }
                 >
                     Set
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={seat.is_chair}
+                    onClick={() =>
+                        router.post(
+                            chair.url({ game: gameId }),
+                            { chair_type: 'character', chair_id: seat.id },
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    Give them the Chair now
                 </Button>
                 <Button
                     size="sm"
@@ -629,6 +650,18 @@ function SeatSomebody({
     );
 }
 
+/**
+ * The Chair rotation, which Council Control announces on the day (3.1.1).
+ *
+ * Every Corporation is in it because it is a Corporation. A seat Control has
+ * given somebody is in it only when Control has put it there — so the list
+ * below is the rotation, and the seats under it are the ones waiting to join.
+ * The game opens with HM Government at the front of it.
+ *
+ * Rearranging is local until it is saved, because that is what laying a list
+ * out is. Giving somebody the Chair now is immediate, because it is a ruling
+ * about the sitting in front of you rather than an order for the turns after.
+ */
 function Rotation({
     gameId,
     control,
@@ -636,11 +669,37 @@ function Rotation({
     gameId: number;
     control: CouncilControlBoard;
 }) {
-    const [order, setOrder] = useState(control.rotation.map((row) => row.id));
+    const [order, setOrder] = useState(control.rotation.map((row) => row.key));
 
-    const move = (id: number, direction: -1 | 1) => {
+    // Both kinds of seat in one map, keyed the way the server keys them: a
+    // Corporation and a character can share a row id, and the bare number
+    // would put one in the other's place.
+    const seats = new Map(control.rotation.map((row) => [row.key, row]));
+
+    for (const seat of control.own_seats) {
+        const key = `character:${seat.id}`;
+
+        if (!seats.has(key)) {
+            seats.set(key, {
+                key,
+                id: seat.id,
+                type: 'character',
+                name: seat.name,
+                logo_path: seat.logo_path,
+                colour: seat.colour,
+                chair_order: seat.chair_order,
+                is_chair: seat.is_chair,
+            });
+        }
+    }
+
+    const waiting = control.own_seats.filter(
+        (seat) => !order.includes(`character:${seat.id}`),
+    );
+
+    const move = (key: string, direction: -1 | 1) => {
         setOrder((current) => {
-            const index = current.indexOf(id);
+            const index = current.indexOf(key);
             const target = index + direction;
 
             if (index === -1 || target < 0 || target >= current.length) {
@@ -654,30 +713,41 @@ function Rotation({
         });
     };
 
-    const byId = new Map(control.rotation.map((row) => [row.id, row]));
+    const save = (next: string[]) =>
+        router.post(
+            rotation.url({ game: gameId }),
+            {
+                order: next.map((key) => {
+                    const [type, id] = key.split(':');
+
+                    return { type, id: Number(id) };
+                }),
+            },
+            { preserveScroll: true },
+        );
 
     return (
         <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">Chair rotation</p>
             <ol className="flex flex-col gap-1">
-                {order.map((id, index) => {
-                    const corporation = byId.get(id);
+                {order.map((key, index) => {
+                    const seat = seats.get(key);
 
-                    if (!corporation) {
+                    if (!seat) {
                         return null;
                     }
 
                     return (
                         <li
-                            key={id}
+                            key={key}
                             className="flex flex-wrap items-center gap-2 text-sm"
                         >
                             <span className="w-6 font-mono text-muted-foreground tabular-nums">
                                 {index + 1}.
                             </span>
-                            <FactionBadge faction={corporation} size="small" />
-                            {corporation.name}
-                            {corporation.is_chair && (
+                            <FactionBadge faction={seat} size="small" />
+                            {seat.name}
+                            {seat.is_chair && (
                                 <Badge variant="outline">
                                     In the Chair this turn
                                 </Badge>
@@ -685,16 +755,16 @@ function Rotation({
                             <Button
                                 size="sm"
                                 variant="ghost"
-                                aria-label={`Move ${corporation.name} earlier`}
-                                onClick={() => move(id, -1)}
+                                aria-label={`Move ${seat.name} earlier`}
+                                onClick={() => move(key, -1)}
                             >
                                 ↑
                             </Button>
                             <Button
                                 size="sm"
                                 variant="ghost"
-                                aria-label={`Move ${corporation.name} later`}
-                                onClick={() => move(id, 1)}
+                                aria-label={`Move ${seat.name} later`}
+                                onClick={() => move(key, 1)}
                             >
                                 ↓
                             </Button>
@@ -704,13 +774,33 @@ function Rotation({
                                 onClick={() =>
                                     router.post(
                                         chair.url({ game: gameId }),
-                                        { corporation_id: id },
+                                        {
+                                            chair_type: seat.type,
+                                            chair_id: seat.id,
+                                        },
                                         { preserveScroll: true },
                                     )
                                 }
                             >
                                 Give them the Chair now
                             </Button>
+                            {/* A Corporation cannot leave the rotation; a seat
+                                Control put in it can. */}
+                            {seat.type === 'character' && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                        save(
+                                            order.filter(
+                                                (other) => other !== key,
+                                            ),
+                                        )
+                                    }
+                                >
+                                    Take out of the rotation
+                                </Button>
+                            )}
                         </li>
                     );
                 })}
@@ -720,16 +810,36 @@ function Rotation({
                 size="sm"
                 variant="outline"
                 className="self-start"
-                onClick={() =>
-                    router.post(
-                        rotation.url({ game: gameId }),
-                        { order },
-                        { preserveScroll: true },
-                    )
-                }
+                onClick={() => save(order)}
             >
                 Save the rotation
             </Button>
+
+            {waiting.length > 0 && (
+                <div className="mt-2 flex flex-col gap-1">
+                    <p className="text-xs text-muted-foreground">
+                        Seats that vote but never come round to chair. Adding
+                        one puts it at the end of the rotation.
+                    </p>
+                    {waiting.map((seat) => (
+                        <div
+                            key={seat.id}
+                            className="flex flex-wrap items-center gap-2 text-sm"
+                        >
+                            {seat.name}
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                    save([...order, `character:${seat.id}`])
+                                }
+                            >
+                                Add to the rotation
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

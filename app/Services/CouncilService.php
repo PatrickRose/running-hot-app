@@ -70,9 +70,12 @@ class CouncilService
         $startedAt = $sittingStartedAt ?? Carbon::now();
         $recessSeconds = (int) $turn->game->council_recess_seconds;
 
+        $chair = $this->nextChair($turn);
+
         /** @var CouncilSession $session */
         $session = $turn->councilSession()->create([
-            'chair_corporation_id' => $this->nextChair($turn)?->id,
+            'chair_type' => $chair?->getMorphClass(),
+            'chair_id' => $chair?->getKey(),
             'recess_at' => $startedAt->copy()->addSeconds($recessSeconds),
         ]);
 
@@ -83,12 +86,10 @@ class CouncilService
      * Whose turn it is to chair, from the rotation the game holds.
      *
      * The rotation is an order Council Control announces on the day, so nothing
-     * here invents one: it reads the order held against the Corporations and
-     * steps through it by turn number. A Corporation Control has not placed in
-     * the rotation sorts last rather than being left out, because a Corporation
-     * with a CEO has a seat whether or not anybody has ordered it.
+     * here invents one: it reads the order that is held against the seats and
+     * steps through it by turn number.
      */
-    public function nextChair(Turn $turn): ?Corporation
+    public function nextChair(Turn $turn): Corporation|Character|null
     {
         $rotation = $this->rotation($turn->game);
 
@@ -100,15 +101,44 @@ class CouncilService
     }
 
     /**
-     * @return Collection<int, Corporation>
+     * The order the Chair rotates in (rulebook 3.1.1).
+     *
+     * Every Corporation, plus every seated character Control has put in it. The
+     * asymmetry is the rule rather than an oversight: a Corporation is in the
+     * rotation because it is a Corporation, and a Corporation Control has not
+     * ordered sorts last rather than being left out, because a Corporation with
+     * a CEO has a seat whether or not anybody ordered it. A seat Control has
+     * given somebody is in the rotation only when Control has said so - HM
+     * Government may chair the first turn of the game and no other.
+     *
+     * Sorted by one closure returning an array rather than by an array of
+     * closures: Collection::sortBy() reads an array of closures as comparators
+     * and sorts by nothing at all.
+     *
+     * @return Collection<int, Corporation|Character>
      */
     public function rotation(Game $game): Collection
     {
-        return $game->corporations()
-            ->orderByRaw('council_chair_order is null')
-            ->orderBy('council_chair_order')
-            ->orderBy('id')
+        $corporations = $game->corporations()->get();
+
+        $seats = $game->characters()
+            ->whereNotNull('council_votes')
+            ->whereNotNull('council_chair_order')
             ->get();
+
+        /** @var Collection<int, Corporation|Character> $rotation */
+        $rotation = $corporations->concat($seats)->values();
+
+        return $rotation
+            ->sortBy(fn (Corporation|Character $seat): array => [
+                $seat->council_chair_order === null ? 1 : 0,
+                $seat->council_chair_order ?? 0,
+                // A Corporation and a character can share a row id, so the
+                // kind is part of the ordering rather than left to chance.
+                $seat instanceof Character ? 1 : 0,
+                $seat->getKey(),
+            ])
+            ->values();
     }
 
     /**
@@ -116,18 +146,83 @@ class CouncilService
      *
      * Only this sitting: the rotation itself is untouched, so a Chair swapped
      * because somebody stepped out does not shuffle every turn after it.
+     *
+     * A character has to hold a seat of their own to take it. A CEO does not
+     * chair as themselves - they chair for their Corporation, which is what
+     * goes in the Chair - so naming one here is refused rather than quietly
+     * stored, exactly as seat() refuses them a second seat.
      */
-    public function setChair(CouncilSession $session, ?Corporation $corporation): CouncilSession
+    public function setChair(CouncilSession $session, Corporation|Character|null $chair): CouncilSession
     {
-        if ($corporation !== null && $corporation->game_id !== $session->turn->game_id) {
+        if ($chair !== null && $chair->game_id !== $session->turn->game_id) {
             throw ValidationException::withMessages([
-                'chair_corporation_id' => 'That Corporation is playing a different game.',
+                'chair' => sprintf('%s is playing a different game.', $chair->name),
             ]);
         }
 
-        $session->forceFill(['chair_corporation_id' => $corporation?->id])->save();
+        if ($chair instanceof Character && ! $chair->sitsOnCouncil()) {
+            throw ValidationException::withMessages([
+                'chair' => $chair->role === CharacterRole::Ceo && $chair->corporation_id !== null
+                    ? sprintf('%s chairs for their Corporation. Give the Chair to %s instead.', $chair->name, $chair->corporation->name)
+                    : sprintf('%s has no seat at the Council, so cannot take the Chair.', $chair->name),
+            ]);
+        }
+
+        $session->forceFill([
+            'chair_type' => $chair?->getMorphClass(),
+            'chair_id' => $chair?->getKey(),
+        ])->save();
 
         return $session;
+    }
+
+    /**
+     * Put the rotation in the order Control has announced (rulebook 3.1.1).
+     *
+     * Control sends the whole order rather than a move, because that is what a
+     * list being rearranged is. A seated character left out of it comes out of
+     * the rotation, since being in the list is the whole of what puts them
+     * there; a Corporation left out keeps whatever order it had, because it is
+     * in the rotation either way.
+     *
+     * @param  Collection<int, Corporation|Character>|array<int, Corporation|Character>  $order
+     */
+    public function setRotation(Game $game, Collection|array $order): void
+    {
+        $order = Collection::wrap($order)->values();
+
+        foreach ($order as $seat) {
+            if ($seat->game_id !== $game->id) {
+                throw ValidationException::withMessages([
+                    'order' => sprintf('%s is playing a different game.', $seat->name),
+                ]);
+            }
+
+            // A character with no seat would be written into the rotation and
+            // then filtered straight back out of it by rotation(), which is a
+            // silent no-op rather than an answer.
+            if ($seat instanceof Character && ! $seat->sitsOnCouncil()) {
+                throw ValidationException::withMessages([
+                    'order' => sprintf('%s has no seat at the Council, so cannot be in the rotation.', $seat->name),
+                ]);
+            }
+        }
+
+        $kept = $order
+            ->filter(fn (Corporation|Character $seat): bool => $seat instanceof Character)
+            ->map(fn (Corporation|Character $seat): int => $seat->getKey())
+            ->all();
+
+        DB::transaction(function () use ($game, $order, $kept): void {
+            foreach ($order as $index => $seat) {
+                $seat->forceFill(['council_chair_order' => $index + 1])->save();
+            }
+
+            $game->characters()
+                ->whereNotNull('council_chair_order')
+                ->whereNotIn('id', $kept)
+                ->update(['council_chair_order' => null]);
+        });
     }
 
     /**

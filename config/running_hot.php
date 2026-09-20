@@ -392,6 +392,13 @@ return [
     | directly. Anybody given a number here gets a seat; everybody else has
     | none.
     |
+    | 'council_chair_order' puts that seat in the Chair rotation, which is an
+    | order Council Control announces on the day (3.1.1) rather than a rule
+    | about who may be in it. The game opens with HM Government in the Chair,
+    | so the Government takes the first place and the Corporations follow. A
+    | seat with no number here still votes; it simply never comes round to
+    | chair unless Control hands it the Chair for a turn.
+    |
     */
 
     'unaffiliated' => [
@@ -400,7 +407,7 @@ return [
         ['name' => 'Yale Pirit', 'role' => CharacterRole::Freelancer, 'brawn' => 5, 'hack' => 2, 'charisma' => 3, 'body' => 6],
         ['name' => 'Business Times', 'role' => CharacterRole::Press],
         ['name' => 'Th3 Undergr0und', 'role' => CharacterRole::Press],
-        ['name' => 'HM Government', 'role' => CharacterRole::Other, 'council_votes' => 6],
+        ['name' => 'HM Government', 'role' => CharacterRole::Other, 'council_votes' => 6, 'council_chair_order' => 1],
     ],
 
     /*

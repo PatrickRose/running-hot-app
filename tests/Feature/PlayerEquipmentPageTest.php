@@ -50,8 +50,8 @@ class PlayerEquipmentPageTest extends TestCase
         $groups = app(GamePresenter::class)->equipmentHoldings($this->game, $user);
 
         $this->assertSame(['Wicker'], $this->namesIn($groups));
-        $this->assertSame('Shiv', $groups[0]['runners'][0]['cards'][0]['name']);
-        $this->assertSame(2, $groups[0]['runners'][0]['cards'][0]['copies']);
+        $this->assertSame('Shiv', $groups[0]['members'][0]['cards'][0]['name']);
+        $this->assertSame(2, $groups[0]['members'][0]['cards'][0]['copies']);
     }
 
     /**
@@ -87,7 +87,7 @@ class PlayerEquipmentPageTest extends TestCase
         $this->assertSame(['Con', 'Wicker'], $this->namesIn($groups));
     }
 
-    public function test_control_sees_every_runner(): void
+    public function test_control_sees_everybody(): void
     {
         $control = User::factory()->control()->create();
 
@@ -118,15 +118,17 @@ class PlayerEquipmentPageTest extends TestCase
     }
 
     /**
-     * Equipment is carried by the side that runs, so a Corporate seat has no
-     * hand to read — and is told that rather than shown somebody else's.
+     * A Corporate seat has a hand of its own now, and sees it rather than
+     * nothing: 2.1 has Runners buying equipment "from other players", so a CEO
+     * may be holding the card they bought to hand over. What they still do not
+     * see is anybody else's.
      */
-    public function test_a_corporate_player_sees_nothing(): void
+    public function test_a_corporate_player_sees_their_own_hand_and_nobody_elses(): void
     {
         $user = User::factory()->create();
         $corporation = Corporation::factory()->for($this->game)->create();
 
-        Character::factory()->create([
+        $ceo = Character::factory()->create([
             'game_id' => $this->game->id,
             'corporation_id' => $corporation->id,
             'user_id' => $user->id,
@@ -134,12 +136,49 @@ class PlayerEquipmentPageTest extends TestCase
             'role' => CharacterRole::Ceo,
         ]);
 
+        $this->give($ceo, 'Katana');
+
         $runner = $this->runner('Wicker');
         $this->give($runner, 'Shiv');
 
         $groups = app(GamePresenter::class)->equipmentHoldings($this->game, $user);
 
-        $this->assertSame([], $groups);
+        $this->assertSame(['Ada Bellweather'], $this->namesIn($groups));
+        $this->assertSame('Katana', $groups[0]['members'][0]['cards'][0]['name']);
+        $this->assertStringNotContainsString('Shiv', json_encode($groups) ?: '');
+    }
+
+    /**
+     * The three groups, in the order the page draws them: the gangs whose game
+     * this mostly is, then the Corporations, then everybody in neither.
+     */
+    public function test_the_whole_game_is_grouped_by_team(): void
+    {
+        $corporation = Corporation::factory()->for($this->game)->create(['name' => 'Gordon']);
+
+        Character::factory()->create([
+            'game_id' => $this->game->id,
+            'corporation_id' => $corporation->id,
+            'name' => 'Gordon CEO',
+            'role' => CharacterRole::Ceo,
+        ]);
+
+        $this->runner('Wicker');
+
+        Character::factory()->create([
+            'game_id' => $this->game->id,
+            'name' => 'HM Government',
+            'role' => CharacterRole::Other,
+        ]);
+
+        $groups = app(GamePresenter::class)->equipmentHoldings($this->game);
+
+        $this->assertSame(
+            ['gang:'.$this->gang->id, 'corporation:'.$corporation->id, 'unaffiliated'],
+            array_column($groups, 'key'),
+        );
+        $this->assertSame(['Facers', 'Gordon', 'Unaffiliated'], array_column($groups, 'name'));
+        $this->assertSame(['Wicker', 'Gordon CEO', 'HM Government'], $this->namesIn($groups));
     }
 
     public function test_a_player_who_has_claimed_nobody_sees_nothing(): void
@@ -193,11 +232,11 @@ class PlayerEquipmentPageTest extends TestCase
         $names = [];
 
         foreach ($groups as $group) {
-            /** @var array<int, array<string, mixed>> $runners */
-            $runners = $group['runners'];
+            /** @var array<int, array<string, mixed>> $members */
+            $members = $group['members'];
 
-            foreach ($runners as $runner) {
-                $names[] = (string) $runner['name'];
+            foreach ($members as $member) {
+                $names[] = (string) $member['name'];
             }
         }
 
@@ -215,10 +254,10 @@ class PlayerEquipmentPageTest extends TestCase
         ]);
     }
 
-    private function give(Character $runner, string $cardName, int $copies = 1): void
+    private function give(Character $character, string $cardName, int $copies = 1): void
     {
         $card = EquipmentCardType::factory()->for($this->game)->create(['name' => $cardName]);
 
-        app(EquipmentService::class)->setCopiesInHand($runner, $card, $copies);
+        app(EquipmentService::class)->setCopiesInHand($character, $card, $copies);
     }
 }

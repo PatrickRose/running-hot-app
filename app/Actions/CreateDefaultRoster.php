@@ -89,7 +89,11 @@ class CreateDefaultRoster
     private function createCorporations(Game $game): int
     {
         $created = 0;
-        $chairOrder = 0;
+
+        // A seat the roster puts in the Chair rotation takes the places before
+        // the Corporations: the game opens with HM Government in the Chair
+        // (config/running_hot.php), and the Corporations follow it round.
+        $chairOrder = $this->reservedChairOrders();
 
         foreach ($this->corporations() as $attributes) {
             // Read by CreateDefaultFacilities and SeedProtectionCardHoldings
@@ -176,6 +180,20 @@ class CreateDefaultRoster
         }
 
         return $created;
+    }
+
+    /**
+     * How many places at the front of the Chair rotation the roster's own seats
+     * have already taken.
+     *
+     * The highest rather than the count, so an order written as 1 and 3 leaves
+     * the Corporations starting at 4 instead of colliding with the 3.
+     */
+    private function reservedChairOrders(): int
+    {
+        return (int) collect($this->unaffiliated())
+            ->map(fn (array $attributes): int => (int) ($attributes['council_chair_order'] ?? 0))
+            ->max();
     }
 
     private function startingCredits(string $key): int

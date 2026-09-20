@@ -23,7 +23,9 @@ use Inertia\Response;
  *
  * The one thing set here is who is *carrying* which Equipment (3.4.1), which
  * belongs under the Equipment list because that is where Control is already
- * looking when a Runner asks for a card.
+ * looking when somebody asks for a card. Anybody on the roster may be handed
+ * one: 2.1 has Runners buying equipment "from other players", so the card may
+ * be going to whoever is about to pass it on.
  */
 class CardCatalogueController extends Controller
 {
@@ -35,6 +37,11 @@ class CardCatalogueController extends Controller
             'equipment' => $presenter->equipmentCardTypes($game),
             // Who is carrying what, which is the one thing this page sets.
             'equipmentHoldings' => $presenter->equipmentHoldings($game),
+            // And everybody a card can be handed to, for the picker that does
+            // it: the whole roster, because 2.1 has a Runner buying equipment
+            // from another player and the card may be going to whoever passes
+            // it on.
+            'equipmentRecipients' => $presenter->equipmentRecipients($game),
             'technologies' => $presenter->technologyTypes($game),
             'researchSuits' => $presenter->researchSuits(),
             // For the forms that add a card: which trees a technology may sit

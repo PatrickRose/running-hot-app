@@ -32,6 +32,14 @@ use Inertia\Response;
  */
 class CouncilController extends Controller
 {
+    /**
+     * The two kinds of thing that can hold the Chair, as the morph map names
+     * them: a Corporation, or a character Control has seated in its own right.
+     *
+     * @var list<string>
+     */
+    private const SEAT_KINDS = ['corporation', 'character'];
+
     public function __construct(private readonly CouncilService $council) {}
 
     public function index(Game $game, GamePresenter $games, CouncilPresenter $council, Request $request): Response
@@ -156,56 +164,74 @@ class CouncilController extends Controller
     }
 
     /**
-     * Hand the Chair to a different Corporation for this turn only.
+     * Hand the Chair to somebody else for this turn only.
+     *
+     * Either kind of seat: a Corporation, whose CEO speaks for it, or a seat
+     * Control has given somebody in their own right. Naming nothing vacates it.
      */
     public function chair(Game $game, Request $request): RedirectResponse
     {
         $session = $this->session($game);
 
         $validated = $request->validate([
-            'corporation_id' => [
-                'nullable', 'integer',
-                Rule::exists('corporations', 'id')->where('game_id', $game->id),
-            ],
+            'chair_type' => ['nullable', 'string', Rule::in(self::SEAT_KINDS)],
+            'chair_id' => ['nullable', 'integer', 'required_with:chair_type'],
         ]);
 
-        $corporation = null;
+        $chair = $this->namedSeat($game, $validated['chair_type'] ?? null, $validated['chair_id'] ?? null);
 
-        if (($validated['corporation_id'] ?? null) !== null) {
-            /** @var Corporation $corporation */
-            $corporation = Corporation::query()->findOrFail($validated['corporation_id']);
-        }
+        $this->council->setChair($session, $chair);
 
-        $this->council->setChair($session, $corporation);
-
-        return back()->with('status', $corporation === null
+        return back()->with('status', $chair === null
             ? 'The Chair is vacant.'
-            : $corporation->name.' takes the Chair.');
+            : $chair->name.' takes the Chair.');
     }
 
     /**
      * Set the order the Chair rotates in, which Council Control announces on
      * the day (3.1.1). Held rather than derived, so this is the only thing that
      * decides whose turn it is next.
+     *
+     * The whole order arrives rather than a move, because that is what a list
+     * being rearranged is - and it is what lets a seat leave the rotation by
+     * being left out of it.
      */
     public function rotation(Game $game, Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'order' => ['required', 'array', 'min:1'],
-            'order.*' => [
-                'required', 'integer',
-                Rule::exists('corporations', 'id')->where('game_id', $game->id),
-            ],
+            'order.*.type' => ['required', 'string', Rule::in(self::SEAT_KINDS)],
+            'order.*.id' => ['required', 'integer'],
         ]);
 
-        foreach (array_values($validated['order']) as $index => $corporationId) {
-            Corporation::query()
-                ->where('game_id', $game->id)
-                ->where('id', $corporationId)
-                ->update(['council_chair_order' => $index + 1]);
-        }
+        /** @var array<int, array{type: string, id: int}> $rows */
+        $rows = $validated['order'];
+
+        $this->council->setRotation($game, array_map(
+            fn (array $row): Corporation|Character => $this->namedSeat($game, $row['type'], $row['id'])
+                ?? throw ValidationException::withMessages([
+                    'order' => 'That seat is not in this game.',
+                ]),
+            $rows,
+        ));
 
         return back()->with('status', 'The Chair rotation is set.');
+    }
+
+    /**
+     * One seat named by its morph, scoped to this game so nothing outside it
+     * can be put in the Chair or the rotation.
+     */
+    private function namedSeat(Game $game, ?string $type, ?int $id): Corporation|Character|null
+    {
+        if ($type === null || $id === null) {
+            return null;
+        }
+
+        /** @var Corporation|Character */
+        return $type === 'character'
+            ? $game->characters()->findOrFail($id)
+            : $game->corporations()->findOrFail($id);
     }
 
     /**

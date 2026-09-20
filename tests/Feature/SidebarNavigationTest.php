@@ -91,7 +91,7 @@ class SidebarNavigationTest extends TestCase
         );
     }
 
-    public function test_a_security_player_gets_the_research_table_but_not_a_kit(): void
+    public function test_a_security_player_gets_the_research_table_and_a_hand(): void
     {
         $corporation = Corporation::factory()->create(['game_id' => $this->game->id]);
 
@@ -107,8 +107,10 @@ class SidebarNavigationTest extends TestCase
         $this->assertContains('runs', $sections);
         $this->assertContains('shop', $sections);
 
-        // A Corporate seat is refused Equipment outright.
-        $this->assertNotContains('equipment', $sections);
+        // And a hand of their own. 2.1 has Runners buying equipment "from
+        // other players", so a Corporate seat may be holding the card it
+        // bought to hand over.
+        $this->assertContains('equipment', $sections);
     }
 
     /**

@@ -100,19 +100,31 @@ class CouncilPresenter
             'deck' => $this->cards($game, AgendaCardStatus::Deck),
             'with_control' => $this->cards($game, AgendaCardStatus::WithControl),
             'amendments' => $this->pendingAmendments($game),
+            // Both kinds of seat, because either may take the Chair: the
+            // Corporations are in it by being Corporations, and a seat Control
+            // has given somebody is in it when Control has put them there.
             'rotation' => $this->council->rotation($game)
-                ->map(fn (Corporation $corporation): array => [
-                    'id' => $corporation->id,
-                    ...FactionBadge::for($corporation->name),
-                    'chair_order' => $corporation->council_chair_order,
-                    'is_chair' => $session?->chair_corporation_id === $corporation->id,
-                ])->all(),
+                ->map(fn (Corporation|Character $seat): array => [
+                    'key' => $seat->getMorphClass().':'.$seat->getKey(),
+                    'id' => $seat->getKey(),
+                    'type' => $seat->getMorphClass(),
+                    ...FactionBadge::for($seat->name),
+                    'chair_order' => $seat->council_chair_order,
+                    'is_chair' => $session?->isChairedBy($seat) ?? false,
+                ])->values()->all(),
             'seats' => $session === null ? [] : $this->seats($game, $session),
             // Seats that are not Corporations, which the register above knows
             // nothing about: the register is attendance, and this is who is
             // entitled to be there at all.
             'own_seats' => $this->council->seated($game)
-                ->map(fn (Character $character): array => $this->seatedCharacter($character))
+                ->map(fn (Character $character): array => [
+                    ...$this->seatedCharacter($character),
+                    // A seat may take the Chair, which is why these two are
+                    // here and not on `seatable`: somebody who holds no seat
+                    // yet can neither chair nor be in the rotation.
+                    'is_chair' => $session?->isChairedBy($character) ?? false,
+                    ...FactionBadge::for($character->name),
+                ])
                 ->all(),
             'seatable' => $this->council->seatable($game)
                 ->map(fn (Character $character): array => $this->seatedCharacter($character))
@@ -134,10 +146,10 @@ class CouncilPresenter
 
         return [
             'id' => $session->id,
-            'chair' => $session->chair === null ? null : [
-                'id' => $session->chair->id,
-                ...FactionBadge::for($session->chair->name),
-            ],
+            // Drawn the way every other seat at the Council is drawn, because
+            // a Corporation and a seated character in the Chair are the same
+            // thing from the floor of the room.
+            'chair' => $this->voter($session->chair),
             'recess_at' => $session->recess_at?->toIso8601String(),
             'recess_seconds_remaining' => $session->recessSecondsRemaining($reference),
             'in_recess' => $session->isInRecess($reference),
@@ -249,6 +261,10 @@ class CouncilPresenter
                 default => null,
             },
             'votes' => $character->council_votes,
+            // Null is not in the Chair rotation at all, which is where a seat
+            // starts: a Corporation is in it by being a Corporation, and a
+            // seat is in it only when Control has put it there.
+            'chair_order' => $character->council_chair_order,
         ];
     }
 

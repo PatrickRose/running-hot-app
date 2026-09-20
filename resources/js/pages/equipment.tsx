@@ -12,15 +12,15 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import type {
+    CharacterEquipment,
     EquipmentHolding,
-    GangEquipmentHoldings,
+    EquipmentHoldingGroup,
     GameSummary,
-    RunnerEquipment,
 } from '@/types/game';
 
 type Props = {
     game: GameSummary | null;
-    holdings: GangEquipmentHoldings[] | null;
+    holdings: EquipmentHoldingGroup[] | null;
     is_control: boolean;
 };
 
@@ -32,11 +32,15 @@ type Props = {
 const CATEGORY_ORDER = ['permanent', 'this-run', 'single-use'] as const;
 
 /**
- * What a Runner is carrying (rulebook 3.4.1).
+ * What you are carrying (rulebook 3.4.1).
  *
  * Its own page rather than a corner of the dashboard, because a hand is what
  * you work from: choosing three permanent items to equip means laying the cards
  * out and reading them, so they are drawn as cards rather than listed as names.
+ *
+ * Not only a Runner's. 2.1 has Runners buying equipment "from other players",
+ * so a card may be sitting with whoever bought it to hand over - which is as
+ * likely to be a CEO as a gangmate, and they need to read it too.
  *
  * You see your own and nobody else's, and Control sees everybody. The server
  * decides which - `GamePresenter::equipmentHoldings()` takes the viewer - so
@@ -62,7 +66,7 @@ export default function Equipment({ game, holdings, is_control }: Props) {
         );
     }
 
-    const runners = holdings.flatMap((gang) => gang.runners);
+    const hands = holdings.flatMap((group) => group.members);
 
     return (
         <>
@@ -73,30 +77,30 @@ export default function Equipment({ game, holdings, is_control }: Props) {
                     title="Equipment"
                     description={
                         is_control
-                            ? 'Every Runner in the game, because you are Control.'
+                            ? 'Everybody in the game, because you are Control.'
                             : 'What you are carrying. A card changes hands by talking to Control.'
                     }
                 />
 
                 <GameStateNotice game={game} />
 
-                {runners.length === 0 ? (
+                {hands.length === 0 ? (
                     <Card>
                         <CardHeader>
                             <CardTitle>Nothing to show</CardTitle>
                             <CardDescription>
                                 {is_control
-                                    ? 'This game has no Runners or Freelancers yet.'
-                                    : 'You are not holding a Runner or Freelancer in this game. Equipment is carried by the side that runs — a Corporate seat has none.'}
+                                    ? 'This game has no characters yet.'
+                                    : 'You are holding no character in this game, so there is no hand to read.'}
                             </CardDescription>
                         </CardHeader>
                     </Card>
                 ) : (
-                    holdings.map((gang) => (
-                        <GangHands
-                            key={gang.gang_id ?? 'freelancers'}
-                            gang={gang}
-                            showGangHeading={is_control}
+                    holdings.map((group) => (
+                        <TeamHands
+                            key={group.key}
+                            group={group}
+                            showTeamHeading={is_control}
                         />
                     ))
                 )}
@@ -105,41 +109,44 @@ export default function Equipment({ game, holdings, is_control }: Props) {
     );
 }
 
-function GangHands({
-    gang,
-    showGangHeading,
+function TeamHands({
+    group,
+    showTeamHeading,
 }: {
-    gang: GangEquipmentHoldings;
-    showGangHeading: boolean;
+    group: EquipmentHoldingGroup;
+    showTeamHeading: boolean;
 }) {
     return (
         <section className="flex flex-col gap-4">
             {/* A player holding one Runner already knows which gang they are
-                in, so the band is Control's: it is what makes twenty-one hands
+                in, so the band is Control's: it is what makes forty hands
                 readable. */}
-            {showGangHeading ? (
+            {showTeamHeading ? (
                 <h2 className="flex items-center gap-2 text-sm font-medium">
-                    {gang.has_badge ? (
-                        <FactionBadge faction={gang} size="small" />
+                    {group.has_badge ? (
+                        <FactionBadge faction={group} size="small" />
                     ) : null}
-                    {gang.name}
+                    {group.name}
                 </h2>
             ) : null}
 
-            {gang.runners.map((runner) => (
-                <RunnerHand key={runner.character_id} runner={runner} />
+            {group.members.map((member) => (
+                <Hand key={member.character_id} character={member} />
             ))}
         </section>
     );
 }
 
-function RunnerHand({ runner }: { runner: RunnerEquipment }) {
-    const held = runner.cards.reduce((total, card) => total + card.copies, 0);
+function Hand({ character }: { character: CharacterEquipment }) {
+    const held = character.cards.reduce(
+        (total, card) => total + card.copies,
+        0,
+    );
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>{runner.name}</CardTitle>
+                <CardTitle>{character.name}</CardTitle>
                 <CardDescription>
                     {held === 0
                         ? 'Carrying nothing.'
@@ -147,14 +154,14 @@ function RunnerHand({ runner }: { runner: RunnerEquipment }) {
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
-                {runner.cards.length === 0 ? (
+                {character.cards.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         Your briefing named no Equipment, or Control has not
                         given you any yet.
                     </p>
                 ) : (
                     CATEGORY_ORDER.map((category) => {
-                        const cards = runner.cards.filter(
+                        const cards = character.cards.filter(
                             (card) => card.category === category,
                         );
 

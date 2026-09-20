@@ -319,9 +319,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::patch('games/{game}/protection-card-holdings', [ProtectionCardHoldingController::class, 'update'])
                     ->name('protection-card-holdings.update');
 
-                // What Equipment each Runner is carrying (rulebook 3.4.1).
-                // Control's to set: the market, a Runner selling to another and
-                // a gang splitting a haul all happen at the table.
+                // What Equipment each player is carrying (rulebook 3.4.1).
+                // Control's to set: the market, a Runner buying from another
+                // player (2.1) and a gang splitting a haul all happen at the
+                // table. Giving adds copies and setting replaces the count,
+                // which is why there are two of them.
+                Route::post('games/{game}/equipment-holdings/give', [EquipmentHoldingController::class, 'give'])
+                    ->name('equipment-holdings.give');
                 Route::patch('games/{game}/equipment-holdings', [EquipmentHoldingController::class, 'update'])
                     ->name('equipment-holdings.update');
 

@@ -1,96 +1,101 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
+import { SearchPicker } from '@/components/search-picker';
+import type { PickerOption } from '@/components/search-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { update } from '@/routes/control/equipment-holdings';
-import type { EquipmentCardSummary, GangEquipmentHoldings } from '@/types/game';
-
-const SELECT_CLASS =
-    'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+import { give, update } from '@/routes/control/equipment-holdings';
+import type {
+    CharacterEquipment,
+    EquipmentCardSummary,
+    EquipmentHoldingGroup,
+    EquipmentRecipient,
+} from '@/types/game';
 
 /**
  * Who is carrying which Equipment, and Control handing cards out (3.4.1).
  *
- * Per Runner rather than per gang, because that is what the rulebook caps and
- * what it takes away: three equipped permanent items are *yours*, and *your*
- * permanent Equipment goes to the Security player when you are carried out.
+ * Per Character rather than per team, because that is what the rulebook caps
+ * and what it takes away: three equipped permanent items are *yours*, and
+ * *your* permanent Equipment goes to the Security player when you are carried
+ * out.
  *
- * Control sets a count outright. Buying from the market, selling to another
- * Runner, splitting a haul and being handed a card for a job that went well all
- * happen at the table, so this records where the count ended up rather than
- * replaying how it got there.
+ * Everybody on the roster is here, not only the side that runs. 2.1 has Runners
+ * buying equipment "from other players", so a card reaches the Facility by way
+ * of whoever was holding it - which may well be a CEO who bought it to hand
+ * over.
+ *
+ * Two controls, and they answer different questions. Giving *adds* copies and
+ * is the one Control reaches for at the table: it knows what it is handing over
+ * and not what the player already has. Setting a count replaces it, which is
+ * the correction - a card spent, a haul split, a number typed wrong.
  */
 export function EquipmentHoldings({
     gameId,
     holdings,
     cards,
+    recipients,
 }: {
     gameId: number;
-    holdings: GangEquipmentHoldings[];
+    holdings: EquipmentHoldingGroup[];
     cards: EquipmentCardSummary[];
+    recipients: EquipmentRecipient[];
 }) {
-    if (holdings.length === 0) {
-        return (
-            <p className="text-sm text-muted-foreground">
-                No Runners yet, so nobody is carrying anything.
-            </p>
-        );
-    }
-
     return (
         <div className="flex flex-col gap-10">
-            {holdings.map((gang) => (
-                <section
-                    key={gang.gang_id ?? 'freelancers'}
-                    className="flex flex-col gap-4"
-                >
-                    <h3 className="flex items-center gap-2 text-sm font-medium">
-                        {gang.has_badge ? (
-                            <FactionBadge faction={gang} size="small" />
-                        ) : null}
-                        {gang.name}
-                    </h3>
+            <GiveACard gameId={gameId} cards={cards} recipients={recipients} />
 
-                    <div className="flex flex-col gap-6 sm:pl-2">
-                        {gang.runners.map((runner) => (
-                            <RunnerHand
-                                key={runner.character_id}
-                                gameId={gameId}
-                                runner={runner}
-                                cards={cards}
-                            />
-                        ))}
-                    </div>
-                </section>
-            ))}
+            {holdings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                    No characters yet, so nobody is carrying anything.
+                </p>
+            ) : (
+                holdings.map((group) => (
+                    <section key={group.key} className="flex flex-col gap-4">
+                        <h3 className="flex items-center gap-2 text-sm font-medium">
+                            {group.has_badge ? (
+                                <FactionBadge faction={group} size="small" />
+                            ) : null}
+                            {group.name}
+                        </h3>
+
+                        <div className="flex flex-col gap-6 sm:pl-2">
+                            {group.members.map((member) => (
+                                <Hand
+                                    key={member.character_id}
+                                    gameId={gameId}
+                                    character={member}
+                                />
+                            ))}
+                        </div>
+                    </section>
+                ))
+            )}
         </div>
     );
 }
 
-function RunnerHand({
+function Hand({
     gameId,
-    runner,
-    cards,
+    character,
 }: {
     gameId: number;
-    runner: GangEquipmentHoldings['runners'][number];
-    cards: EquipmentCardSummary[];
+    character: CharacterEquipment;
 }) {
     return (
         <div className="flex flex-col gap-2 border-l-2 pl-4">
             <h4 className="text-sm font-medium">
-                {runner.name}
-                {runner.role === 'freelancer' ? (
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {runner.role_label}
-                    </span>
-                ) : null}
+                {character.name}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {character.role_label}
+                </span>
             </h4>
 
-            {runner.cards.length === 0 ? (
+            {character.cards.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                     Carrying nothing. Their briefing named no Equipment, or
                     Control has not given them any yet.
@@ -111,7 +116,7 @@ function RunnerHand({
                             </tr>
                         </thead>
                         <tbody>
-                            {runner.cards.map((card) => (
+                            {character.cards.map((card) => (
                                 <tr
                                     key={card.card_type_id}
                                     className="border-b last:border-0"
@@ -141,7 +146,7 @@ function RunnerHand({
                                     <td className="py-2">
                                         <SetCopies
                                             gameId={gameId}
-                                            characterId={runner.character_id}
+                                            characterId={character.character_id}
                                             cardTypeId={card.card_type_id}
                                             current={card.copies}
                                         />
@@ -152,14 +157,6 @@ function RunnerHand({
                     </table>
                 </div>
             )}
-
-            <GiveACard
-                gameId={gameId}
-                characterId={runner.character_id}
-                runnerName={runner.name}
-                cards={cards}
-                alreadyHeld={runner.cards.map((card) => card.card_type_id)}
-            />
         </div>
     );
 }
@@ -211,89 +208,119 @@ function SetCopies({
 }
 
 /**
- * Give a Runner a card they are carrying none of.
+ * Hand somebody a card.
  *
- * Which is how a card bought from the market, taken off another Runner or
- * handed over by Control reaches somebody: Control is told, and writes it down.
+ * Which is how a card bought from the market, taken off another Runner or given
+ * out by Control reaches a hand: Control is told, and writes it down.
+ *
+ * Both pickers search, for the reason the shop's do: seventy-four cards and a
+ * roster of forty are two lists nobody finds anything in when they are a native
+ * `select`, and worst of all on a phone. The card is drawn before it is given,
+ * because the thing somebody at the table is holding is the artwork.
  */
 function GiveACard({
     gameId,
-    characterId,
-    runnerName,
     cards,
-    alreadyHeld,
+    recipients,
 }: {
     gameId: number;
-    characterId: number;
-    runnerName: string;
     cards: EquipmentCardSummary[];
-    alreadyHeld: number[];
+    recipients: EquipmentRecipient[];
 }) {
-    const [selected, setSelected] = useState('');
+    const [characterId, setCharacterId] = useState<number | null>(null);
+    const [cardId, setCardId] = useState<number | null>(null);
     const [copies, setCopies] = useState('1');
+    const [error, setError] = useState<string | null>(null);
 
-    const options = cards.filter((card) => !alreadyHeld.includes(card.id));
+    const card = cards.find((option) => option.id === cardId) ?? null;
 
-    if (options.length === 0) {
+    if (recipients.length === 0) {
         return null;
     }
 
     return (
-        <div className="flex flex-wrap items-end gap-2">
-            <div className="grid gap-1">
-                <Label
-                    htmlFor={`give-equipment-${characterId}`}
-                    className="text-xs text-muted-foreground"
-                >
-                    Give {runnerName} a card
-                </Label>
-                <select
-                    id={`give-equipment-${characterId}`}
-                    value={selected}
-                    onChange={(event) => setSelected(event.target.value)}
-                    className={SELECT_CLASS}
-                >
-                    <option value="">Choose a card…</option>
-                    {options.map((card) => (
-                        <option key={card.id} value={card.id}>
-                            {card.code ? `${card.code} — ` : ''}
-                            {card.name} ({card.category_label})
-                        </option>
-                    ))}
-                </select>
+        <div className="flex flex-col gap-3 rounded-md border p-4">
+            <p className="text-sm font-medium">Give somebody a card</p>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-1">
+                    <Label htmlFor="give-equipment-character">To</Label>
+                    <SearchPicker
+                        id="give-equipment-character"
+                        options={recipientOptions(recipients)}
+                        value={characterId}
+                        onChange={setCharacterId}
+                        placeholder={`Search ${recipients.length} people…`}
+                        searchPlaceholder="Name, role or team…"
+                        emptyMessage="Nobody of that name is in this game."
+                    />
+                </div>
+
+                <div className="grid gap-1 lg:col-span-2">
+                    <Label htmlFor="give-equipment-card">Card</Label>
+                    <SearchPicker
+                        id="give-equipment-card"
+                        options={cardOptions(cards)}
+                        value={cardId}
+                        onChange={setCardId}
+                        placeholder={`Search ${cards.length} cards…`}
+                        searchPlaceholder="Name, code, category or effect…"
+                        emptyMessage="No card matches that."
+                    />
+                </div>
+
+                <div className="grid gap-1">
+                    <Label htmlFor="give-equipment-copies">Copies</Label>
+                    <Input
+                        id="give-equipment-copies"
+                        type="number"
+                        min={1}
+                        value={copies}
+                        onChange={(event) => setCopies(event.target.value)}
+                    />
+                </div>
             </div>
 
-            <div className="grid gap-1">
-                <Label
-                    htmlFor={`give-equipment-copies-${characterId}`}
-                    className="text-xs text-muted-foreground"
-                >
-                    Copies
-                </Label>
-                <Input
-                    id={`give-equipment-copies-${characterId}`}
-                    type="number"
-                    min={0}
-                    value={copies}
-                    onChange={(event) => setCopies(event.target.value)}
-                    className="w-20"
+            {card ? (
+                <CardFace
+                    shape="portrait"
+                    name={card.name}
+                    code={card.code}
+                    imagePath={card.image_path}
+                    lines={[{ label: '', value: card.effect }]}
+                    footer={card.category_label}
                 />
-            </div>
+            ) : null}
+
+            {/* Kept on the form rather than read off the page: it is the only
+                refusal this control can meet, and a give that silently did
+                nothing is the bug every other panel here has already had. */}
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
             <Button
                 size="sm"
-                disabled={selected === ''}
+                className="self-start"
+                disabled={characterId === null || cardId === null}
                 onClick={() =>
-                    router.patch(
-                        update.url({ game: gameId }),
+                    router.post(
+                        give.url({ game: gameId }),
                         {
                             character_id: characterId,
-                            equipment_card_type_id: Number(selected),
+                            equipment_card_type_id: cardId,
                             copies: Number(copies),
                         },
                         {
                             preserveScroll: true,
-                            onSuccess: () => setSelected(''),
+                            onSuccess: () => {
+                                setError(null);
+                                setCardId(null);
+                                setCopies('1');
+                            },
+                            onError: (errors) =>
+                                setError(
+                                    Object.values(errors)[0] ??
+                                        'That card could not be given.',
+                                ),
                         },
                     )
                 }
@@ -302,4 +329,28 @@ function GiveACard({
             </Button>
         </div>
     );
+}
+
+function recipientOptions(recipients: EquipmentRecipient[]): PickerOption[] {
+    return recipients.map((person) => ({
+        value: person.character_id,
+        label: person.name,
+        hint: person.team
+            ? `${person.role_label} — ${person.team}`
+            : person.role_label,
+        search: [person.name, person.role_label, person.team]
+            .filter(Boolean)
+            .join(' '),
+    }));
+}
+
+function cardOptions(cards: EquipmentCardSummary[]): PickerOption[] {
+    return cards.map((card) => ({
+        value: card.id,
+        label: card.name,
+        hint: [card.code, card.category_label].filter(Boolean).join(' · '),
+        search: [card.name, card.code, card.category_label, card.effect]
+            .filter(Boolean)
+            .join(' '),
+    }));
 }

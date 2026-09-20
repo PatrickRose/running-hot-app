@@ -9,7 +9,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * What a Runner is carrying, as they see it (rulebook 3.4.1).
+ * What you are carrying, as you see it (rulebook 3.4.1).
  *
  * Every Runner needs this and had nowhere to read it: the briefing names a
  * starting kit and then the count moves - a Single-use card is spent, a
@@ -17,6 +17,10 @@ use Inertia\Response;
  * hands one over for a job that went well - and only Control could see where it
  * had got to. Choosing three permanent items to equip means being able to see
  * what there is to choose from.
+ *
+ * Not only a Runner's, either. 2.1 has Runners buying equipment "from other
+ * players", so a card may be sitting with whoever bought it to hand over - a
+ * CEO as readily as a gangmate - and they need to be able to read it too.
  *
  * You see your own hands and nobody else's. The rulebook does not make a hand
  * Secret the way 3.4.2 makes a Facility's stack, so this is a ruling rather

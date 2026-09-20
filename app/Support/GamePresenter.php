@@ -793,66 +793,75 @@ class GamePresenter
     }
 
     /**
-     * Who is carrying which Equipment, grouped by the gang they run with.
+     * Who is carrying which Equipment, grouped by the team they belong to.
      *
      * Per Character, because that is what the rulebook caps and what it takes
      * away: three equipped permanent items are *yours* (3.4.1), and *your*
      * permanent Equipment goes to the Security player when you are carried out
      * (3.4.2). A gang's kit is four or five separate hands.
      *
-     * Only the cards a Runner has a row for, the way the Protection Card
-     * holdings work and for the same reason - seventy-four cards against
-     * twenty-one Runners would be fifteen hundred rows that are almost all
-     * zero. A count that has been spent to nothing stays, because a Runner who
-     * has used their last Mini-hospital held one and a list that drops it reads
-     * as though they never did.
+     * Only the cards somebody has a row for, the way the Protection Card
+     * holdings work and for the same reason - seventy-four cards against forty
+     * characters would be three thousand rows that are almost all zero. A count
+     * that has been spent to nothing stays, because a Runner who has used their
+     * last Mini-hospital held one and a list that drops it reads as though they
+     * never did.
      *
-     * Freelancers are here too, under a group of their own. 3.4 hands the
-     * Facility game to a side rather than to a roster, and the three the game
-     * ships with carry nothing only because their briefings give them special
-     * rules instead - not because nobody could ever hand them a card.
+     * Everybody in the game is here, not only the side that runs. 2.1 has
+     * Runners buying equipment "from other players", so a card reaches the
+     * Facility by way of whoever was holding it - which may well be a CEO who
+     * bought it to hand over. Who may hold what is Control's call, and a hand
+     * that is empty all game costs a line on a page.
+     *
+     * The three groups read in the order they matter on this page: the gangs,
+     * whose game this mostly is, then the Corporations, then everybody who
+     * belongs to neither - the Freelancers, the press and the Government.
      *
      * A viewer narrows it to their own hands. Passing nobody is Control's
      * whole-game view, which is what the Control panel asks for; passing a
-     * player gives them the Runners and Freelancers they have claimed and
-     * nothing else, because a hand is private the way a Facility's stack is.
-     * Control passed as the viewer still sees everybody, so the one page can
-     * serve both without a second implementation of the shape.
+     * player gives them the seats they have claimed and nothing else, because a
+     * hand is private the way a Facility's stack is. Control passed as the
+     * viewer still sees everybody, so the one page can serve both without a
+     * second implementation of the shape.
      *
      * @return array<int, array<string, mixed>>
      */
     public function equipmentHoldings(Game $game, ?User $viewer = null): array
     {
         $query = $game->characters()
-            ->whereIn('role', [CharacterRole::Runner, CharacterRole::Freelancer])
-            ->with(['gang', 'equipmentHoldings.cardType'])
+            ->with(['gang', 'corporation', 'equipmentHoldings.cardType'])
             ->orderBy('name');
 
         if ($viewer !== null && ! $viewer->isControlFor($game)) {
             $query->where('user_id', $viewer->id);
         }
 
-        $runners = $query->get();
+        $characters = $query->get();
 
         $groups = [];
 
-        foreach ($runners as $runner) {
-            $gang = $runner->gang;
-            $key = $gang->id ?? 0;
+        foreach ($characters as $character) {
+            // Asked of the keys rather than the relations, because only the
+            // columns know that somebody belongs to no team at all.
+            [$key, $name, $hasBadge, $rank] = match (true) {
+                $character->gang_id !== null => ['gang:'.$character->gang_id, $character->gang->name, true, 0],
+                $character->corporation_id !== null => ['corporation:'.$character->corporation_id, $character->corporation->name, true, 1],
+                // Named for what they are rather than given a faction badge
+                // that would imply a team standing behind them.
+                default => ['unaffiliated', 'Unaffiliated', false, 2],
+            };
 
             if (! isset($groups[$key])) {
                 $groups[$key] = [
-                    'gang_id' => $gang?->id,
-                    // A Freelancer runs with nobody, so the group is named for
-                    // what they are rather than given a faction badge that
-                    // would imply a gang standing behind them.
-                    ...FactionBadge::for($gang->name ?? 'Freelancers'),
-                    'has_badge' => $gang !== null,
-                    'runners' => [],
+                    'key' => $key,
+                    ...FactionBadge::for($name),
+                    'has_badge' => $hasBadge,
+                    'rank' => $rank,
+                    'members' => [],
                 ];
             }
 
-            $cards = $runner->equipmentHoldings
+            $cards = $character->equipmentHoldings
                 ->map(fn (EquipmentHolding $holding): array => [
                     'card_type_id' => $holding->equipment_card_type_id,
                     'code' => $holding->cardType->code,
@@ -860,7 +869,7 @@ class GamePresenter
                     'category' => $holding->cardType->category->value,
                     'category_label' => $holding->cardType->category->label(),
                     'category_glyph' => $holding->cardType->category->glyph(),
-                    // What the card does, and its artwork: a Runner reading
+                    // What the card does, and its artwork: somebody reading
                     // their own hand is reading the cards, not a list of names.
                     'effect' => $holding->cardType->effect,
                     'image_path' => $holding->cardType->imagePath(),
@@ -870,24 +879,55 @@ class GamePresenter
                 ->values()
                 ->all();
 
-            $groups[$key]['runners'][] = [
-                'character_id' => $runner->id,
-                'name' => $runner->name,
-                'role' => $runner->role->value,
-                'role_label' => $runner->role->label(),
+            $groups[$key]['members'][] = [
+                'character_id' => $character->id,
+                'name' => $character->name,
+                'role' => $character->role->value,
+                'role_label' => $character->role->label(),
                 'cards' => $cards,
             ];
         }
 
-        // Gangs first and the Freelancers last, since they are the odd group
-        // out rather than one more gang.
         uasort(
             $groups,
-            fn (array $a, array $b): int => [$a['gang_id'] === null, $a['name']]
-                <=> [$b['gang_id'] === null, $b['name']],
+            fn (array $a, array $b): int => [$a['rank'], $a['name']] <=> [$b['rank'], $b['name']],
         );
 
-        return array_values($groups);
+        return array_values(array_map(
+            function (array $group): array {
+                unset($group['rank']);
+
+                return $group;
+            },
+            $groups,
+        ));
+    }
+
+    /**
+     * Everybody Control may hand a card to, for the picker that does it.
+     *
+     * The whole roster rather than the side that runs, for the reason
+     * equipmentHoldings() lists the whole roster: 2.1 has a Runner buying
+     * equipment from another player, so the card may be going to whoever is
+     * about to pass it on. The team travels with the name because forty-odd
+     * people are easier to find by the team they are in than by a surname
+     * nobody has learnt yet.
+     *
+     * @return array<int, array{character_id: int, name: string, role_label: string, team: string|null}>
+     */
+    public function equipmentRecipients(Game $game): array
+    {
+        return $game->characters()
+            ->with(['corporation', 'gang'])
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Character $character): array => [
+                'character_id' => $character->id,
+                'name' => $character->name,
+                'role_label' => $character->role->label(),
+                'team' => $character->corporation->name ?? $character->gang?->name,
+            ])
+            ->all();
     }
 
     /**

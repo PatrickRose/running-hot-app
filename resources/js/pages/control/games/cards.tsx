@@ -25,8 +25,9 @@ import { index, show } from '@/routes/control/games';
 import { destroy as destroyTechnology } from '@/routes/control/technologies';
 import type {
     EquipmentCardSummary,
+    EquipmentHoldingGroup,
+    EquipmentRecipient,
     FacilityTypeSummary,
-    GangEquipmentHoldings,
     GameSummary,
     ProtectionCardSummary,
     ResearchSuitSummary,
@@ -38,7 +39,8 @@ type Props = {
     game: GameSummary;
     protectionCards: ProtectionCardSummary[];
     equipment: EquipmentCardSummary[];
-    equipmentHoldings: GangEquipmentHoldings[];
+    equipmentHoldings: EquipmentHoldingGroup[];
+    equipmentRecipients: EquipmentRecipient[];
     technologies: TechnologySummary[];
     researchSuits: ResearchSuitSummary[];
     technologyTrees: TechnologyTreeSummary[];
@@ -65,6 +67,7 @@ export default function ControlCards({
     protectionCards,
     equipment,
     equipmentHoldings,
+    equipmentRecipients,
     technologies,
     researchSuits,
     technologyTrees,
@@ -271,15 +274,17 @@ export default function ControlCards({
                     <CardHeader>
                         <CardTitle>Who is carrying what</CardTitle>
                         <CardDescription>
-                            Equipment is held per Runner, because that is what
+                            Equipment is held per person, because that is what
                             the rulebook caps and what it takes away — three
                             equipped permanent items are theirs, and their
                             permanent Equipment goes to the Security player if
-                            they are carried out of a Facility. Set a count
-                            outright: buying from the market, selling to another
-                            Runner, splitting a haul and being handed a card for
-                            a job that went well all happen at the table, so
-                            what is recorded here is where the count ended up.
+                            they are carried out of a Facility. Anybody on the
+                            roster can be handed one: 2.1 has Runners buying
+                            equipment from other players, so a card may be
+                            sitting with whoever bought it to hand over. Giving
+                            adds copies; setting a count replaces it, which is
+                            the correction when a card is spent, a haul is split
+                            or a number was typed wrong.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -287,6 +292,7 @@ export default function ControlCards({
                             gameId={game.id}
                             holdings={equipmentHoldings}
                             cards={equipment}
+                            recipients={equipmentRecipients}
                         />
                     </CardContent>
                 </Card>
