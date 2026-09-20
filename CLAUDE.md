@@ -1934,6 +1934,83 @@ behind it and puts the form in a panel. The mark there is deliberately not a
 link any more — it used to point at `home`, which now redirects straight back to
 the form it is sitting on.
 
+**The login page offers Discord and nothing else**, unless
+`RUNNING_HOT_DIRECT_LOGIN` says otherwise. A seat is claimed by Discord handle,
+so an account made any other way is an account holding nothing — the player
+signs in, lands on a dashboard with no characters on it, and reads that as the
+application being broken rather than as the queue it is. The email form, the
+sign-up link and the passkey button are all behind that one flag, and the page
+says **"Confirm with Control that you are set up before logging in!"** above the
+buttons either way, because after you have signed in is too late to be told.
+
+It is on in `.env.example` and off in `config/running_hot.php`, which is
+deliberate in both directions: a fresh checkout can use the password logins
+`DemoGameSeeder` prints, and a deployment that never sets it gets the
+Discord-only page. The heading follows the state through `setLayoutProps` —
+telling somebody to enter a password above a page with no password box is how
+people end up hunting for a form that is not there.
+
+**It governs what is drawn, not what the endpoints accept**, and that is a
+decision rather than an oversight. Turning Fortify's features off instead would
+take the `register` route out of the Wayfinder modules, so `tsc` would pass or
+fail depending on which way the flag was set when somebody last ran
+`wayfinder:generate` — a build that breaks on an environment variable. The flag
+is a signpost for players, not an access control; if it ever needs to be one,
+`Fortify::authenticateUsing()` is the hook, and the passkey route would need its
+own answer because it does not go through that callback.
+
+**Dark is the default, and "follow the system" is still a setting.** The game is
+played in the evening and the application is themed off a neon sign, so dark is
+the design rather than a preference — `system` as a default put half the table
+on a white screen. The default is written in *three* places that have to agree —
+`HandleAppearance`, the `@class` on the `html` element and the inline script
+above it — because a server painting one theme and the client swapping to the
+other is the exact flash that inline script exists to prevent. `AppearanceTest`
+pins all three.
+
+The three-way choice stays on the settings page; the sidebar gets a one-click
+`AppearanceToggle` instead, because "follow the system" is a preference you set
+once and "the lights just went up" is a thing that happens mid-game. It reads
+`resolvedAppearance` rather than `appearance`, so somebody on `system` at night
+is offered light — the question is what they are looking at, not what they once
+chose.
+
+**The sidebar draws the seats a player holds, not every page the game has.**
+`App\Support\Navigation` decides it server-side from the characters they have
+claimed, the way `GamePresenter` decides which tier of the Facility board they
+get, and shares it as a `nav` prop. A plain shared prop rather than
+`Inertia::always()`, which is right here for once: the list only changes when
+Control seats somebody, a partial reload leaves the client holding what it had,
+and the query never runs on a poll. `undefined` therefore means "a poll did not
+re-send it" rather than "none", so the sidebar falls back to drawing everything
+rather than blanking itself mid-poll.
+
+Dashboard and Facilities are everybody's — the Facility list is posted in a
+Discord channel the whole game reads, and a Runner picks their target off it.
+Everything else follows the seat: Runs and Shop to both sides, Equipment to the
+Runners (a Corporate seat is refused Equipment outright), Research to any
+Corporate seat, Council to a CEO or to a character Control has written
+`council_votes` on. Control gets the lot, as everywhere.
+
+**Two of those are narrower than the rest of this file**, and it is the
+designer's ruling rather than a reading of the rulebook. 3.1.3 hands blank
+agenda cards to *players* rather than to CEOs, and `CouncilPresenter` still
+sends `my_cards` to anybody — so a Runner can write a custom agenda and now has
+no link to the page where they would. The research table's public tier is
+described above as "everybody's" and a Runner is no longer offered it either.
+Both were deliberate: a link to a room you hold no seat in is the application
+offering something it will not give. If a Runner ever needs the agenda
+composer back, the one-line change is `'council'` on any seat rather than on a
+Council seat — the rest of the page already decides for itself what that
+viewer may see.
+
+**Hiding a link is not closing a door**, which is why this lives in a
+presenter rather than in the policies. Every page behind these links already
+filters its own payload — two tiers on the Facility board, a hand that is only
+its owner's, a run Security cannot see until it starts — so somebody typing
+`/research` gets exactly what they would have got before. That is a curiosity;
+a link nobody can use is a bug.
+
 **The palette is sampled off the logo rather than chosen.** The neon tube in
 `public/images/running-hot.webp` sits at hue 33–40 with a chroma of about 0.24
 and its ground at a lightness of 0.067, which is where `--primary` and the dark

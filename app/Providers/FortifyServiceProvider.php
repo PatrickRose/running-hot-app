@@ -50,6 +50,11 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
+            // Whether to offer the application's own ways in beside Discord.
+            // Off in a real game: a seat is claimed by Discord handle, so an
+            // account made any other way holds nothing. See
+            // config/running_hot.php for the whole of the reasoning.
+            'canLoginDirectly' => (bool) config('running_hot.direct_login'),
             'status' => $request->session()->get('status'),
         ]));
 

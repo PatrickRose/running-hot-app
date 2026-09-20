@@ -47,6 +47,21 @@ enum CharacterRole: string
     }
 
     /**
+     * Roles that walk into a Facility (rulebook 3.4).
+     *
+     * The same two roles again, and a third separate question for the reason
+     * the one below is separate: 3.4 hands the Facility game to "Runners" as a
+     * side rather than to one role, so a Freelancer submits, carries Equipment
+     * and takes consequences like anybody else. This one is about what a player
+     * is *offered* - the Runs and Equipment pages - where the two below are
+     * about upkeep and about trackers.
+     */
+    public function goesOnRuns(): bool
+    {
+        return in_array($this, [self::Runner, self::Freelancer], true);
+    }
+
+    /**
      * Roles whose Credits, Wounds and Tags are their own.
      *
      * A Corporate player spends their Corporation's Credits rather than a purse

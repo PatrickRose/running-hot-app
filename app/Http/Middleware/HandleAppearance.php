@@ -16,7 +16,12 @@ class HandleAppearance
      */
     public function handle(Request $request, Closure $next): Response
     {
-        View::share('appearance', $request->cookie('appearance') ?? 'system');
+        // Dark unless the reader has said otherwise. The game is played in
+        // the evening and the application is themed off a neon sign, so dark
+        // is the design rather than a preference - 'system' as a default had
+        // half the table on a white screen. 'system' is still a setting; it is
+        // just no longer what you get for saying nothing.
+        View::share('appearance', $request->cookie('appearance') ?? 'dark');
 
         return $next($request);
     }
