@@ -20,10 +20,13 @@ import { show } from '@/routes/control/games';
 import researchRoutes from '@/routes/control/research';
 import { store as grantTechnology } from '@/routes/control/technology-holdings';
 import { destroy as destroyHolding } from '@/routes/control/technology-holdings';
+import { update as updateHolding } from '@/routes/control/technology-holdings';
 import type {
     GameSummary,
     ResearchControlState,
     ResearchEquationSummary,
+    ResearchFacilitySummary,
+    TechnologyHoldingSummary,
 } from '@/types/game';
 
 const SELECT_CLASS =
@@ -388,10 +391,13 @@ export default function ControlResearch({ game, research }: Props) {
                                                 {holding.discount_percent > 0 &&
                                                     ` · ${holding.discount_percent}% off`}
                                             </Badge>
-                                            <span className="text-muted-foreground">
-                                                {holding.facility ??
-                                                    'not housed'}
-                                            </span>
+                                            <MoveHolding
+                                                gameId={game.id}
+                                                holding={holding}
+                                                facilities={
+                                                    corporation.facilities
+                                                }
+                                            />
                                             {!holding.usable && (
                                                 <Badge variant="secondary">
                                                     Not working
@@ -431,6 +437,94 @@ export default function ControlResearch({ game, research }: Props) {
                 </Card>
             </div>
         </>
+    );
+}
+
+/**
+ * Where a technology card is stored, and Control moving it (rulebook 3.2.2).
+ *
+ * A Corporation's Security player moves their own cards by dragging them on the
+ * Facility board. Control needs the same reach without holding a seat - a
+ * Facility that has just been destroyed sends its cards somewhere, and that
+ * ruling must not wait on the Security player being at their laptop - so the
+ * panel says where a card is and offers to move it in one control.
+ *
+ * Only the Facilities that would actually take the card: this is the list of
+ * where it can go, and TechnologyService refuses the rest anyway. "Not in a
+ * Facility" is on it on purpose, because it is the way out of a card that is
+ * housed somewhere it should not be - unhouse it, then place it.
+ */
+function MoveHolding({
+    gameId,
+    holding,
+    facilities,
+}: {
+    gameId: number;
+    holding: TechnologyHoldingSummary;
+    facilities: ResearchFacilitySummary[];
+}) {
+    // A card a Run took out of the building has no Facility to be moved
+    // between. Control puts it back with Restore first.
+    if (holding.status === 'destroyed' || holding.status === 'stolen') {
+        return (
+            <span className="text-muted-foreground">out of the building</span>
+        );
+    }
+
+    const required = holding.required_facility_type_id;
+
+    const destinations = facilities.filter(
+        (facility) =>
+            facility.id !== holding.facility_id &&
+            facility.available &&
+            facility.stored < facility.capacity &&
+            (required === null || facility.facility_type_id === required),
+    );
+
+    return (
+        <span className="flex items-center gap-1">
+            <span className="text-muted-foreground">
+                {holding.facility ?? 'not housed'}
+            </span>
+            <select
+                aria-label={`Move ${holding.name} to another Facility`}
+                className="h-7 rounded-md border border-input bg-transparent px-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+                disabled={
+                    destinations.length === 0 && holding.facility_id === null
+                }
+                value=""
+                onChange={(event) => {
+                    const choice = event.target.value;
+
+                    event.target.value = '';
+
+                    if (choice === '') {
+                        return;
+                    }
+
+                    router.patch(
+                        updateHolding.url({
+                            game: gameId,
+                            holding: holding.id,
+                        }),
+                        // 0 is "not in a Facility", which is what the
+                        // controller reads it as.
+                        { facility_id: Number(choice) },
+                        { preserveScroll: true },
+                    );
+                }}
+            >
+                <option value="">Move to…</option>
+                {destinations.map((facility) => (
+                    <option key={facility.id} value={facility.id}>
+                        {facility.name} ({facility.stored}/{facility.capacity})
+                    </option>
+                ))}
+                {holding.facility_id !== null && (
+                    <option value="0">Not in a Facility</option>
+                )}
+            </select>
+        </span>
     );
 }
 

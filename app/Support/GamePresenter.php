@@ -472,7 +472,7 @@ class GamePresenter
             ->with([
                 'facilityType',
                 'protectionCards.cardType',
-                'technologyHoldings.technologyType',
+                'technologyHoldings.technologyType.requiredFacilityType',
                 'turnStates' => fn ($query) => $query->where('turn_id', $turn?->id),
             ])
             ->orderBy('name')
@@ -871,7 +871,7 @@ class GamePresenter
                 'facilities' => fn ($query) => $query->orderBy('name'),
                 'facilities.facilityType',
                 'facilities.protectionCards.cardType',
-                'facilities.technologyHoldings.technologyType',
+                'facilities.technologyHoldings.technologyType.requiredFacilityType',
                 'facilities.turnStates' => fn ($query) => $query->where('turn_id', $turn?->id),
             ])
             ->orderBy('name')
@@ -930,15 +930,29 @@ class GamePresenter
             // separately and names none of this.
             'technology_capacity' => $totals['technology_capacity'],
             'technologies' => $facility->technologyHoldings
+                // What is actually in the building. A card a Run stole or
+                // destroyed keeps its row - the ledger of what a Corporation
+                // once had is worth more than a tidy table - but it is not
+                // here any more, and listing it made the count on screen
+                // disagree with the capacity the server enforces.
+                ->filter(fn (TechnologyHolding $holding): bool => $holding->status->occupiesStorage())
                 ->sortBy(fn (TechnologyHolding $holding): string => $holding->technologyType->name)
                 ->values()
                 ->map(fn (TechnologyHolding $holding): array => [
                     'id' => $holding->id,
                     'name' => $holding->technologyType->name,
                     'code' => $holding->technologyType->code,
+                    'image_path' => $holding->technologyType->imagePath(),
+                    'description' => $holding->technologyType->description,
+                    'effect' => $holding->technologyType->effect,
                     'status' => $holding->status->value,
                     'status_label' => $holding->status->label(),
                     'origin_label' => $holding->origin->label(),
+                    // So the board can refuse a Facility that cannot house this
+                    // card before asking, and say why. The service refuses it
+                    // too, and is the one that decides.
+                    'required_facility_type_id' => $holding->technologyType->required_facility_type_id,
+                    'required_facility_type' => $holding->technologyType->requiredFacilityType?->name,
                     // 3.2.7 in one boolean: a claimed copy is paper until it is
                     // paid for, and a stolen piece of a split technology does
                     // nothing until its thief holds every piece.

@@ -287,6 +287,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | What a player may see of the Facilities | `App\Http\Controllers\FacilityBoardController` |
 | What a player may see of their Equipment | `App\Http\Controllers\EquipmentController`, `resources/js/pages/equipment.tsx` |
 | Security arranging their own stacks | `App\Http\Controllers\FacilityDefenceController`, `App\Policies\FacilityPolicy` |
+| Moving a stored technology between Facilities | `App\Http\Controllers\FacilityTechnologyController`, `App\Services\TechnologyService::place()` |
 | The drag-and-drop defence board | `resources/js/components/facility-defence-board.tsx` |
 | Auto-advance and its backstop | `App\Jobs\AdvancePhase`, `game:tick` |
 
@@ -626,6 +627,62 @@ them: a Runner is coming for the technologies, and the person deciding what to
 defend is looking at the Facility board.
 
 **Security arranges their own stacks; everyone else reads.** That page used to be read-only, on the reasoning that Security hands Control a requisition slip at the table. It is not any more: a Security player drags cards between their hand and their own Corporation's Facilities at `/facilities`, and Control is left for the rulings only Control can make. `FacilityPolicy::defend` is the whole of the boundary — the Corporation's *Security* seat, in a running game, and nobody else. The CEO and the Research player still see those stacks (3.4.2 keeps them Secret from outside the Corporation, not from inside it) and still cannot move them, because a board three people can drag at once is a board nobody can trust. Control keeps every power it had, through `before()` and through its own routes, so a ruling mid-game never waits on the Security player being at their laptop.
+
+**Where a technology is stored is Security's too, and it is dragged on the same
+board.** The rulebook has a Research player place a technology when they
+research it and then says nothing about moving it afterwards, because at the
+table the cards are in front of you and you pick one up. What the application
+had instead was `TechnologyService::place()` and a Control route that *nothing
+on any screen called* — so a card could not be moved at all without somebody
+hand-writing a PATCH, and a Corporation that had just lost a Facility, or wanted
+its four pieces of Power in four buildings rather than one, had no way to say
+so.
+
+It is Security's for the reason the stacks are: which Facility holds a
+technology is a decision about what a Run would come away with and what is worth
+defending, made by the person already making the other half of it, and 3.4.2
+keeps a Facility's contents Secret from outside the Corporation rather than from
+Security. `FacilityPolicy::defend` is the whole boundary again, asked of the
+Facility the card is going *into* — which is both what the gesture names and
+what the route's path carries. The controller adds the second half of it, as
+`RunController` does: the policy only asks whether that Facility is yours, so
+without a check that the card's Corporation matches, a Security player could
+pull a rival's technology across into their own building. The CEO and the
+Research player read the cards where they are stored and cannot move them, and
+they could not read them on that page at all before — the technologies were
+drawn on the Security tier only, which is the wrong line: 3.4.2 draws it around
+the Corporation, not around the seat.
+
+**A technology shelf is not a stack, and the board says so in what it draws.**
+Storage has no order — nothing is met first, and a Run draws from it blind — so
+the shelf holds chips rather than the column of card faces the stacks use, with
+the whole card a hover away and in the drag overlay. Four gestures on one board
+now, and the two that cannot mean anything are refused by name rather than
+silently ignored: a Protection Card dropped on a shelf is told it goes in a
+stack, and a technology dropped on a stack or in the hand is told it is stored
+rather than installed.
+
+**Every stored card also carries a Move menu, and that is not a nicety.** A drag
+has no keyboard path here — the board registers dnd-kit's `KeyboardSensor` for
+sorting a stack, not for carrying a card across the page — and on a phone the
+Facility you are moving to is usually scrolled off the screen the card is on.
+Same reasoning as the Remove button on every installed card. The menu lists only
+the Facilities that would actually take the card, and it goes through the same
+guarded path the drop does rather than a second copy of the refusals. Control's
+panel has the same menu on its own route, because Control holds no Corporate
+seat and so never sees `/facilities`' own tier.
+
+**A card a Run took is not in the building to be moved.** `place()` refuses a
+Destroyed or Stolen holding outright: the row stays because what a Corporation
+once had is worth more than a tidy table, but putting one back is `restore()`
+and Control's judgement rather than something a drag does quietly. Control's
+update route therefore restores *before* it places, so salvaging a card and
+saying where it goes is still one request. The same reading fixed a quieter bug
+one layer along: `GamePresenter::facility()` listed every holding whatever its
+status, so a card Control had destroyed stayed on the Facility board and counted
+towards a capacity the server was not enforcing it against. It filters on
+`TechnologyHoldingStatus::occupiesStorage()` now, which is the predicate the Run
+side already used.
 
 **The rules did not move with the routes.** `App\Http\Controllers\FacilityDefenceController` is a thin thing: every write goes through `FacilityDefenceService`, so a full stack is still refused, a card the Corporation does not hold is still refused, and every Credit still lands in the `tracker_adjustments` ledger with the Security player's name against it rather than Control's. Do not let a player-facing route grow its own copy of a rule.
 

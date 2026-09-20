@@ -367,7 +367,7 @@ class ResearchPresenter
     private function holdings(Corporation $corporation): array
     {
         return $corporation->technologyHoldings()
-            ->with('technologyType', 'facility')
+            ->with('technologyType.requiredFacilityType', 'facility')
             ->orderBy('id')
             ->get()
             ->map(fn (TechnologyHolding $holding): array => [
@@ -385,6 +385,11 @@ class ResearchPresenter
                 'discount_percent' => $holding->discount_percent,
                 'facility_id' => $holding->facility_id,
                 'facility' => $holding->facility?->name,
+                // So Control's panel can offer the Facilities that would
+                // actually take this card rather than every one the
+                // Corporation owns (rulebook 3.2.2).
+                'required_facility_type_id' => $holding->technologyType->required_facility_type_id,
+                'required_facility_type' => $holding->technologyType->requiredFacilityType?->name,
                 'paid' => $holding->paid(),
                 // The split rules of 3.2.7 in one boolean: a claimed copy is
                 // paper, and a stolen piece of a four-part technology does

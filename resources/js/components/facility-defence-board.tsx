@@ -44,6 +44,11 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { budget as budgetRoute } from '@/routes/facilities';
 import {
     install as installRoute,
@@ -51,6 +56,7 @@ import {
     remove as removeRoute,
     reorder as reorderRoute,
 } from '@/routes/facilities/cards';
+import { move as moveTechnologyRoute } from '@/routes/facilities/technologies';
 import type {
     CorporationFacilities,
     FacilitySummary,
@@ -59,6 +65,7 @@ import type {
     ProtectionKind,
     ProtectionStack,
     ReorderQuote,
+    StoredTechnology,
 } from '@/types/game';
 
 /**
@@ -77,6 +84,30 @@ function stackId(facilityId: number, kind: ProtectionKind): StackId {
     return `stack-${facilityId}-${kind}`;
 }
 
+/**
+ * Where a Facility's technologies are stored, and the drop target that moves
+ * one into it (rulebook 3.2.2).
+ *
+ * A Facility has one shelf and two stacks, because storage is not a stack: the
+ * cards in it have no order, nothing is met first, and a Run draws from them
+ * blind. So the shelf carries only the Facility, where a stack has to carry the
+ * kind as well.
+ */
+type ShelfId = string;
+
+function shelfId(facilityId: number): ShelfId {
+    return `shelf-${facilityId}`;
+}
+
+function isShelf(target: string): boolean {
+    return target.startsWith('shelf-');
+}
+
+/** Which Facility a stack or shelf id belongs to. */
+function facilityIdOf(target: string): number {
+    return Number(target.split('-')[1]);
+}
+
 /** What travels with a card while it is being dragged. */
 type DragData =
     | { type: 'hand'; container: typeof HAND; card: HandCard }
@@ -86,7 +117,22 @@ type DragData =
           facilityId: number;
           kind: ProtectionKind;
           card: InstalledProtectionCard;
+      }
+    | {
+          type: 'technology';
+          container: ShelfId;
+          facilityId: number;
+          technology: StoredTechnology;
       };
+
+/** The card being dragged, whichever kind of card it is. */
+function draggedName(data: DragData | undefined | null): string {
+    if (!data) {
+        return 'a card';
+    }
+
+    return data.type === 'technology' ? data.technology.name : data.card.name;
+}
 
 /**
  * Where in the stack a card sits, in words.
@@ -125,6 +171,27 @@ function cardLines(card: HandCard | InstalledProtectionCard) {
 }
 
 /**
+ * The lines a technology card prints, in the order the card prints them.
+ *
+ * Not the four suit costs: what a stored card cost is the research game's
+ * question and it has already been answered. On this page the card is a thing a
+ * Run may come away with, so what it says it does is the useful half, and the
+ * Facility type it names is the one thing that decides where it may go.
+ */
+function technologyLines(technology: StoredTechnology) {
+    return [
+        { label: '', value: technology.description },
+        { label: 'Effect', value: technology.effect },
+        {
+            label: 'Housed in',
+            value: technology.required_facility_type
+                ? `a ${technology.required_facility_type} Facility`
+                : null,
+        },
+    ];
+}
+
+/**
  * Security arranging their own Corporation's defences by dragging (rulebook
  * 3.3.4).
  *
@@ -141,6 +208,12 @@ function cardLines(card: HandCard | InstalledProtectionCard) {
  *   because reordering costs 1 Credit per card that moves and at the table you
  *   lay the cards out and then pay once - not a Credit every time you change
  *   your mind.
+ * - Shelf to shelf moves a technology between Facilities (3.2.2), immediately.
+ *   It costs nothing - storage is not a stack and there is no order to pay for
+ *   - and it is the one gesture here that does not involve a Protection Card
+ *   at all. A technology dropped anywhere else is refused rather than guessed
+ *   at, because a card that is stored and a card that defends are different
+ *   things that happen to sit on the same page.
  *
  * The Credit cost of an arrangement comes from the server as the cards move.
  * The rule is a longest-ascending-run over the old positions, and a second
@@ -312,6 +385,34 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
             overData?.sortable?.containerId ??
             String(over.id);
 
+        if (source.type === 'technology') {
+            if (!isShelf(target)) {
+                toast.error(
+                    `${source.technology.name} is stored rather than installed. Drop it on another Facility's technology storage.`,
+                );
+
+                return;
+            }
+
+            const to = facilitiesById.get(facilityIdOf(target));
+
+            if (to) {
+                moveTechnology(source.technology, source.facilityId, to);
+            }
+
+            return;
+        }
+
+        // A Protection Card defends a Facility; it is not kept in one. Saying
+        // so beats a drop that silently does nothing.
+        if (isShelf(target)) {
+            toast.error(
+                `${source.card.name} is a Protection Card, so it goes in a stack rather than in storage.`,
+            );
+
+            return;
+        }
+
         if (source.type === 'hand') {
             if (target !== HAND) {
                 installInto(target, source.card);
@@ -451,6 +552,65 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
         setPending((was) => ({ ...was, [key]: next }));
     }
 
+    /**
+     * Store a technology in another of the Corporation's Facilities.
+     *
+     * One implementation for both ways of asking: the drag resolves which
+     * Facility was dropped on and hands it here, and the per-card menu - which
+     * is the only path a keyboard has - hands over the one that was picked. A
+     * second copy of these refusals behind the menu would be a second set of
+     * rules to keep in step with the server's.
+     *
+     * Checked here as well as on the server so the refusal is instant and names
+     * the Facility. The server still decides: TechnologyService::place() is the
+     * one that knows what a Corporation owns.
+     */
+    const moveTechnology = useCallback(
+        (technology: StoredTechnology, from: number, to: FacilitySummary) => {
+            if (to.id === from) {
+                return;
+            }
+
+            if (!to.available) {
+                toast.error(
+                    `${to.name} is still being built, so it stores nothing yet.`,
+                );
+
+                return;
+            }
+
+            const required = technology.required_facility_type_id;
+
+            if (required !== null && to.facility_type_id !== required) {
+                toast.error(
+                    `${technology.name} has to be housed in a ${technology.required_facility_type} Facility, and ${to.name} is a ${to.facility_type} one.`,
+                );
+
+                return;
+            }
+
+            if (to.technologies.length >= to.technology_capacity) {
+                toast.error(
+                    to.technology_capacity === 0
+                        ? 'You have no Corporate Facilities, so you can store no technologies at all.'
+                        : `${to.name} is already storing its ${to.technology_capacity} technologies.`,
+                );
+
+                return;
+            }
+
+            router.patch(
+                moveTechnologyRoute.url({
+                    facility: to.id,
+                    holding: technology.id,
+                }),
+                {},
+                { preserveScroll: true },
+            );
+        },
+        [],
+    );
+
     function confirmArrangement(
         facility: FacilitySummary,
         kind: ProtectionKind,
@@ -500,7 +660,9 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
                         Runners come in at the top of a stack and work down.
                         Dragging within a stack costs 1 Credit for every card
                         that has to move, and nothing is charged until you
-                        confirm it.
+                        confirm it. Technologies move between Facilities for
+                        nothing — drag one onto another Facility's storage, or
+                        use its Move menu.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
@@ -508,6 +670,8 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
                         <FacilityPanel
                             key={facility.id}
                             facility={facility}
+                            facilities={own.facilities}
+                            onMoveTechnology={moveTechnology}
                             orderFor={orderFor}
                             pending={pending}
                             quotes={quotes}
@@ -527,7 +691,16 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
             {/* The card follows the pointer at full size, so what is being
                 dragged is the card itself rather than a ghost of a row. */}
             <DragOverlay>
-                {dragging ? (
+                {dragging === null ? null : dragging.type === 'technology' ? (
+                    <CardFace
+                        shape="landscape"
+                        name={dragging.technology.name}
+                        code={dragging.technology.code}
+                        imagePath={dragging.technology.image_path}
+                        lines={technologyLines(dragging.technology)}
+                        className="rotate-2 opacity-95 shadow-lg"
+                    />
+                ) : (
                     <CardFace
                         shape="landscape"
                         name={dragging.card.name}
@@ -536,7 +709,7 @@ export function FacilityDefenceBoard({ own }: { own: CorporationFacilities }) {
                         lines={cardLines(dragging.card)}
                         className="rotate-2 opacity-95 shadow-lg"
                     />
-                ) : null}
+                )}
             </DragOverlay>
         </DndContext>
     );
@@ -767,6 +940,8 @@ function SecurityBudget({ facility }: { facility: FacilitySummary }) {
 
 function FacilityPanel({
     facility,
+    facilities,
+    onMoveTechnology,
     orderFor,
     pending,
     quotes,
@@ -775,6 +950,13 @@ function FacilityPanel({
     onDiscard,
 }: {
     facility: FacilitySummary;
+    /** Every Facility the Corporation has, because a technology moves to one. */
+    facilities: FacilitySummary[];
+    onMoveTechnology: (
+        technology: StoredTechnology,
+        from: number,
+        to: FacilitySummary,
+    ) => void;
     orderFor: (facility: FacilitySummary, stack: ProtectionStack) => number[];
     pending: Record<StackId, number[]>;
     quotes: Record<StackId, ReorderQuote | null>;
@@ -812,31 +994,11 @@ function FacilityPanel({
 
             <SecurityBudget facility={facility} />
 
-            {/* What is stored in here, above the stacks that defend it: a
-                Runner is coming for the technologies, so the Facility reads as
-                what it holds and then how it is protected. Secret from outside
-                the Corporation (3.4.2) and so never in the public list. */}
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-muted-foreground">
-                    Technologies {facility.technologies.length} of{' '}
-                    {facility.technology_capacity}
-                </span>
-                {facility.technologies.map((technology) => (
-                    <Badge
-                        key={technology.id}
-                        variant={technology.usable ? 'outline' : 'secondary'}
-                        title={`${technology.status_label} · ${technology.origin_label}${
-                            technology.usable ? '' : ' · does nothing yet'
-                        }`}
-                    >
-                        {technology.name}
-                        {!technology.usable && ' ·\u00a0inert'}
-                    </Badge>
-                ))}
-                {facility.technologies.length === 0 && (
-                    <span className="text-muted-foreground">— empty</span>
-                )}
-            </div>
+            <TechnologyShelf
+                facility={facility}
+                facilities={facilities}
+                onMove={onMoveTechnology}
+            />
 
             <div className="mt-3 grid gap-4 lg:grid-cols-2">
                 {facility.stacks.map((stack) => (
@@ -856,6 +1018,249 @@ function FacilityPanel({
                 ))}
             </div>
         </div>
+    );
+}
+
+/**
+ * What a Facility is holding, and the drop target that moves a card into it
+ * (rulebook 3.2.2).
+ *
+ * Above the stacks that defend it, because a Runner is coming for the
+ * technologies: the Facility reads as what it holds and then as how it is
+ * protected. Secret from outside the Corporation (3.4.2) and so never in the
+ * public list.
+ *
+ * The cards are chips rather than the full card faces the stacks use, and that
+ * is the difference between the two halves of the panel rather than a saving.
+ * Storage has no order - nothing is met first, and a Run draws from it blind -
+ * so there is nothing to read down a column of pictures for, and holding six
+ * card faces above every pair of stacks would push the stacks off the screen.
+ * The whole card is a hover away, and it is what the drag carries.
+ */
+function TechnologyShelf({
+    facility,
+    facilities,
+    onMove,
+}: {
+    facility: FacilitySummary;
+    facilities: FacilitySummary[];
+    onMove: (
+        technology: StoredTechnology,
+        from: number,
+        to: FacilitySummary,
+    ) => void;
+}) {
+    const key = shelfId(facility.id);
+    const { setNodeRef, isOver } = useDroppable({
+        id: key,
+        data: { container: key },
+    });
+
+    const full = facility.technologies.length >= facility.technology_capacity;
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={`mt-3 flex flex-wrap items-center gap-2 rounded-md border border-dashed p-2 text-sm transition-colors ${
+                isOver ? 'border-primary bg-primary/5' : 'border-transparent'
+            }`}
+        >
+            <span className="text-muted-foreground">
+                Technologies {facility.technologies.length} of{' '}
+                {facility.technology_capacity}
+            </span>
+
+            <ul
+                aria-label={`Technologies stored in ${facility.name}`}
+                className="flex flex-wrap items-center gap-2"
+            >
+                {facility.technologies.map((technology) => (
+                    <StoredTechnologyItem
+                        key={technology.id}
+                        technology={technology}
+                        facility={facility}
+                        facilities={facilities}
+                        onMove={onMove}
+                    />
+                ))}
+            </ul>
+
+            {facility.technologies.length === 0 && (
+                <span className="text-muted-foreground">
+                    {facility.available
+                        ? full
+                            ? '— nothing stored, and no room to store any.'
+                            : '— empty. Drag a technology here.'
+                        : '— still being built, so it stores nothing yet.'}
+                </span>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Everything a stored technology says.
+ *
+ * Shared by the tooltip and by the text a screen reader is given, so the two
+ * can never drift into saying different things about the same card - the same
+ * split, and for the same reason, as CardFace's own. The name is only on the
+ * tooltip, which has to say which card it belongs to; the reader has it from
+ * the chip.
+ */
+function TechnologyWords({
+    technology,
+    withName = false,
+}: {
+    technology: StoredTechnology;
+    withName?: boolean;
+}) {
+    return (
+        <span className="flex flex-col gap-1 text-left">
+            {withName && <span className="font-medium">{technology.name}</span>}
+            <span className="opacity-70">
+                {technology.status_label} · {technology.origin_label}
+                {technology.usable ? '' : ' · does nothing yet'}
+            </span>
+            {technologyLines(technology)
+                .filter((line) => line.value)
+                .map((line) => (
+                    <span key={line.label} className="leading-snug">
+                        {line.label ? (
+                            <span className="opacity-70">{line.label} </span>
+                        ) : null}
+                        {line.value}
+                    </span>
+                ))}
+        </span>
+    );
+}
+
+/**
+ * One stored technology: a chip you can drag, and a menu you can reach without
+ * a pointer.
+ *
+ * Both, and neither is a nicety. Dragging is what people reach for when the
+ * Facilities are laid out in front of them, and it is the gesture the rest of
+ * this board is built on. But a drag has no keyboard path here - the board
+ * registers dnd-kit's KeyboardSensor for sorting a stack, not for carrying a
+ * card across the page - and on a phone the Facility you are moving to is
+ * usually scrolled off the screen the card is on. The menu is the answer to
+ * both, the same way every installed card carries a Remove button as well as
+ * the drag that removes it.
+ *
+ * A Facility that cannot take this card is left out of the menu rather than
+ * offered and refused: the list is short, and what it is for is telling you
+ * where the card can go.
+ */
+function StoredTechnologyItem({
+    technology,
+    facility,
+    facilities,
+    onMove,
+}: {
+    technology: StoredTechnology;
+    facility: FacilitySummary;
+    facilities: FacilitySummary[];
+    onMove: (
+        technology: StoredTechnology,
+        from: number,
+        to: FacilitySummary,
+    ) => void;
+}) {
+    // Only the listeners, never dnd-kit's attributes. They announce a
+    // draggable that answers to the keyboard and make the chip a tab stop, and
+    // neither is true here: the board's KeyboardSensor is for sorting a stack,
+    // and the keyboard's way to move a technology is the menu beside it. Two
+    // tab stops per card, one of which does nothing, is worse than one.
+    const { listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: `technology-${technology.id}`,
+        data: {
+            type: 'technology',
+            container: shelfId(facility.id),
+            facilityId: facility.id,
+            technology,
+        } satisfies DragData,
+    });
+
+    const required = technology.required_facility_type_id;
+
+    const destinations = facilities.filter(
+        (candidate) =>
+            candidate.id !== facility.id &&
+            candidate.available &&
+            candidate.technologies.length < candidate.technology_capacity &&
+            (required === null || candidate.facility_type_id === required),
+    );
+
+    return (
+        <li
+            ref={setNodeRef}
+            style={{
+                transform: CSS.Translate.toString(transform),
+                opacity: isDragging ? 0.4 : undefined,
+            }}
+            className="flex items-center gap-1"
+        >
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span
+                        className="cursor-grab touch-none rounded-md active:cursor-grabbing"
+                        {...listeners}
+                    >
+                        <Badge
+                            variant={
+                                technology.usable ? 'outline' : 'secondary'
+                            }
+                        >
+                            {technology.name}
+                            {!technology.usable && ' ·\u00a0inert'}
+                        </Badge>
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                    <TechnologyWords technology={technology} withName />
+                </TooltipContent>
+            </Tooltip>
+
+            {/* The same words in the page rather than behind a hover, because
+                the chip is not focusable and a tooltip is a pointer's
+                convenience. CardFace does this for the card faces beside it. */}
+            <span className="sr-only">
+                <TechnologyWords technology={technology} />
+            </span>
+
+            {/* Reset to the placeholder after every choice, because this is a
+                button that happens to be a menu rather than a field with a
+                value: the card's Facility is the panel it is drawn in, and the
+                page it moves to says so. */}
+            <select
+                aria-label={`Move ${technology.name} to another Facility`}
+                className="h-6 rounded-md border border-input bg-transparent px-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+                disabled={destinations.length === 0}
+                value=""
+                onChange={(event) => {
+                    const to = facilities.find(
+                        (candidate) =>
+                            candidate.id === Number(event.target.value),
+                    );
+
+                    event.target.value = '';
+
+                    if (to) {
+                        onMove(technology, facility.id, to);
+                    }
+                }}
+            >
+                <option value="">
+                    {destinations.length === 0 ? 'Nowhere to move' : 'Move to…'}
+                </option>
+                {destinations.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                        {candidate.name}
+                    </option>
+                ))}
+            </select>
+        </li>
     );
 }
 
@@ -1092,24 +1497,40 @@ function InstalledCardItem({
 }
 
 /**
+ * What a drop target is, in words rather than as an id.
+ *
+ * A sortable card answers with its own id rather than its container's, which is
+ * as much as the announcement needs: what matters is which of the three kinds
+ * of place the card is over, and a card is only ever inside a stack.
+ */
+function targetName(id: string | number): string {
+    const key = String(id);
+
+    if (key === HAND) {
+        return 'your hand';
+    }
+
+    return isShelf(key)
+        ? "a Facility's technology storage"
+        : 'a Facility stack';
+}
+
+/**
  * What a screen reader is told while a card is being dragged.
  *
  * dnd-kit's defaults talk about sortable positions, which say nothing about
- * what is happening here: the same gesture installs, arranges or removes
- * depending on where the card lands.
+ * what is happening here: the same gesture installs, arranges, removes or moves
+ * a technology to another building, depending on what was picked up and where
+ * it lands.
  */
 const announcements: Announcements = {
     onDragStart: ({ active }) =>
-        `Picked up ${(active.data.current as DragData | undefined)?.card.name ?? 'a card'}.`,
+        `Picked up ${draggedName(active.data.current as DragData | undefined)}.`,
     onDragOver: ({ over }) =>
-        over
-            ? `Over ${over.id === HAND ? 'your hand' : 'a Facility stack'}.`
-            : 'Not over a drop target.',
+        over ? `Over ${targetName(over.id)}.` : 'Not over a drop target.',
     onDragEnd: ({ over }) =>
         over
-            ? over.id === HAND
-                ? 'Dropped into your hand.'
-                : 'Dropped into a Facility stack.'
-            : 'Dropped outside any stack, so nothing changed.',
+            ? `Dropped into ${targetName(over.id)}.`
+            : 'Dropped outside any target, so nothing changed.',
     onDragCancel: () => 'Cancelled. The card is back where it was.',
 };
