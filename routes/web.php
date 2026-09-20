@@ -32,6 +32,7 @@ use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
 use App\Http\Controllers\FacilityTechnologyController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ResearchBoardController;
 use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
@@ -40,7 +41,14 @@ use App\Http\Controllers\RunController;
 use App\Http\Controllers\ShopController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+/*
+ * There is no landing page. Everybody who uses this application signs in — a
+ * player to their seats, Control to its panel — so the front door is the login
+ * form rather than a page describing the game to somebody already here to play
+ * it. The name is kept because logging out, deleting an account and asking for
+ * a fresh verification mail all redirect to it.
+ */
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware('guest')->group(function () {
     Route::get('auth/discord', [DiscordController::class, 'redirect'])->name('auth.discord');

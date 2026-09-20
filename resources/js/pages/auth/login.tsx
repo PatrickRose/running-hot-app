@@ -108,7 +108,7 @@ export default function Login({ status, canResetPassword }: Props) {
                     <span className="w-full border-t border-border" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
+                    <span className="bg-card px-2 text-muted-foreground">
                         Or
                     </span>
                 </div>
@@ -122,7 +122,7 @@ export default function Login({ status, canResetPassword }: Props) {
             </Button>
 
             {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
+                <div className="mb-4 text-center text-sm font-medium text-green-600 dark:text-green-400">
                     {status}
                 </div>
             )}

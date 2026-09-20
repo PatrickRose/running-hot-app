@@ -1916,6 +1916,54 @@ The rulebook prints the four Research Point suits as icons and never names them 
 
 **The font is loaded through Vite, not from `public/`.** `laravel-vite-plugin` sets Vite's `publicDir` to `false`, and in development the stylesheet is served from the Vite origin — so a root-relative `url('/fonts/…')` asks the dev server for a directory it does not serve, 404s, and the icons silently degrade to bare letters for everybody running `composer run dev` while working perfectly once built. Anything referenced from CSS has to live under `resources/` and be referenced relatively. Card artwork is the opposite case and belongs in `public/`.
 
+## The front door, and the theme
+
+**There is no landing page.** Everybody who opens this application signs in — a
+player to their seats, Control to its panel — so a page describing the game to
+somebody already here to play it was a door nobody wanted to be shown. `/` is a
+redirect instead: to `login` for a visitor, to `dashboard` for somebody already
+signed in, so the one URL anybody types lands them where they were going rather
+than making them click through. The route keeps the name `home`, because logging
+out, deleting an account and asking for a fresh verification mail all redirect
+to it and Fortify's own `home` config is a separate thing pointing at
+`/dashboard`.
+
+Which makes the **login page the first thing anybody sees of the game**, so it is
+dressed as the game: `AuthSimpleLayout` throws the logo's own glow onto the page
+behind it and puts the form in a panel. The mark there is deliberately not a
+link any more — it used to point at `home`, which now redirects straight back to
+the form it is sitting on.
+
+**The palette is sampled off the logo rather than chosen.** The neon tube in
+`public/images/running-hot.webp` sits at hue 33–40 with a chroma of about 0.24
+and its ground at a lightness of 0.067, which is where `--primary` and the dark
+theme's background come from. Three things about that are worth not undoing:
+
+- **Every value was checked against the sRGB gamut, and every readable pair
+  against WCAG AA.** An oklch outside the gamut is clipped *silently*, so the
+  colour that ships is not the one in the file and nothing says so. The tight
+  pairs are the light theme's `--primary` (white label on it, 4.71) and its
+  `--muted-foreground` (5.79) — raising the lightness of either is what breaks
+  them.
+- **`--destructive` moved to hue 14–16, away from the usual 27.** The primary is
+  now an orange-red, and a Delete button the same colour as the Log in button is
+  a Delete button nobody sees coming. It still reads unmistakably red; it is
+  just on the other side of the tube.
+- **The inline `<style>` in `app.blade.php` holds the same two background
+  colours a second time**, because it paints the `html` element before the CSS
+  bundle lands. It is the one place the tokens are duplicated, and leaving it
+  behind is a flash of the old white on every dark-theme load.
+
+**The theme is the tokens, and almost nothing else.** Every shadcn component
+already reads `--primary`, `--muted` and the rest, so the restyle is that one
+file — which is also why the starter kit's literal `neutral-*` chrome had to go
+(the appearance tabs, the avatar fallbacks, the header, the footer links): a
+cold grey does not follow a warm theme, and it was the one thing on the page
+still the colour the starter kit left it. The literal `amber`, `red` and `green`
+in the game's own components are deliberately left alone: those carry meaning
+rather than brand, and a warning that changes colour with the theme is a warning
+nobody can rely on.
+
 ## Built so far
 
 The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and the security budget — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the accesses a successful one buys, the screen players work it from, the Runners being let into the Facility's own Discord channels for the length of it, and what each Runner is carrying — the Equipment holdings, seeded from the briefings and handed out by Control — and the shop: Control putting cards out at a price with a stock behind them, and both counters players buy from, the Corporation shop out of the Corporation's Credits and the market out of their own.
