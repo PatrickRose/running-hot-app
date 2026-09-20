@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
+import { claim, register } from '@/routes';
 import { discord } from '@/routes/auth';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
@@ -157,6 +157,18 @@ export default function Login({
                     Continue with Discord
                 </a>
             </Button>
+
+            {/*
+                The way out of the one failure this page cannot fix by itself:
+                Control reserved the seat against a handle that never reached
+                them, so signing in works and finds nothing. It sits under the
+                Discord button because that is the point at which somebody
+                discovers it.
+            */}
+            <div className="text-center text-sm text-muted-foreground">
+                Signed in before and found no character?{' '}
+                <TextLink href={claim()}>Find my seat</TextLink>
+            </div>
 
             {status && (
                 <div className="mb-4 text-center text-sm font-medium text-green-600 dark:text-green-400">

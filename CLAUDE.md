@@ -1989,6 +1989,67 @@ for somebody Control has never set up — but it is not closed, and turning
 Fortify's features off instead is still the wrong lever for the Wayfinder
 reason above.
 
+**And there is a way back in for whoever the handle failed.** A seat is
+reserved against a Discord handle, and that is wrong often enough to matter:
+Control types them off a sign-up list, people rename themselves between signing
+up and turning up, and a handle Control never got leaves somebody signing in to
+a dashboard with no characters on it — which reads as the application being
+broken. `characters.email` is the second claim ticket, and `/claim` is where a
+player redeems it: name the address you signed up with, and the seat is bound
+to the Discord account that comes back.
+
+**It works from both sides of the sign in, because both cases are real.** A
+visitor names their address and is sent through the Discord sign in that
+already exists; somebody *already signed in* — because signing in worked, it
+just found them nothing — is bound on the spot, since there is no reason to
+send them round through Discord to learn what the session already knows. So the
+route sits in neither the `guest` nor the `auth` group: either one would shut
+the door on half the people it exists for.
+
+**The address rides the session, not the character.** `CharacterClaimController::PENDING`
+holds the address across the OAuth round trip and `DiscordController` redeems
+it, and it is looked up *again* at the far end rather than resolved once on the
+way out — what Control edits between one step and the next is the roster, so a
+correction made in the meantime is picked up. It is `pull`ed rather than read,
+because an address that found nothing must not sit in the session waiting to
+fire on a later sign in.
+
+**The claim writes the handle on as well as the `user_id`.** The id is the
+permanent binding; the handle goes on so the Control panel shows the seat as
+linked and every later sign in claims it the ordinary way. Only if the sign in
+brought one, though — a password account has none, and writing null over what
+Control typed would throw it away.
+
+**The address proves nothing, and that is a decision rather than an oversight.**
+Anybody who knows a player's email can link that seat to their own Discord
+account. Two things hold it down: a claim only ever takes a seat with no
+`user_id`, so it can never take one somebody already holds, and Control can
+release a character from the panel, which is the existing undo. A one-time code
+to the address was the alternative and was turned down — `MAIL_MAILER` is `log`
+in `.env.example`, so it would have meant depending on SMTP being right on the
+night, and if it were not then the people who could not self-serve would be
+exactly the people this exists for. If that trade ever stops being acceptable,
+the code goes between `store()` and the redirect to Discord and nothing else
+moves.
+
+**Two characters in one game may not share an address.** A claim takes *every*
+unheld seat on one, so a duplicate would hand whoever got there first both of
+them. It is the same bound the Discord handle already carries and for the same
+reason; a player genuinely on two seats in one game takes the second by handle.
+Across games it is fine, because a different game is a different roster.
+
+**Control seats are deliberately not in this.** `control_members` goes on
+claiming by handle alone: an organiser whose handle was mistyped is fixed by
+another organiser editing the Control team, and the same failure does not leave
+them locked out of a game they are playing.
+
+**The refusals name which case you are in** rather than failing blankly —
+nobody reserved for that address, every seat on it already claimed, or you
+already hold them all. That does leak whether an address is on a roster, which
+is consistent with the trust the flow already extends and is not worth being
+vague about when the alternative is a player who cannot tell whether they typed
+it wrong.
+
 **Dark is the default, and "follow the system" is still a setting.** The game is
 played in the evening and the application is themed off a neon sign, so dark is
 the design rather than a preference — `system` as a default put half the table

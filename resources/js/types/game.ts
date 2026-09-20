@@ -125,6 +125,11 @@ export type CharacterSubject = TrackerSubject & {
     is_corporate: boolean;
     team: string | null;
     discord_username: string | null;
+    /**
+     * The address the player signed up with, which is the way back in when the
+     * handle was never right. Control's alone — it is on no player payload.
+     */
+    email: string | null;
     claimed_by: string | null;
     /**
      * The four printed stats. Not Trackers — they are what a character is

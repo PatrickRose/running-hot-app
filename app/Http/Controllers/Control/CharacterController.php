@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Control;
 
+use App\Actions\ClaimCharactersByEmail;
 use App\Actions\ClaimCharactersForUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\UpdateCharacterDiscordRequest;
+use App\Http\Requests\Control\UpdateCharacterEmailRequest;
 use App\Http\Requests\Control\UpdateCharacterStatsRequest;
 use App\Models\Character;
 use App\Models\Game;
@@ -13,7 +15,10 @@ use Illuminate\Http\RedirectResponse;
 
 class CharacterController extends Controller
 {
-    public function __construct(private readonly ClaimCharactersForUser $claimCharacters) {}
+    public function __construct(
+        private readonly ClaimCharactersForUser $claimCharacters,
+        private readonly ClaimCharactersByEmail $claimByEmail,
+    ) {}
 
     /**
      * Reserve a character for a Discord handle, ahead of the player signing in.
@@ -44,6 +49,44 @@ class CharacterController extends Controller
         }
 
         return back()->with('status', $character->name.' reserved for @'.$handle.'.');
+    }
+
+    /**
+     * Reserve a character for the address a player signed up with.
+     *
+     * The second claim ticket, and the one Control reaches for when the handle
+     * was wrong: the player then finds their own way in at /claim rather than
+     * waiting on somebody to work out what their Discord name is.
+     */
+    public function updateEmail(
+        Game $game,
+        Character $character,
+        UpdateCharacterEmailRequest $request,
+    ): RedirectResponse {
+        abort_if($character->game_id !== $game->id, 404);
+
+        $email = $request->input('email');
+
+        $character->forceFill(['email' => $email])->save();
+
+        if ($email === null) {
+            return back()->with('status', $character->name.' has no email address against them.');
+        }
+
+        // If that player has already signed in, bind them now rather than
+        // making them go round through /claim - the same courtesy the handle
+        // above extends.
+        $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+
+        if ($user !== null && ! $character->fresh()?->isClaimed()) {
+            $claimed = $this->claimByEmail->handle($user, $email);
+
+            if ($claimed !== []) {
+                return back()->with('status', $character->name.' claimed by '.$user->name.'.');
+            }
+        }
+
+        return back()->with('status', $character->name.' reserved for '.$email.'.');
     }
 
     /**

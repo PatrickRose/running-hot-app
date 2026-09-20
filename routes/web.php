@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AgendaCardController;
+use App\Http\Controllers\Auth\CharacterClaimController;
 use App\Http\Controllers\Auth\DiscordController;
 use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
@@ -54,6 +55,18 @@ Route::middleware('guest')->group(function () {
     Route::get('auth/discord', [DiscordController::class, 'redirect'])->name('auth.discord');
     Route::get('auth/discord/callback', [DiscordController::class, 'callback'])->name('auth.discord.callback');
 });
+
+/*
+ * "I signed up to this game with this email address."
+ *
+ * Deliberately in neither middleware group. A visitor names their address and
+ * is sent through the Discord sign in; somebody already signed in - because
+ * signing in worked, it just found them nothing - is bound on the spot. Both
+ * are people the handle failed, so a `guest` or an `auth` here would shut the
+ * door on half of them.
+ */
+Route::get('claim', [CharacterClaimController::class, 'create'])->name('claim');
+Route::post('claim', [CharacterClaimController::class, 'store'])->name('claim.store');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -457,6 +470,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 Route::post('games/{game}/characters/{character}/discord', [CharacterController::class, 'updateDiscord'])
                     ->name('characters.discord');
+                Route::post('games/{game}/characters/{character}/email', [CharacterController::class, 'updateEmail'])
+                    ->name('characters.email');
                 Route::post('games/{game}/characters/{character}/release', [CharacterController::class, 'release'])
                     ->name('characters.release');
             });
