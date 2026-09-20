@@ -8,6 +8,7 @@ use App\Enums\GameStatus;
 use App\Enums\PhaseStatus;
 use App\Enums\PhaseType;
 use App\Jobs\AdvancePhase;
+use App\Jobs\ClearRunChannels;
 use App\Models\Game;
 use App\Models\Phase;
 use App\Models\Turn;
@@ -103,6 +104,17 @@ class TurnEngine
             if ($next !== null) {
                 return $this->startPhase($phase->turn, $next, $actor);
             }
+
+            // The turn is over, so last turn's conversation comes out of the
+            // Facility channels it happened in. They are permanent and reused,
+            // so a group going in next turn would otherwise read the last one
+            // working out what was in the stack - which 3.4.2 makes Secret and
+            // reconnaissance is what you pay to find out. Queued and fail-soft:
+            // a Discord outage must never be able to stop the clock.
+            //
+            // At the end of the turn rather than the end of the Action phase,
+            // so the group has Team Time to read back over how it went.
+            ClearRunChannels::dispatch($phase->turn->id);
 
             $turn = $phase->turn->game->turns()->create([
                 'number' => $phase->turn->number + 1,

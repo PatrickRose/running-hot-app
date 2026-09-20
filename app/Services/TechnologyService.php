@@ -159,10 +159,21 @@ class TechnologyService
     /**
      * How many a Facility can store: 2 for every Corporate Facility the
      * Corporation owns.
+     *
+     * Nought for a Plot Facility. Storage scales with a Corporation's Corporate
+     * Facilities and a Plot Facility belongs to no Corporation, so the same
+     * reading that gives a Corporation with no Corporate Facility nowhere to
+     * put a card gives Control's own building none either - which is what is
+     * wanted: a Plot Facility is a stack of Protection Cards and whatever
+     * Control hands over at the end of it, not a technology store.
      */
     public function capacityFor(Facility $facility): int
     {
-        return $this->defence->technologyCapacityPerFacility($facility->corporation);
+        $corporation = $facility->corporation;
+
+        return $corporation === null
+            ? 0
+            : $this->defence->technologyCapacityPerFacility($corporation);
     }
 
     /**
@@ -567,6 +578,12 @@ class TechnologyService
         Facility $facility,
         ?TechnologyHolding $ignoring = null,
     ): void {
+        if ($facility->isPlotFacility()) {
+            throw ValidationException::withMessages([
+                'facility_id' => $facility->name.' is a Plot Facility and stores no technologies.',
+            ]);
+        }
+
         if ($facility->corporation_id !== $corporation->id) {
             throw ValidationException::withMessages([
                 'facility_id' => $facility->name.' is not '.$corporation->name.'\'s Facility.',

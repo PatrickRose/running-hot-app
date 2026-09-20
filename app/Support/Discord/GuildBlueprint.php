@@ -46,6 +46,10 @@ class GuildBlueprint
      * public voice room for each of its members, and only the private text
      * channels inside it are locked. A category with no overwrites of its own
      * is what {@see self::CATEGORY_COMMON} already is.
+     *
+     * Not to be confused with {@see self::CATEGORY_PLOT_FACILITIES}, which is
+     * the buildings nobody owns rather than the people. The two are separate
+     * keys and separate categories; they share only the word.
      */
     public const CATEGORY_INDEPENDENTS = 'category:independents';
 
@@ -59,6 +63,27 @@ class GuildBlueprint
      * every fifteen minutes.
      */
     public const PUBLIC_VOICE_ROOMS = 3;
+
+    /**
+     * The category holding every Plot Facility's pair of channels.
+     *
+     * One category for all of them rather than one each, because a Plot
+     * Facility has no team to be grouped under - what they share is that
+     * Control built them. Locked to Control alone, exactly as a Corporation's
+     * category is locked to its Corporation: the Runners attacking one are let
+     * in per member when their run starts, which is the Run's business.
+     *
+     * Nothing to do with {@see self::CATEGORY_INDEPENDENTS}, which houses the
+     * characters who belong to no team.
+     */
+    public const CATEGORY_PLOT_FACILITIES = 'category:plot-facilities';
+
+    /**
+     * What that category is called in the guild. Named for what players can
+     * see - a Facility belonging to nobody in the roster - rather than for what
+     * Control is doing with it.
+     */
+    public const PLOT_FACILITIES_CATEGORY_NAME = 'Independent Facilities';
 
     /**
      * Discord's limit on how many channels one category may hold.
@@ -355,6 +380,24 @@ class GuildBlueprint
             }
         }
 
+        // The Plot Facilities' shared category, and only when there is one to
+        // put in it: a game with no plot buildings should not grow an empty
+        // category in its channel list.
+        $plot = $this->game->facilities()->plot()->orderBy('name')->get();
+
+        if ($plot->isNotEmpty()) {
+            $channels[] = new PlannedChannel(
+                key: self::CATEGORY_PLOT_FACILITIES,
+                kind: DiscordResourceKind::Category,
+                name: self::PLOT_FACILITIES_CATEGORY_NAME,
+                overwrites: self::controlOnlyOverwrites(),
+            );
+
+            foreach ($plot as $facility) {
+                $channels = [...$channels, ...self::channelsForFacility($facility)];
+            }
+        }
+
         return $channels;
     }
 
@@ -373,9 +416,8 @@ class GuildBlueprint
      */
     public static function channelsForFacility(Facility $facility): array
     {
-        $corporation = $facility->corporation;
-        $overwrites = self::teamOverwrites(self::corporationRoleKey($corporation));
-        $parentKey = self::corporationCategoryKey($corporation);
+        $overwrites = self::facilityOverwrites($facility);
+        $parentKey = self::categoryKeyForFacility($facility);
 
         return [
             new PlannedChannel(
@@ -403,6 +445,61 @@ class GuildBlueprint
     public static function corporationCategoryKey(Corporation $corporation): string
     {
         return 'category:corporation:'.$corporation->id;
+    }
+
+    /**
+     * The category a Facility's pair of channels hangs off: its Corporation's,
+     * or the shared one every Plot Facility sits in.
+     */
+    public static function categoryKeyForFacility(Facility $facility): string
+    {
+        $corporation = $facility->corporation;
+
+        return $corporation === null
+            ? self::CATEGORY_PLOT_FACILITIES
+            : self::corporationCategoryKey($corporation);
+    }
+
+    /**
+     * What that category is called, for the one path that has to create it
+     * without a whole blueprint in hand ({@see ProvisionFacilityChannels}).
+     */
+    public static function categoryNameForFacility(Facility $facility): string
+    {
+        return $facility->isPlotFacility()
+            ? self::PLOT_FACILITIES_CATEGORY_NAME
+            : $facility->corporation->name;
+    }
+
+    /**
+     * Who may read a Facility's channels before a run starts.
+     *
+     * A Corporation's Facility opens to its own team; a Plot Facility opens to
+     * nobody but Control, because nobody in the roster owns it. Both deny
+     *
+     * @everyone, and both are widened per member when the Runners hitting the
+     * Facility are let in for the length of their run.
+     *
+     * @return array<int, PlannedOverwrite>
+     */
+    public static function facilityOverwrites(Facility $facility): array
+    {
+        $corporation = $facility->corporation;
+
+        return $corporation === null
+            ? self::controlOnlyOverwrites()
+            : self::teamOverwrites(self::corporationRoleKey($corporation));
+    }
+
+    /**
+     * @return array<int, PlannedOverwrite>
+     */
+    private static function controlOnlyOverwrites(): array
+    {
+        return [
+            new PlannedOverwrite(PlannedOverwrite::EVERYONE, deny: DiscordApi::VIEW_CHANNEL),
+            new PlannedOverwrite(self::ROLE_CONTROL, allow: DiscordApi::VIEW_CHANNEL | DiscordApi::SEND_MESSAGES | DiscordApi::CONNECT | DiscordApi::SPEAK),
+        ];
     }
 
     public static function facilityChannelKey(Facility $facility, string $kind): string

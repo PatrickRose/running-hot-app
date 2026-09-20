@@ -486,6 +486,33 @@ class ProtectionCardStackTest extends TestCase
     }
 
     /**
+     * Installing a card the Corporation holds no copy of is refused under the
+     * key the Control panel draws, which is the whole point of pinning it.
+     *
+     * The picker on that panel offers the entire catalogue rather than only
+     * what is in hand - a card is chosen by what it does to the Runners, and
+     * Control raises the count afterwards - so this is the refusal Control
+     * actually meets. Reported anywhere but `protection_card_type_id` and the
+     * Install button goes silent again, which is exactly how it behaved before
+     * the panel learned to draw it.
+     */
+    public function test_a_card_the_corporation_holds_none_of_is_refused_over_http(): void
+    {
+        $unheld = ProtectionCardType::factory()
+            ->for($this->game)
+            ->ofKind(ProtectionKind::Physical)
+            ->create(['name' => 'Anzu']);
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$this->game->id}/facilities/{$this->facility->id}/cards", [
+                'protection_card_type_id' => $unheld->id,
+            ])
+            ->assertSessionHasErrors('protection_card_type_id');
+
+        $this->assertSame([], $this->stackNames());
+    }
+
+    /**
      * @return array<string, int> card type ids, keyed by title
      */
     private function installAlphaBravoCharlie(): array

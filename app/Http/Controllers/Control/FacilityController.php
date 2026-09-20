@@ -47,6 +47,7 @@ class FacilityController extends Controller
         return Inertia::render('control/games/facilities', [
             'game' => $presenter->summary($game),
             'facilities' => $presenter->facilities($game),
+            'plotFacilities' => $presenter->plotFacilities($game),
             'facilityTypes' => $presenter->facilityTypes($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
             'cardHoldings' => $presenter->protectionCardHoldings($game),
@@ -72,13 +73,23 @@ class FacilityController extends Controller
 
     public function store(Game $game, StoreFacilityRequest $request): RedirectResponse
     {
-        /** @var Corporation $corporation */
-        $corporation = $game->corporations()->findOrFail($request->integer('corporation_id'));
-
         /** @var FacilityType $type */
         $type = $game->facilityTypes()->findOrFail($request->integer('facility_type_id'));
 
         $name = $request->string('name')->toString();
+
+        // No Corporation names a Plot Facility: Control builds it, it belongs
+        // to nobody in the roster, and the Runners hit it for the plot's sake.
+        $corporationId = $request->input('corporation_id');
+
+        if ($corporationId === null || $corporationId === '') {
+            $facility = $this->storePlotFacility($game, $type, $name);
+
+            return back()->with('status', $facility->name.' is open.');
+        }
+
+        /** @var Corporation $corporation */
+        $corporation = $game->corporations()->findOrFail((int) $corporationId);
 
         if ($corporation->facilities()->where('name', $name)->exists()) {
             throw ValidationException::withMessages([
@@ -109,6 +120,29 @@ class FacilityController extends Controller
                 ? 'is open'
                 : 'is building, and opens on turn '.$facility->available_from_turn,
         ));
+    }
+
+    /**
+     * Build a Plot Facility.
+     *
+     * The uniqueness check is by hand for the reason the Corporation one is:
+     * the table's unique key is (corporation_id, name), and two null
+     * corporation_ids are distinct to the database, so nothing would stop a
+     * second Independent building called the same thing. Two identically named
+     * targets on the list every Runner chooses from is exactly the confusion
+     * the Corporation check exists to avoid.
+     */
+    private function storePlotFacility(Game $game, FacilityType $type, string $name): Facility
+    {
+        $taken = $game->facilities()->plot()->where('name', $name)->exists();
+
+        if ($taken) {
+            throw ValidationException::withMessages([
+                'name' => 'There is already a Plot Facility called that.',
+            ]);
+        }
+
+        return $this->requisition->buildForControl($game, $type, $name);
     }
 
     public function update(Game $game, Facility $facility, UpdateFacilityRequest $request): RedirectResponse

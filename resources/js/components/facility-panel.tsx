@@ -1,6 +1,8 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { GameIcon } from '@/components/game-icon';
+import { SearchPicker } from '@/components/search-picker';
+import type { PickerOption } from '@/components/search-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,9 +18,6 @@ import type {
     ProtectionCardSummary,
     ProtectionStack,
 } from '@/types/game';
-
-const SELECT_CLASS =
-    'h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
 /**
  * One Facility: its two Protection Card stacks, and Security's orders for it.
@@ -60,7 +59,7 @@ export function FacilityPanel({
                         {facility.stacks
                             .map(
                                 (stack) =>
-                                    `${stack.cards.length}/${stack.slots} ${stack.kind}`,
+                                    `${stack.cards.length}${stack.slots === null ? '' : `/${stack.slots}`} ${stack.kind}`,
                             )
                             .join(' · ')}
                     </p>
@@ -165,7 +164,8 @@ function Stack({
             ),
     );
 
-    const full = stack.cards.length >= stack.slots;
+    // A Plot Facility has no slot limit at all, so nothing is ever full.
+    const full = stack.slots !== null && stack.cards.length >= stack.slots;
 
     /**
      * Swap two neighbours and send the whole stack. The server charges 1 Credit
@@ -194,7 +194,8 @@ function Stack({
                 <GameIcon glyph={stack.kind_glyph} label={stack.kind_label} />
                 <span aria-hidden="true">{stack.kind_label}</span>
                 <span className="font-normal text-muted-foreground">
-                    {stack.cards.length}/{stack.slots}
+                    {stack.cards.length}
+                    {stack.slots === null ? ' installed' : `/${stack.slots}`}
                 </span>
             </p>
 
@@ -268,6 +269,34 @@ function Stack({
     );
 }
 
+/**
+ * The cards this stack could take, as the picker's options.
+ *
+ * Searchable by the printed code as well as the name, for the reason the
+ * shop's picker is: a card is looked up by its code as often as by what it is
+ * called. The challenge and the consequence go in too, because the question
+ * Control is actually answering here is "what do I want the Runners to hit" -
+ * so being able to type "end the run" and see which cards do it is the point
+ * of having a search rather than a list.
+ *
+ * The kind is not in there: a stack only ever offers its own kind, so every
+ * option would carry the same word and it would match everything.
+ */
+function installOptions(cards: ProtectionCardSummary[]): PickerOption[] {
+    return cards.map((card) => ({
+        value: card.id,
+        label: card.name,
+        hint: [card.code, card.challenge].filter(Boolean).join(' · ') || null,
+        search: [
+            card.code ?? '',
+            card.name,
+            card.challenge,
+            card.consequence,
+            card.availability === 'research_only' ? 'research only' : '',
+        ].join(' '),
+    }));
+}
+
 function InstallCard({
     gameId,
     facilityId,
@@ -281,7 +310,24 @@ function InstallCard({
     options: ProtectionCardSummary[];
     disabled: boolean;
 }) {
-    const [selected, setSelected] = useState('');
+    const [selected, setSelected] = useState<number | null>(null);
+
+    /**
+     * Why the last install was refused, kept per stack.
+     *
+     * It has to be drawn somewhere, and it has to be drawn *here*: a Facility
+     * has two stacks and a game has a page full of Facilities, so every one of
+     * these posts reports against the same `protection_card_type_id` key. A
+     * page-level `errors` would put one stack's refusal under every stack on
+     * screen. Same answer the research table's ScoreForm and the run screen's
+     * useRunAction already reach for.
+     *
+     * The refusal that actually happens is the Corporation having no copy of
+     * the card left: installing costs a copy out of its hand (3.3.4), the
+     * picker offers the whole catalogue rather than only what is held, and
+     * without this the button simply did nothing.
+     */
+    const [refusal, setRefusal] = useState<string | null>(null);
 
     if (disabled) {
         return (
@@ -292,39 +338,59 @@ function InstallCard({
     }
 
     return (
-        <div className="flex flex-wrap gap-2">
-            <select
-                aria-label={`Install a ${kind} card`}
-                value={selected}
-                onChange={(event) => setSelected(event.target.value)}
-                className={SELECT_CLASS}
-            >
-                <option value="">Install a card…</option>
-                {options.map((card) => (
-                    <option key={card.id} value={card.id}>
-                        {card.name} — {card.challenge}
-                    </option>
-                ))}
-            </select>
-            <Button
-                size="sm"
-                disabled={selected === ''}
-                onClick={() => {
-                    router.post(
-                        installCard.url({
-                            game: gameId,
-                            facility: facilityId,
-                        }),
-                        { protection_card_type_id: Number(selected) },
-                        {
-                            preserveScroll: true,
-                            onSuccess: () => setSelected(''),
-                        },
-                    );
-                }}
-            >
-                Install
-            </Button>
+        <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+                {/* The picker's own trigger is w-full, so the wrapper is what
+                    flexes. min-w keeps it from collapsing to the chevron when a
+                    narrow panel wraps the Install button onto its line. */}
+                <div className="min-w-56 flex-1">
+                    <SearchPicker
+                        options={installOptions(options)}
+                        value={selected}
+                        onChange={(value) => {
+                            setSelected(value);
+                            setRefusal(null);
+                        }}
+                        placeholder={`Install one of ${options.length} cards…`}
+                        searchPlaceholder="Name, code or what it does…"
+                        emptyMessage={`No ${kind.toLowerCase()} card matches that. A card already in this Facility is not offered — 3.3.4 allows one copy of each.`}
+                    />
+                </div>
+                <Button
+                    size="sm"
+                    disabled={selected === null}
+                    onClick={() => {
+                        router.post(
+                            installCard.url({
+                                game: gameId,
+                                facility: facilityId,
+                            }),
+                            { protection_card_type_id: selected },
+                            {
+                                preserveScroll: true,
+                                onSuccess: () => {
+                                    setSelected(null);
+                                    setRefusal(null);
+                                },
+                                onError: (errors) =>
+                                    setRefusal(
+                                        errors.protection_card_type_id ??
+                                            Object.values(errors)[0] ??
+                                            'That card could not be installed.',
+                                    ),
+                            },
+                        );
+                    }}
+                >
+                    Install
+                </Button>
+            </div>
+
+            {refusal !== null && (
+                <p role="alert" className="text-sm text-destructive">
+                    {refusal}
+                </p>
+            )}
         </div>
     );
 }

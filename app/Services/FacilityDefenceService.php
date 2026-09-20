@@ -50,6 +50,26 @@ class FacilityDefenceService
      * open, so a Security Facility requisitioned this turn widens your stacks
      * next turn.
      */
+    /**
+     * How many cards of one kind may stand in this particular Facility.
+     *
+     * Null means no limit, which is what a Plot Facility has. Control builds
+     * one for the Runners to hit rather than out of a Corporation's economy, so
+     * the cap that exists to make Security Facilities worth building has
+     * nothing to bite on - a plot building is as deep as the story needs.
+     *
+     * The one method every caller asks, so that "how many fit here" is answered
+     * in one place whoever owns the building.
+     */
+    public function slotsFor(Facility $facility, ProtectionKind $kind): ?int
+    {
+        $corporation = $facility->corporation;
+
+        return $corporation === null
+            ? null
+            : $this->slotsPerKind($corporation, $kind);
+    }
+
     public function slotsPerKind(Corporation $corporation, ProtectionKind $kind): int
     {
         return self::BASE_SLOTS_PER_KIND + $this->grantTotal($corporation, match ($kind) {
@@ -131,9 +151,9 @@ class FacilityDefenceService
         return DB::transaction(function () use ($facility, $cardType): FacilityProtectionCard {
             $installed = $this->stack($facility, $cardType->kind);
 
-            $slots = $this->slotsPerKind($facility->corporation, $cardType->kind);
+            $slots = $this->slotsFor($facility, $cardType->kind);
 
-            if ($installed->count() >= $slots) {
+            if ($slots !== null && $installed->count() >= $slots) {
                 throw ValidationException::withMessages([
                     'protection_card_type_id' => sprintf(
                         '%s already holds its %d %s cards.',
@@ -159,7 +179,12 @@ class FacilityDefenceService
                 ]);
             }
 
-            $this->takeCopy($facility, $cardType);
+            // A Plot Facility installs out of nothing: there is no Corporation
+            // holding copies, and the one-copy-per-Facility economy exists to
+            // cap a Corporation rather than Control.
+            if (! $facility->isPlotFacility()) {
+                $this->takeCopy($facility, $cardType);
+            }
 
             $card = $facility->protectionCards()->create([
                 'protection_card_type_id' => $cardType->id,
@@ -210,14 +235,29 @@ class FacilityDefenceService
         }
 
         $moved = $this->moveCost($current, $requested);
-        $discount = min($moved, $this->cardMoveDiscount($facility->corporation));
+        $corporation = $facility->corporation;
+
+        // Nobody to bill for a Plot Facility, so nothing is charged. The count
+        // of cards that move is still reported, because that is a fact about
+        // the arrangement - but no discount is claimed for it, since a discount
+        // is a Factory's doing and there is no Factory here.
+        if ($corporation === null) {
+            return [
+                'moved' => $moved,
+                'discount' => 0,
+                'cost' => 0,
+                'affordable' => true,
+            ];
+        }
+
+        $discount = min($moved, $this->cardMoveDiscount($corporation));
         $cost = $moved - $discount;
 
         return [
             'moved' => $moved,
             'discount' => $discount,
             'cost' => $cost,
-            'affordable' => $facility->corporation->credits >= $cost,
+            'affordable' => $corporation->credits >= $cost,
         ];
     }
 
@@ -271,8 +311,12 @@ class FacilityDefenceService
 
             // Before the clock starts there is no turn to count removals
             // against, so Control setting up a roster is not charged for it.
+            // A Plot Facility is free to take apart as well as to fill: the
+            // removal cost is Credits off the Corporation, and there is none.
             $state = $turn === null ? null : $facility->stateForTurn($turn);
-            $cost = $state !== null && $state->cards_removed > 0 ? 1 : 0;
+            $cost = $state !== null
+                && $state->cards_removed > 0
+                && ! $facility->isPlotFacility() ? 1 : 0;
 
             if ($cost > 0) {
                 $this->charge(
@@ -289,7 +333,11 @@ class FacilityDefenceService
             $cardTypeId = $card->protection_card_type_id;
             $card->delete();
 
-            $this->returnCopy($facility->corporation, $cardTypeId);
+            $corporation = $facility->corporation;
+
+            if ($corporation !== null) {
+                $this->returnCopy($corporation, $cardTypeId);
+            }
 
             $this->resequence($facility, $kind, $this->stack($facility, $kind)->pluck('id')->all());
 
@@ -324,6 +372,15 @@ class FacilityDefenceService
             }
 
             $delta = $budget - $state->security_budget;
+            $corporation = $facility->corporation;
+
+            // A Plot Facility's budget is escrowed from nowhere. There is no
+            // Corporation whose Credits could be promised twice, so the number
+            // Control writes is simply what the building has to spend - and
+            // nothing goes in the ledger, because no tracker moved.
+            if ($corporation === null) {
+                $delta = 0;
+            }
 
             if ($delta > 0) {
                 $this->charge(
@@ -334,7 +391,7 @@ class FacilityDefenceService
                 );
             } elseif ($delta < 0) {
                 $this->trackers->adjust(
-                    $facility->corporation,
+                    $corporation,
                     Tracker::CorporationCredits,
                     -$delta,
                     sprintf('Security budget for %s reduced', $facility->name),
@@ -379,10 +436,15 @@ class FacilityDefenceService
 
         foreach ($states as $state) {
             $unspent = $state->unspentBudget();
+            $corporation = $state->facility->corporation;
 
-            if ($unspent > 0) {
+            // A Plot Facility's budget was never taken off anybody, so there is
+            // nothing to hand back - only the mark that says this turn's escrow
+            // has been dealt with, which keeps the sweep from looking at it
+            // again every phase for the rest of the game.
+            if ($unspent > 0 && $corporation !== null) {
                 $this->trackers->adjust(
-                    $state->facility->corporation,
+                    $corporation,
                     Tracker::CorporationCredits,
                     $unspent,
                     sprintf(
@@ -601,10 +663,18 @@ class FacilityDefenceService
 
     /**
      * Take Credits off the Facility's Corporation, refusing if it cannot pay.
+     *
+     * A Plot Facility has no Corporation, and nothing it does costs Credits:
+     * every caller here already quotes nought for one, so this is the floor
+     * under that rather than a case reached in normal play.
      */
     protected function charge(Facility $facility, int $amount, string $reason, ?User $actor): void
     {
         $corporation = $facility->corporation;
+
+        if ($corporation === null) {
+            return;
+        }
 
         if ($corporation->credits < $amount) {
             throw ValidationException::withMessages([

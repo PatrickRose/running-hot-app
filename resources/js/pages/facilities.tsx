@@ -53,6 +53,7 @@ export default function Facilities({ game, board }: Props) {
     }
 
     const own = board.own;
+    const plot = board.plot;
 
     return (
         <>
@@ -303,7 +304,37 @@ export default function Facilities({ game, board }: Props) {
                                 </ul>
                             </div>
                         ))}
-                        {board.public.length === 0 && (
+
+                        {/*
+                         * The Facilities belonging to nobody, drawn as one
+                         * more owner at the end of the list. A group choosing
+                         * a target has to be able to see them, and they carry
+                         * no second tier: nobody is inside one, so nobody
+                         * reads its stack here.
+                         */}
+                        {plot !== null && (
+                            <div>
+                                <p className="flex items-center gap-2 font-medium">
+                                    <FactionBadge faction={plot} size="small" />
+                                    {plot.name}
+                                </p>
+                                <ul className="mt-1 flex flex-col gap-0.5 text-sm">
+                                    {plot.facilities.map((facility) => (
+                                        <li key={facility.id}>
+                                            {facility.name}
+                                            <span className="text-muted-foreground">
+                                                {' '}
+                                                — {facility.facility_type}
+                                                {!facility.available &&
+                                                    ' (building)'}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {board.public.length === 0 && plot === null && (
                             <p className="text-sm text-muted-foreground">
                                 Nothing built yet.
                             </p>

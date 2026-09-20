@@ -43,6 +43,23 @@ use Throwable;
  */
 class GamePresenter
 {
+    /**
+     * What a Plot Facility's owner would grant it, which is nothing.
+     *
+     * Null slots mean no limit: the cap on a stack exists to make Security
+     * Facilities worth building, and Control is not playing that economy. The
+     * other two are nought because both are a Corporation's Facilities working
+     * on each other, and a Plot Facility has no Corporation.
+     *
+     * @var array{physical_slots: int|null, cyber_slots: int|null, technology_capacity: int, card_move_discount: int}
+     */
+    private const PLOT_FACILITY_TOTALS = [
+        'physical_slots' => null,
+        'cyber_slots' => null,
+        'technology_capacity' => 0,
+        'card_move_discount' => 0,
+    ];
+
     private ?TechnologyService $technologies = null;
 
     /**
@@ -475,9 +492,54 @@ class GamePresenter
                         'available_from_turn' => $facility->available_from_turn,
                     ])->all(),
             ])->all(),
+            // The Facilities nobody owns, listed for everybody exactly as the
+            // Corporations' are: a Runner cannot choose a target they have not
+            // been told about, and Control builds these to be run against.
+            // Never a second tier - no player is inside one of these, so no
+            // player reads its stacks.
+            //
+            // Null rather than an empty group when there are none, so the page
+            // draws no heading for a kind of Facility this game does not have.
+            // It carries a badge like every other owner, from the same hash, so
+            // the browser never has to invent a colour.
+            'plot' => $this->plotGroup($game, $turnNumber),
             'own' => $own === null
                 ? null
                 : $this->ownDefences($own, $mayDefend, $turn, $turnNumber, $defence),
+        ];
+    }
+
+    /**
+     * The Facilities belonging to nobody, as one more owner on the public list.
+     *
+     * Drawn under {@see Facility::INDEPENDENT_OWNER} rather than as Plot
+     * Facilities: this is the list a group chooses a target from, and which
+     * buildings Control put there for the story is Control's own hand.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function plotGroup(Game $game, ?int $turnNumber): ?array
+    {
+        $facilities = $game->facilities()
+            ->plot()
+            ->with('facilityType')
+            ->orderBy('name')
+            ->get();
+
+        if ($facilities->isEmpty()) {
+            return null;
+        }
+
+        return [
+            ...FactionBadge::for(Facility::INDEPENDENT_OWNER),
+            'facilities' => $facilities
+                ->map(fn (Facility $facility): array => [
+                    'id' => $facility->id,
+                    'name' => $facility->name,
+                    'facility_type' => $facility->facilityType->name,
+                    'available' => $facility->isAvailableOnTurn($turnNumber),
+                    'available_from_turn' => $facility->available_from_turn,
+                ])->all(),
         ];
     }
 
@@ -1004,7 +1066,46 @@ class GamePresenter
     }
 
     /**
-     * @param  array{physical_slots: int, cyber_slots: int, technology_capacity: int, card_move_discount: int}  $totals
+     * The Facilities belonging to nobody: the Plot Facilities Control builds
+     * for the Runners to hit (see {@see Facility::INDEPENDENT_OWNER}).
+     *
+     * Their own list rather than a tenth Corporation in facilities(), because
+     * almost nothing that describes a Corporation is true of them - there are
+     * no Credits behind them, no hand of copies to install from, no Security
+     * seat and no slot limit at all. A fake Corporation carrying four zeroes
+     * and a null would be a shape the browser had to keep checking.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function plotFacilities(Game $game): array
+    {
+        $turn = $game->currentTurn();
+        $turnNumber = $turn?->number;
+
+        $channelKeys = array_fill_keys($game->discordResources()->pluck('key')->all(), true);
+
+        return $game->facilities()
+            ->plot()
+            ->with([
+                'facilityType',
+                'protectionCards.cardType',
+                'turnStates' => fn ($query) => $query->where('turn_id', $turn?->id),
+            ])
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Facility $facility): array => $this->facility(
+                $facility,
+                $turnNumber,
+                self::PLOT_FACILITY_TOTALS,
+                $channelKeys,
+            ))
+            ->all();
+    }
+
+    /**
+     * @param  array{physical_slots: int|null, cyber_slots: int|null, technology_capacity: int, card_move_discount: int}  $totals
+     *                                                                                                                             a null slot count means no limit, which is
+     *                                                                                                                             what a Plot Facility has
      * @param  array<string, bool>|null  $channelKeys  recorded Discord resource keys,
      *                                                 or null for a caller with no business knowing
      * @return array<string, mixed>
@@ -1021,6 +1122,7 @@ class GamePresenter
             'id' => $facility->id,
             'name' => $facility->name,
             'corporation_id' => $facility->corporation_id,
+            'is_plot' => $facility->isPlotFacility(),
             'facility_type_id' => $facility->facility_type_id,
             'facility_type' => $facility->facilityType->name,
             'available_from_turn' => $facility->available_from_turn,

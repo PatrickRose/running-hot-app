@@ -22,6 +22,7 @@ import type {
     CorporationCardHoldings,
     CorporationFacilities,
     FacilityListState,
+    FacilitySummary,
     FacilityTypeSummary,
     GameSummary,
     ProtectionCardSummary,
@@ -30,6 +31,8 @@ import type {
 type Props = {
     game: GameSummary;
     facilities: CorporationFacilities[];
+    /** The Facilities belonging to nobody: Control's own, for the Runners to hit. */
+    plotFacilities: FacilitySummary[];
     facilityTypes: FacilityTypeSummary[];
     protectionCards: ProtectionCardSummary[];
     cardHoldings: CorporationCardHoldings[];
@@ -42,6 +45,7 @@ const SELECT_CLASS =
 export default function ControlFacilities({
     game,
     facilities,
+    plotFacilities,
     facilityTypes,
     protectionCards,
     cardHoldings,
@@ -53,6 +57,7 @@ export default function ControlFacilities({
         only: [
             'game',
             'facilities',
+            'plotFacilities',
             'facilityTypes',
             'protectionCards',
             'cardHoldings',
@@ -168,6 +173,12 @@ export default function ControlFacilities({
                             A requisition is raised during Setup and opens next
                             turn. Build now is the override, and is how a game's
                             starting Facilities go in.
+                            <br />
+                            Choosing nobody builds a Plot Facility: yours rather
+                            than a Corporation's, for the Runners to run
+                            against. It opens at once, costs nothing, takes as
+                            many Protection Cards as you care to install and
+                            stores no technologies.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -187,7 +198,7 @@ export default function ControlFacilities({
                                             id="facility-corporation"
                                             name="corporation_id"
                                             className={SELECT_CLASS}
-                                            required
+                                            defaultValue=""
                                         >
                                             {facilities.map((corporation) => (
                                                 <option
@@ -197,6 +208,15 @@ export default function ControlFacilities({
                                                     {corporation.name}
                                                 </option>
                                             ))}
+                                            {/*
+                                             * Nobody: a Plot Facility. It is
+                                             * built at once and costs nothing,
+                                             * so the cost and When boxes are
+                                             * ignored for one.
+                                             */}
+                                            <option value="">
+                                                Nobody — Plot Facility
+                                            </option>
                                         </select>
                                         <InputError
                                             message={errors.corporation_id}
@@ -334,6 +354,40 @@ export default function ControlFacilities({
                         <CardContent className="py-6 text-muted-foreground">
                             This game has no Corporations, so there is nothing
                             to defend yet.
+                        </CardContent>
+                    </Card>
+                )}
+
+                {plotFacilities.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Plot Facilities</CardTitle>
+                            <CardDescription>
+                                Yours. No Corporation owns them, so nobody in
+                                the roster defends one and nothing about them
+                                costs anybody Credits — install as many
+                                Protection Cards as the story needs, arrange
+                                them freely, and set whatever budget the
+                                Facility should have to spend on a Run.
+                                <br />
+                                Players see them on the Facility list as{' '}
+                                <strong>Independent</strong>, alongside the
+                                Corporations', so a group can name one as a
+                                target without being told which buildings are
+                                yours. They store no technologies.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-4">
+                            {plotFacilities.map((facility) => (
+                                <FacilityPanel
+                                    key={facility.id}
+                                    gameId={game.id}
+                                    facility={facility}
+                                    catalogue={protectionCards}
+                                    currentTurn={currentTurn}
+                                    discordReady={discordReady}
+                                />
+                            ))}
                         </CardContent>
                     </Card>
                 )}
