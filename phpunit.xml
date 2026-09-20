@@ -39,6 +39,22 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!--
+            Pinned rather than left to the environment. `composer setup` copies
+            .env.example into place, and that turns this on so a fresh checkout
+            can use the logins DemoGameSeeder prints - so without this line the
+            suite runs on whichever posture the developer's .env happens to
+            carry, and CI ran on the opposite one to a laptop with no .env at
+            all. Off is the posture a deployment ships with, which is the one
+            worth proving the application works in; the three test files whose
+            subject is the password form turn it back on in their own setUp.
+
+            "(false)" rather than "false": PHPUnit reads the second as a
+            boolean and writes it into $_ENV as an empty string, which is falsy
+            but is not `false`. Laravel's Env converts the parenthesised form
+            to a real boolean.
+        -->
+        <env name="RUNNING_HOT_DIRECT_LOGIN" value="(false)"/>
         <env name="DISCORD_CLIENT_ID" value="testing"/>
         <env name="DISCORD_CLIENT_SECRET" value="testing"/>
         <!-- Blanked for the same reason as the webhook: the sync queue driver

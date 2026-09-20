@@ -19,10 +19,21 @@ class LoginOptionsTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Every test here names the posture it is about rather than inheriting one.
+     * The setting is read from the environment, and `composer setup` copies
+     * .env.example into place - which turns it on - so a test that relied on
+     * the ambient value passed on a machine with no .env and failed in CI.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['running_hot.direct_login' => false]);
+    }
+
     public function test_only_discord_is_offered_unless_the_environment_says_otherwise(): void
     {
-        config(['running_hot.direct_login' => false]);
-
         $this->get(route('login'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
@@ -40,14 +51,35 @@ class LoginOptionsTest extends TestCase
     }
 
     /**
-     * Off by default, so a deployment that never sets it gets the Discord-only
-     * page rather than the developer's one. The rest of the suite runs on this
-     * default; the handful of tests whose subject is the password form turn it
-     * back on in their own setUp.
+     * The shipped default is off, so a deployment that sets nothing gets the
+     * Discord-only page rather than the developer's one.
+     *
+     * Read out of the config file with the variable taken out of the
+     * environment, rather than off the resolved value: .env.example turns this
+     * on for development and CI copies it into place, so what `config()`
+     * answers during a test says nothing about what a deployment that sets
+     * nothing would get. This is the line that would actually change that.
      */
-    public function test_it_is_off_when_nothing_is_configured(): void
+    public function test_the_shipped_default_is_off(): void
     {
-        $this->assertFalse((bool) config('running_hot.direct_login'));
+        // Taken out of the superglobals rather than through the Env
+        // repository, which is immutable here: clear() on it is a silent
+        // no-op, so the variable would still have been found.
+        $previous = $_ENV['RUNNING_HOT_DIRECT_LOGIN'] ?? null;
+
+        unset($_ENV['RUNNING_HOT_DIRECT_LOGIN'], $_SERVER['RUNNING_HOT_DIRECT_LOGIN']);
+        putenv('RUNNING_HOT_DIRECT_LOGIN');
+
+        try {
+            $shipped = require config_path('running_hot.php');
+
+            $this->assertFalse($shipped['direct_login']);
+        } finally {
+            if ($previous !== null) {
+                $_ENV['RUNNING_HOT_DIRECT_LOGIN'] = $previous;
+                putenv('RUNNING_HOT_DIRECT_LOGIN='.$previous);
+            }
+        }
     }
 
     /**
