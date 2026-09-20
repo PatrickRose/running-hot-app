@@ -1,17 +1,15 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     Backpack,
-    BookOpen,
     Building2,
     Crosshair,
     FlaskConical,
-    FolderGit2,
     Gavel,
     LayoutGrid,
     ShoppingCart,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
+import { AppearanceToggle } from '@/components/appearance-toggle';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -34,58 +32,65 @@ import {
 } from '@/routes';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
+type Section = NavItem & { section: string };
+
+const mainNavItems: Section[] = [
     {
+        section: 'dashboard',
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
     },
     {
+        section: 'facilities',
         title: 'Facilities',
         href: facilities(),
         icon: Building2,
     },
     {
+        section: 'runs',
         title: 'Runs',
         href: runs(),
         icon: Crosshair,
     },
     {
+        section: 'equipment',
         title: 'Equipment',
         href: equipment(),
         icon: Backpack,
     },
     {
+        section: 'council',
         title: 'Council',
         href: council(),
         icon: Gavel,
     },
     {
+        section: 'research',
         title: 'Research',
         href: research(),
         icon: FlaskConical,
     },
     {
+        section: 'shop',
         title: 'Shop',
         href: shop(),
         icon: ShoppingCart,
     },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
-
 export function AppSidebar() {
+    // Which sections this player holds a seat for, decided server-side by
+    // App\Support\Navigation. Undefined on a partial reload, which is not
+    // "none": the client keeps the list it already had, so fall back to
+    // drawing everything rather than blanking the sidebar mid-poll.
+    const { nav } = usePage().props;
+
+    const items =
+        nav === undefined
+            ? mainNavItems
+            : mainNavItems.filter((item) => nav.includes(item.section));
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -101,11 +106,11 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={items} />
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+                <AppearanceToggle />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

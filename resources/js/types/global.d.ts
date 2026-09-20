@@ -13,6 +13,13 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            /**
+             * The sections this player is offered, decided server-side by
+             * App\Support\Navigation from the seats they hold. Optional
+             * because a partial reload leaves the client holding the list it
+             * already had rather than re-sending it.
+             */
+            nav?: string[];
             [key: string]: unknown;
         };
     }

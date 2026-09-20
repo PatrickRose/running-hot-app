@@ -12,9 +12,10 @@ use App\Support\FacilityTypeBlueprint;
  * Control moves during play, so nothing in this file is ever read again once a
  * game has been created.
  *
- * The exception is the first entry, which is not roster at all: it is read by
- * the demo seeder rather than by a game, and it lives here because a seeder
- * cannot read the environment once config is cached.
+ * The exceptions are the first two entries, which are not roster at all: one is
+ * read by the demo seeder rather than by a game, and the other by the login
+ * page. Both live here because neither a seeder nor a cached config can read
+ * the environment later.
  */
 return [
 
@@ -36,6 +37,35 @@ return [
     */
 
     'demo_control_discord' => env('DEMO_CONTROL_DISCORD', ''),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Signing in without Discord
+    |--------------------------------------------------------------------------
+    |
+    | Whether the login page offers the application's own ways in - the email
+    | and password form, and the passkey button - beside Continue with Discord.
+    |
+    | Off is the shipped setting, because a real game is played by people who
+    | signed in with Discord: a character is claimed by handle (see the Discord
+    | integration notes in CLAUDE.md), so an account made any other way is an
+    | account holding no seats. Offering that door to a player is offering them
+    | a way to end up somewhere the game cannot see them.
+    |
+    | On is for development. DemoGameSeeder prints a password login per
+    | character so a developer can look at the game from a CEO's chair and then
+    | from a Runner's without a Discord account each, and those logins need the
+    | form to be on screen. `.env.example` therefore ships it enabled, so a
+    | fresh checkout works and a deployment that never sets it does not.
+    |
+    | It governs what is drawn, not what the endpoints accept. Fortify's routes
+    | are registered either way - turning them off by feature flag would take
+    | the `register` route out of the Wayfinder modules and break `tsc` for
+    | whoever generated them with it set the other way.
+    |
+    */
+
+    'direct_login' => env('RUNNING_HOT_DIRECT_LOGIN', false),
 
     /*
     |--------------------------------------------------------------------------

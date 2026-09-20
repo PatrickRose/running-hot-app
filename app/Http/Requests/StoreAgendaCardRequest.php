@@ -7,6 +7,7 @@ use App\Models\Character;
 use App\Models\Game;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * A player filling out a blank agenda card (rulebook 3.1.3).
@@ -39,14 +40,61 @@ class StoreAgendaCardRequest extends FormRequest
                 'max:'.AgendaCard::MAXIMUM_RESOLUTIONS,
             ],
             'resolutions.*' => ['required', 'string', 'max:500'],
-            // Which of the player's characters is writing it. Any of them may:
-            // the rulebook hands blank cards to players rather than to CEOs.
+            // Which of the player's characters is writing it. That it is
+            // theirs is checked here; that it holds a seat is checked below,
+            // because the seat needs the Eloquent scope that is the one
+            // definition of who sits at the Council.
             'character_id' => [
                 'required', 'integer',
                 Rule::exists('characters', 'id')
                     ->where('game_id', $this->game()?->id)
                     ->where('user_id', $this->user()?->id),
             ],
+        ];
+    }
+
+    /**
+     * The author has to be a character with a seat, not merely a character
+     * belonging to somebody who has one.
+     *
+     * Otherwise a player holding both a CEO seat and a Runner could raise an
+     * agenda under the Runner's name, and the Chair would be handed a card
+     * from somebody who is not at the table. The policy asks whether this
+     * *user* may write one at all; this asks which of their seats is signing
+     * it.
+     *
+     * Control is not held to it: Control has its own route for the deck, and
+     * reaches this one through the policy's before() to write on a player's
+     * behalf.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $game = $this->game();
+
+                if ($game === null || $validator->errors()->has('character_id')) {
+                    return;
+                }
+
+                if ($this->user()?->isControlFor($game)) {
+                    return;
+                }
+
+                $seated = $game->characters()
+                    ->whereKey($this->integer('character_id'))
+                    ->onTheCouncil()
+                    ->exists();
+
+                if (! $seated) {
+                    $validator->errors()->add(
+                        'character_id',
+                        'Only a character with a seat at the Council may raise an agenda.',
+                    );
+                }
+            },
         ];
     }
 

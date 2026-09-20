@@ -574,8 +574,15 @@ the pile that was only on the panel was a card that had visibly vanished.
 **Custom agendas are a three-step handshake, and all three steps are real.** A
 player writes the card, Control adds its remarks and gives it *back*, and only
 then does the player submit it to the Chair — the rulebook has the player submit
-it once they and Control agree, so agreeing is the player's to do too. Any
-player may write one: 3.1.3 hands blank cards to players rather than to CEOs.
+it once they and Control agree, so agreeing is the player's to do too.
+
+**Writing one takes a seat at the Council.** 3.1.3 hands blank cards to
+"players" rather than to "CEOs" and this was read literally at first — any
+character in the game could write one. It is the designer's ruling that it
+takes a seat, and that somebody without one who wants an agenda raised has to
+convince somebody who has one. `Character::scopeOnTheCouncil` is who that is,
+and the whole of the Chamber is behind it now: see *The front door, and the
+theme* below for the four places that ask the one predicate.
 
 **The Chamber polls, for the reason the research table does.** It is a room full
 of other people: the Chair puts a card up, somebody declares a vote secret, a
@@ -1915,6 +1922,233 @@ The rulebook prints the four Research Point suits as icons and never names them 
 **What each icon means is recorded in `App\Support\IconFont`, and nowhere else.** The glyph names inside the font are only the letters, so nothing in the file says what any of them is — working it out again means rendering the font and looking at it. The three enums that draw themselves (`ProtectionKind`, `EquipmentCategory`, `ResearchSuit`) take their glyphs from there, and a wild research card draws `Y`. `G` (Boost) is drawn and recorded but unused, because Runs are not built.
 
 **The font is loaded through Vite, not from `public/`.** `laravel-vite-plugin` sets Vite's `publicDir` to `false`, and in development the stylesheet is served from the Vite origin — so a root-relative `url('/fonts/…')` asks the dev server for a directory it does not serve, 404s, and the icons silently degrade to bare letters for everybody running `composer run dev` while working perfectly once built. Anything referenced from CSS has to live under `resources/` and be referenced relatively. Card artwork is the opposite case and belongs in `public/`.
+
+## The front door, and the theme
+
+**There is no landing page.** Everybody who opens this application signs in — a
+player to their seats, Control to its panel — so a page describing the game to
+somebody already here to play it was a door nobody wanted to be shown. `/` is a
+redirect instead: to `login` for a visitor, to `dashboard` for somebody already
+signed in, so the one URL anybody types lands them where they were going rather
+than making them click through. The route keeps the name `home`, because logging
+out, deleting an account and asking for a fresh verification mail all redirect
+to it and Fortify's own `home` config is a separate thing pointing at
+`/dashboard`.
+
+Which makes the **login page the first thing anybody sees of the game**, so it is
+dressed as the game: `AuthSimpleLayout` throws the logo's own glow onto the page
+behind it and puts the form in a panel. The mark there is deliberately not a
+link any more — it used to point at `home`, which now redirects straight back to
+the form it is sitting on.
+
+**The login page offers Discord and nothing else**, unless
+`RUNNING_HOT_DIRECT_LOGIN` says otherwise. A seat is claimed by Discord handle,
+so an account made any other way is an account holding nothing — the player
+signs in, lands on a dashboard with no characters on it, and reads that as the
+application being broken rather than as the queue it is. The email form, the
+sign-up link and the passkey button are all behind that one flag, and the page
+says **"Confirm with Control that you are set up before logging in!"** above the
+buttons either way, because after you have signed in is too late to be told.
+
+It is on in `.env.example` and off in `config/running_hot.php`, which is
+deliberate in both directions: a fresh checkout can use the password logins
+`DemoGameSeeder` prints, and a deployment that never sets it gets the
+Discord-only page. The heading follows the state through `setLayoutProps` —
+telling somebody to enter a password above a page with no password box is how
+people end up hunting for a form that is not there.
+
+**And `POST /login` is refused, not merely unlinked.** A hidden form whose
+endpoint still takes credentials is a signpost pretending to be a lock.
+`App\Actions\Fortify\EnsureDirectLoginIsEnabled` is the first pipe in
+Fortify's login pipeline, and it is a *pipe* rather than a check inside
+`Fortify::authenticateUsing()` for a specific reason: that callback replaces the
+credential check outright, so using it would mean reimplementing password
+verification, remember-me and rehashing here in order to refuse one case.
+Refusing early and letting Fortify's own actions do the work is the whole point.
+The refusal names Discord, because a bare "these credentials do not match our
+records" has somebody retyping a password that was never going to be looked at.
+
+The pipeline is installed with `Fortify::authenticateThrough()`, which is
+evaluated per request — that is what lets the setting be changed in a test
+without rebooting the application. Everything after the first pipe is Fortify's
+own default list, reproduced; if Fortify ever gains a pipe it has to be added
+there too, and `AuthenticationTest` is what would notice.
+
+**The suite runs on the shipped default, which is off.** Only three test files
+actually post to the login route — `AuthenticationTest`, `TwoFactorChallengeTest`
+and `DemoGameSeederTest` — and each turns the setting back on in its own
+`setUp()`. That is deliberate rather than convenient: it means the other
+eleven hundred tests prove the application works in the posture a deployment
+ships with, and `actingAs()` does not go near the route anyway.
+
+**What is still open is the passkey endpoint.** The button is hidden with the
+form, but `POST /passkeys/login` has no callback hook of Fortify's to hang a
+refusal on, so it would need a middleware. It is the lesser case — a passkey
+only exists if that user registered one while signed in, so it is not a way in
+for somebody Control has never set up — but it is not closed, and turning
+Fortify's features off instead is still the wrong lever for the Wayfinder
+reason above.
+
+**And there is a way back in for whoever the handle failed.** A seat is
+reserved against a Discord handle, and that is wrong often enough to matter:
+Control types them off a sign-up list, people rename themselves between signing
+up and turning up, and a handle Control never got leaves somebody signing in to
+a dashboard with no characters on it — which reads as the application being
+broken. `characters.email` is the second claim ticket, and `/claim` is where a
+player redeems it: name the address you signed up with, and the seat is bound
+to the Discord account that comes back.
+
+**It works from both sides of the sign in, because both cases are real.** A
+visitor names their address and is sent through the Discord sign in that
+already exists; somebody *already signed in* — because signing in worked, it
+just found them nothing — is bound on the spot, since there is no reason to
+send them round through Discord to learn what the session already knows. So the
+route sits in neither the `guest` nor the `auth` group: either one would shut
+the door on half the people it exists for.
+
+**The address rides the session, not the character.** `CharacterClaimController::PENDING`
+holds the address across the OAuth round trip and `DiscordController` redeems
+it, and it is looked up *again* at the far end rather than resolved once on the
+way out — what Control edits between one step and the next is the roster, so a
+correction made in the meantime is picked up. It is `pull`ed rather than read,
+because an address that found nothing must not sit in the session waiting to
+fire on a later sign in.
+
+**The claim writes the handle on as well as the `user_id`.** The id is the
+permanent binding; the handle goes on so the Control panel shows the seat as
+linked and every later sign in claims it the ordinary way. Only if the sign in
+brought one, though — a password account has none, and writing null over what
+Control typed would throw it away.
+
+**The address proves nothing, and that is a decision rather than an oversight.**
+Anybody who knows a player's email can link that seat to their own Discord
+account. Two things hold it down: a claim only ever takes a seat with no
+`user_id`, so it can never take one somebody already holds, and Control can
+release a character from the panel, which is the existing undo. A one-time code
+to the address was the alternative and was turned down — `MAIL_MAILER` is `log`
+in `.env.example`, so it would have meant depending on SMTP being right on the
+night, and if it were not then the people who could not self-serve would be
+exactly the people this exists for. If that trade ever stops being acceptable,
+the code goes between `store()` and the redirect to Discord and nothing else
+moves.
+
+**Two characters in one game may not share an address.** A claim takes *every*
+unheld seat on one, so a duplicate would hand whoever got there first both of
+them. It is the same bound the Discord handle already carries and for the same
+reason; a player genuinely on two seats in one game takes the second by handle.
+Across games it is fine, because a different game is a different roster.
+
+**Control seats are deliberately not in this.** `control_members` goes on
+claiming by handle alone: an organiser whose handle was mistyped is fixed by
+another organiser editing the Control team, and the same failure does not leave
+them locked out of a game they are playing.
+
+**The refusals name which case you are in** rather than failing blankly —
+nobody reserved for that address, every seat on it already claimed, or you
+already hold them all. That does leak whether an address is on a roster, which
+is consistent with the trust the flow already extends and is not worth being
+vague about when the alternative is a player who cannot tell whether they typed
+it wrong.
+
+**Dark is the default, and "follow the system" is still a setting.** The game is
+played in the evening and the application is themed off a neon sign, so dark is
+the design rather than a preference — `system` as a default put half the table
+on a white screen. The default is written in *three* places that have to agree —
+`HandleAppearance`, the `@class` on the `html` element and the inline script
+above it — because a server painting one theme and the client swapping to the
+other is the exact flash that inline script exists to prevent. `AppearanceTest`
+pins all three.
+
+The three-way choice stays on the settings page; the sidebar gets a one-click
+`AppearanceToggle` instead, because "follow the system" is a preference you set
+once and "the lights just went up" is a thing that happens mid-game. It reads
+`resolvedAppearance` rather than `appearance`, so somebody on `system` at night
+is offered light — the question is what they are looking at, not what they once
+chose.
+
+**The sidebar draws the seats a player holds, not every page the game has.**
+`App\Support\Navigation` decides it server-side from the characters they have
+claimed, the way `GamePresenter` decides which tier of the Facility board they
+get, and shares it as a `nav` prop. A plain shared prop rather than
+`Inertia::always()`, which is right here for once: the list only changes when
+Control seats somebody, a partial reload leaves the client holding what it had,
+and the query never runs on a poll. `undefined` therefore means "a poll did not
+re-send it" rather than "none", so the sidebar falls back to drawing everything
+rather than blanking itself mid-poll.
+
+Dashboard and Facilities are everybody's — the Facility list is posted in a
+Discord channel the whole game reads, and a Runner picks their target off it.
+Everything else follows the seat: Runs and Shop to both sides, Equipment to the
+Runners (a Corporate seat is refused Equipment outright), Research to any
+Corporate seat, Council to a CEO or to a character Control has written
+`council_votes` on. Control gets the lot, as everywhere.
+
+**Research is narrower than the rest of this file describes it**, and that is
+the designer's ruling rather than a reading. The table's public tier is called
+"everybody's" in the research section above; a Runner is no longer offered the
+link to it. Hiding a link is not closing a door, though — the page still
+filters its own payload, so somebody typing `/research` gets what they always
+got. That is a curiosity; a link nobody can use is a bug.
+
+**The Council went further, and is properly closed.** 3.1.3 hands blank agenda
+cards to "players" rather than to "CEOs", and this application read that
+literally at first: any character in a running game could open the Chamber and
+write one. The designer's ruling is that a seat is what it takes, and that
+somebody without one who wants an agenda raised has to convince somebody who
+has one — which is the conversation the Council is for. So the Chamber returns
+403 without a seat, `AgendaCardPolicy::create` asks for one, and the sidebar
+link follows.
+
+**A seat is one predicate, asked in four places.**
+`Character::scopeOnTheCouncil` is it: a CEO, whose vote is their Corporation's
+Political Will, or anybody Control has written a `council_votes` bloc on.
+`CouncilService::hasSeat()` wraps it, and the Chamber, `CouncilSessionPolicy::vote`,
+`AgendaCardPolicy::create` and `Navigation` all ask *that* rather than keeping
+four copies — `vote` used to carry its own and no longer does. Control is
+deliberately not in the predicate: the override belongs in the policies'
+`before()`, and a service that answered "yes, Control" would put it in two
+places.
+
+Note the instance method `Character::sitsOnCouncil()` is the *narrower*
+question and stays that way — it asks about the `council_votes` kind alone,
+because a CEO has no bloc of their own and never should.
+
+**Holding a seat is not the same as signing with it.** A player holding both a
+CEO chair and a Runner may raise an agenda, but as the CEO:
+`StoreAgendaCardRequest` checks the *character* named on the card, because
+otherwise the Chair is handed a card from somebody who is not in the room. The
+policy asks whether this user may write one at all; the request asks which of
+their seats is signing it.
+
+**The palette is sampled off the logo rather than chosen.** The neon tube in
+`public/images/running-hot.webp` sits at hue 33–40 with a chroma of about 0.24
+and its ground at a lightness of 0.067, which is where `--primary` and the dark
+theme's background come from. Three things about that are worth not undoing:
+
+- **Every value was checked against the sRGB gamut, and every readable pair
+  against WCAG AA.** An oklch outside the gamut is clipped *silently*, so the
+  colour that ships is not the one in the file and nothing says so. The tight
+  pairs are the light theme's `--primary` (white label on it, 4.71) and its
+  `--muted-foreground` (5.79) — raising the lightness of either is what breaks
+  them.
+- **`--destructive` moved to hue 14–16, away from the usual 27.** The primary is
+  now an orange-red, and a Delete button the same colour as the Log in button is
+  a Delete button nobody sees coming. It still reads unmistakably red; it is
+  just on the other side of the tube.
+- **The inline `<style>` in `app.blade.php` holds the same two background
+  colours a second time**, because it paints the `html` element before the CSS
+  bundle lands. It is the one place the tokens are duplicated, and leaving it
+  behind is a flash of the old white on every dark-theme load.
+
+**The theme is the tokens, and almost nothing else.** Every shadcn component
+already reads `--primary`, `--muted` and the rest, so the restyle is that one
+file — which is also why the starter kit's literal `neutral-*` chrome had to go
+(the appearance tabs, the avatar fallbacks, the header, the footer links): a
+cold grey does not follow a warm theme, and it was the one thing on the page
+still the colour the starter kit left it. The literal `amber`, `red` and `green`
+in the game's own components are deliberately left alone: those carry meaning
+rather than brand, and a warning that changes colour with the theme is a warning
+nobody can rely on.
 
 ## Built so far
 

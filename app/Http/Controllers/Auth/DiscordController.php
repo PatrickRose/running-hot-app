@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Actions\ClaimCharactersByEmail;
 use App\Actions\ClaimCharactersForUser;
 use App\Actions\ClaimControlSeatsForUser;
 use App\Http\Controllers\Controller;
@@ -10,6 +11,7 @@ use App\Models\Character;
 use App\Models\ControlMember;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
@@ -26,6 +28,7 @@ class DiscordController extends Controller
 {
     public function __construct(
         private readonly ClaimCharactersForUser $claimCharacters,
+        private readonly ClaimCharactersByEmail $claimByEmail,
         private readonly ClaimControlSeatsForUser $claimControlSeats,
     ) {}
 
@@ -36,7 +39,7 @@ class DiscordController extends Controller
         return Socialite::driver('discord')->redirect();
     }
 
-    public function callback(): RedirectResponse
+    public function callback(Request $request): RedirectResponse
     {
         try {
             $discordUser = Socialite::driver('discord')->user();
@@ -75,6 +78,16 @@ class DiscordController extends Controller
         // roster after someone has already logged in still reaches them.
         $claimed = $this->claimCharacters->handle($user);
 
+        // And to whatever seat they named an address for on the way in, which
+        // is the way back for somebody Control could not reach by handle. The
+        // address is forgotten either way: a redemption that found nothing
+        // must not sit in the session waiting to fire on a later sign in.
+        $pending = $request->session()->pull(CharacterClaimController::PENDING);
+
+        if ($pending !== null) {
+            $claimed = [...$claimed, ...$this->claimByEmail->handle($user, $pending)];
+        }
+
         // And to whatever Control seats they have been named on, which is how
         // an organiser becomes Control of a game without anyone touching the
         // console.
@@ -89,7 +102,7 @@ class DiscordController extends Controller
 
         Auth::login($user, remember: true);
 
-        request()->session()->regenerate();
+        $request->session()->regenerate();
 
         $status = [];
 

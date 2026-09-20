@@ -386,6 +386,9 @@ class GamePresenter
                     'is_corporate' => $character->role->isCorporate(),
                     'team' => $character->gang->name ?? $character->corporation?->name,
                     'discord_username' => $character->discord_username,
+                    // The second claim ticket, for when the handle was never
+                    // right. Control's alone: it is on no player-facing payload.
+                    'email' => $character->email,
                     'claimed_by' => $character->user?->name,
                     // The four printed stats. Not Trackers: they are what a
                     // character is rather than a number that moves, so Control

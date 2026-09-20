@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AgendaCardController;
+use App\Http\Controllers\Auth\CharacterClaimController;
 use App\Http\Controllers\Auth\DiscordController;
 use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
 use App\Http\Controllers\FacilityTechnologyController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ResearchBoardController;
 use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
@@ -40,12 +42,31 @@ use App\Http\Controllers\RunController;
 use App\Http\Controllers\ShopController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+/*
+ * There is no landing page. Everybody who uses this application signs in — a
+ * player to their seats, Control to its panel — so the front door is the login
+ * form rather than a page describing the game to somebody already here to play
+ * it. The name is kept because logging out, deleting an account and asking for
+ * a fresh verification mail all redirect to it.
+ */
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware('guest')->group(function () {
     Route::get('auth/discord', [DiscordController::class, 'redirect'])->name('auth.discord');
     Route::get('auth/discord/callback', [DiscordController::class, 'callback'])->name('auth.discord.callback');
 });
+
+/*
+ * "I signed up to this game with this email address."
+ *
+ * Deliberately in neither middleware group. A visitor names their address and
+ * is sent through the Discord sign in; somebody already signed in - because
+ * signing in worked, it just found them nothing - is bound on the spot. Both
+ * are people the handle failed, so a `guest` or an `auth` here would shut the
+ * door on half of them.
+ */
+Route::get('claim', [CharacterClaimController::class, 'create'])->name('claim');
+Route::post('claim', [CharacterClaimController::class, 'store'])->name('claim.store');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -174,10 +195,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // is what checks the seat matches the counter, and that the shop is open.
     Route::post('shop/{listing}/buy', [ShopController::class, 'buy'])->name('shop.buy');
 
-    // The Council (rulebook 3.1). Everyone playing may read it, because the
-    // agenda is read out and any player may write a custom one. Who may vote,
-    // and who may chair, is the CouncilSessionPolicy's answer rather than a
-    // middleware's - the Chair is a Corporation that changes every turn.
+    // The Council (rulebook 3.1). A seat is what it takes to read it at all -
+    // the controller refuses without one - and who may vote, and who may
+    // chair, narrows from there in the CouncilSessionPolicy rather than in a
+    // middleware: the Chair is a Corporation that changes every turn.
     Route::get('council', CouncilController::class)->name('council');
 
     Route::post('council/items/{item}/ballots', [CouncilBallotController::class, 'store'])
@@ -449,6 +470,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 Route::post('games/{game}/characters/{character}/discord', [CharacterController::class, 'updateDiscord'])
                     ->name('characters.discord');
+                Route::post('games/{game}/characters/{character}/email', [CharacterController::class, 'updateEmail'])
+                    ->name('characters.email');
                 Route::post('games/{game}/characters/{character}/release', [CharacterController::class, 'release'])
                     ->name('characters.release');
             });

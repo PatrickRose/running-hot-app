@@ -1,4 +1,5 @@
 import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { CharacterEmail } from '@/components/character-email';
 import { CharacterLogo } from '@/components/character-logo';
 import { ControlTeam } from '@/components/control-team';
 import { DiscordHandle } from '@/components/discord-handle';
@@ -287,6 +288,11 @@ export default function ControlGameShow({
                             automatically. Once claimed, the link survives a
                             Discord rename.
                             <br />
+                            The email address is the fallback for when the
+                            handle was never right: the player names it
+                            themselves at <code>/claim</code> and is linked
+                            through Discord from there.
+                            <br />
                             Their numbers — Wounds, Tags, Credits and the four
                             stats on the character sheet — are on the Stats
                             screen.
@@ -305,7 +311,10 @@ export default function ControlGameShow({
                                     <th className="py-2 pr-4 font-medium">
                                         Team
                                     </th>
-                                    <th className="py-2 font-medium">Player</th>
+                                    <th className="py-2 pr-4 font-medium">
+                                        Player
+                                    </th>
+                                    <th className="py-2 font-medium">Email</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -339,7 +348,7 @@ export default function ControlGameShow({
                                             <td className="py-2 pr-4 text-muted-foreground">
                                                 {character.team ?? '—'}
                                             </td>
-                                            <td className="py-2">
+                                            <td className="py-2 pr-4">
                                                 <DiscordHandle
                                                     gameId={game.id}
                                                     characterId={
@@ -354,6 +363,18 @@ export default function ControlGameShow({
                                                     claimedBy={
                                                         character.claimed_by
                                                     }
+                                                />
+                                            </td>
+                                            <td className="py-2">
+                                                <CharacterEmail
+                                                    gameId={game.id}
+                                                    characterId={
+                                                        character.subject_id
+                                                    }
+                                                    characterName={
+                                                        character.name
+                                                    }
+                                                    email={character.email}
                                                 />
                                             </td>
                                         </tr>

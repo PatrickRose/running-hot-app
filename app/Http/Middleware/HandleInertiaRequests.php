@@ -4,13 +4,17 @@ namespace App\Http\Middleware;
 
 use App\Models\Game;
 use App\Support\GamePresenter;
+use App\Support\Navigation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
-    public function __construct(private readonly GamePresenter $games) {}
+    public function __construct(
+        private readonly GamePresenter $games,
+        private readonly Navigation $navigation,
+    ) {}
 
     /**
      * The root template that's loaded on the first page visit.
@@ -97,6 +101,16 @@ class HandleInertiaRequests extends Middleware
 
                 return $game === null ? null : $this->games->standing($game, $request->user());
             }),
+            // Which sections this player is offered, so the sidebar draws
+            // the seats they hold rather than every page the game has. A plain
+            // closure rather than always(): a partial reload leaves the client
+            // holding the list it already had, which is right - the nav only
+            // changes when Control seats somebody, and the next full visit
+            // picks that up. It also means the query never runs on a poll.
+            'nav' => fn (): array => $this->navigation->sectionsFor(
+                Game::current(),
+                $request->user(),
+            ),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
