@@ -45,7 +45,7 @@ class ShopController extends Controller
     public function index(Game $game, GamePresenter $presenter, ShopPresenter $shop): Response
     {
         return Inertia::render('control/games/shop', [
-            'game' => $presenter->summary($game),
+            'game' => $presenter->controlSummary($game),
             'shop' => $shop->forControl($game),
         ]);
     }

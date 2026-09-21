@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\GameStatus;
 use App\Enums\PhaseStatus;
 use App\Enums\PhaseType;
 use App\Models\Character;
@@ -14,6 +15,7 @@ use App\Support\LogoImage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -406,5 +408,59 @@ class ControlPanelTest extends TestCase
                 'discord_webhook_url' => 'https://discord.com/api/webhooks/1/hijack',
             ])
             ->assertForbidden();
+    }
+
+    /**
+     * An incoming webhook is a bearer credential, so a player must never be
+     * sent one - a page that does not render it still puts it on the wire.
+     *
+     * Asserted at the presenter as well as on a page, because every one of the
+     * seven player-facing controllers goes through summary(): one assertion
+     * there covers the shop, the runs, the research table and the rest.
+     */
+    public function test_a_players_payload_carries_no_webhook(): void
+    {
+        $game = Game::factory()->create([
+            'status' => GameStatus::Running,
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/123456789/abcdef-ghij',
+        ]);
+
+        $this->assertArrayNotHasKey(
+            'discord_webhook_url',
+            app(GamePresenter::class)->summary($game),
+            'The shared summary is what every player-facing page sends.',
+        );
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                // The game itself is there, so the missing key below is the
+                // key being absent rather than the whole prop being null.
+                ->where('game.id', $game->id)
+                ->missing('game.discord_webhook_url')
+                ->etc());
+    }
+
+    public function test_control_still_reads_the_webhook_on_its_own_page(): void
+    {
+        $url = 'https://discord.com/api/webhooks/123456789/abcdef-ghij';
+
+        $game = Game::factory()->create([
+            'status' => GameStatus::Running,
+            'discord_webhook_url' => $url,
+        ]);
+
+        $this->assertSame(
+            $url,
+            app(GamePresenter::class)->controlSummary($game)['discord_webhook_url'],
+        );
+
+        $this->actingAs($this->control())
+            ->get("/control/games/{$game->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('game.discord_webhook_url', $url)
+                ->etc());
     }
 }

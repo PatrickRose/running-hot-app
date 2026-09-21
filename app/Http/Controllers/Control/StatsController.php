@@ -28,7 +28,7 @@ class StatsController extends Controller
     public function index(Game $game, GamePresenter $presenter): Response
     {
         return Inertia::render('control/games/stats', [
-            'game' => $presenter->summary($game),
+            'game' => $presenter->controlSummary($game),
             'trackers' => $presenter->trackers($game),
             'adjustments' => $presenter->recentAdjustments($game),
         ]);

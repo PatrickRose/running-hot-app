@@ -22,7 +22,7 @@ class ResearchController extends Controller
     public function index(Game $game, GamePresenter $games, ResearchPresenter $research): Response
     {
         return Inertia::render('control/games/research', [
-            'game' => $games->summary($game),
+            'game' => $games->controlSummary($game),
             'research' => $research->control($game),
         ]);
     }

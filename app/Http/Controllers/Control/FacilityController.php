@@ -45,7 +45,7 @@ class FacilityController extends Controller
     public function index(Game $game, GamePresenter $presenter): Response
     {
         return Inertia::render('control/games/facilities', [
-            'game' => $presenter->summary($game),
+            'game' => $presenter->controlSummary($game),
             'facilities' => $presenter->facilities($game),
             'plotFacilities' => $presenter->plotFacilities($game),
             'facilityTypes' => $presenter->facilityTypes($game),

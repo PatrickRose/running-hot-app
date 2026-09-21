@@ -72,6 +72,17 @@ class GamePresenter
     }
 
     /**
+     * The game as anybody signed in may read it.
+     *
+     * Deliberately carries no `discord_webhook_url`: an incoming webhook is a
+     * bearer credential, and anybody holding one can post into #announcements
+     * as the announcer, with no token and no authentication. In a game where
+     * Control's announcements carry rulings, that is not a string to put on the
+     * wire to every player because nothing on their pages happens to render it.
+     * Control's copy is controlSummary() below, which is the only caller that
+     * adds it - so a new player-facing page gets the safe shape by default
+     * rather than by remembering to ask for it.
+     *
      * @return array<string, mixed>
      */
     public function summary(Game $game): array
@@ -86,7 +97,6 @@ class GamePresenter
             'stability' => $game->stability,
             'civil_unrest' => $game->civil_unrest,
             'auto_advance' => $game->auto_advance,
-            'discord_webhook_url' => $game->discord_webhook_url,
             'durations' => [
                 'setup_seconds' => $game->setup_seconds,
                 'action_seconds' => $game->action_seconds,
@@ -95,6 +105,24 @@ class GamePresenter
             'phase' => $phase === null ? null : $this->phase($phase),
             'discord' => $this->discord($game),
             'server_time' => now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * The same game as Control reads it, webhook and all.
+     *
+     * The one key is the difference, so this is a spread of summary() rather
+     * than a second copy of the shape: two payloads describing one game is how
+     * they drift. Every caller is behind `can:control` or
+     * `can:control-game`, which is what makes adding the credential here safe.
+     *
+     * @return array<string, mixed>
+     */
+    public function controlSummary(Game $game): array
+    {
+        return [
+            ...$this->summary($game),
+            'discord_webhook_url' => $game->discord_webhook_url,
         ];
     }
 
