@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Character;
 use App\Models\EquipmentCardType;
 use App\Models\EquipmentHolding;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -112,5 +113,82 @@ class EquipmentService
         $holding->increment('copies', $copies);
 
         return $holding->refresh();
+    }
+
+    /**
+     * Pass copies from one hand to another (rulebook 2.1).
+     *
+     * "You may buy equipment, either from the market or from other players" is
+     * the whole of what the rulebook says about this, and the word that shapes
+     * it is *buy*: what comes back the other way is Credits, a favour, or a
+     * share of the next job. None of that moves here, for the reason a research
+     * point trade moves nothing back either (3.2.5) - a transfer is one-way and
+     * one-sided, one hand goes down and the other goes up, and what was agreed
+     * in exchange is settled at the table.
+     *
+     * That one-sidedness is also what makes it safe to give a player. Handing a
+     * card away spends only what is yours; a transfer that also took the other
+     * player's Credits would be one player reaching into another's purse on the
+     * strength of a price only the giver had typed in.
+     *
+     * Locked for the length of it, because two copies given away at once from
+     * the same hand is exactly what a double-clicked button is.
+     */
+    public function transfer(
+        Character $from,
+        Character $to,
+        EquipmentCardType $card,
+        int $copies = 1,
+    ): void {
+        if ($copies < 1) {
+            throw ValidationException::withMessages([
+                'copies' => 'Handing somebody no copies of a card is not handing them anything.',
+            ]);
+        }
+
+        if ($from->is($to)) {
+            throw ValidationException::withMessages([
+                'to_character_id' => 'That card is already in their hand.',
+            ]);
+        }
+
+        if ($from->game_id !== $to->game_id || $card->game_id !== $from->game_id) {
+            throw ValidationException::withMessages([
+                'to_character_id' => sprintf('%s is playing a different game.', $to->name),
+            ]);
+        }
+
+        DB::transaction(function () use ($from, $to, $card, $copies): void {
+            // The same query twice, which is what lets the count be read
+            // without a model to be null: somebody who has never held this card
+            // has no row at all, and that is nought copies rather than an
+            // error.
+            $hand = fn () => EquipmentHolding::query()
+                ->where('character_id', $from->id)
+                ->where('equipment_card_type_id', $card->id);
+
+            $held = (int) $hand()->lockForUpdate()->value('copies');
+
+            if ($held < $copies) {
+                throw ValidationException::withMessages([
+                    'copies' => sprintf(
+                        '%s is carrying %d %s of %s, not %d.',
+                        $from->name,
+                        $held,
+                        $held === 1 ? 'copy' : 'copies',
+                        $card->name,
+                        $copies,
+                    ),
+                ]);
+            }
+
+            // The row stays at nought rather than being deleted, for the reason
+            // setCopiesInHand keeps it: somebody who has given their last
+            // Mini-hospital away held one, and a list that forgets it reads as
+            // though they never did.
+            $hand()->decrement('copies', $copies);
+
+            $this->giveCopies($to, $card, $copies);
+        });
     }
 }

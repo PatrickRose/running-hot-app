@@ -31,6 +31,7 @@ use App\Services\FacilityDefenceService;
 use App\Services\TechnologyService;
 use App\Support\Discord\GuildBlueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -829,7 +830,7 @@ class GamePresenter
     public function equipmentHoldings(Game $game, ?User $viewer = null): array
     {
         $query = $game->characters()
-            ->with(['gang', 'corporation', 'equipmentHoldings.cardType'])
+            ->with(['game', 'gang', 'corporation', 'equipmentHoldings.cardType'])
             ->orderBy('name');
 
         if ($viewer !== null && ! $viewer->isControlFor($game)) {
@@ -885,6 +886,14 @@ class GamePresenter
                 'role' => $character->role->value,
                 'role_label' => $character->role->label(),
                 'cards' => $cards,
+                // Whether this viewer may hand a card out of this hand (2.1),
+                // asked of the Gate rather than worked out here: the seat, the
+                // claim and the shop's own clock are all
+                // App\Policies\CharacterPolicy's. False with no viewer, which
+                // is the Control panel's own call - it gives through its own
+                // route rather than this one.
+                'can_give' => $viewer !== null
+                    && Gate::forUser($viewer)->allows('giveEquipment', $character),
             ];
         }
 

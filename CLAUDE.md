@@ -289,6 +289,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Inertia payload shaping | `App\Support\GamePresenter` |
 | What a player may see of the Facilities | `App\Http\Controllers\FacilityBoardController` |
 | What a player may see of their Equipment | `App\Http\Controllers\EquipmentController`, `resources/js/pages/equipment.tsx` |
+| One player handing a card to another | `App\Http\Controllers\EquipmentTransferController`, `App\Services\EquipmentService::transfer()`, `App\Policies\CharacterPolicy` |
 | Security arranging their own stacks | `App\Http\Controllers\FacilityDefenceController`, `App\Policies\FacilityPolicy` |
 | Moving a stored technology between Facilities | `App\Http\Controllers\FacilityTechnologyController`, `App\Services\TechnologyService::place()` |
 | The drag-and-drop defence board | `resources/js/components/facility-defence-board.tsx` |
@@ -1291,7 +1292,17 @@ None of it is a Tracker. A Tracker is a number the game moves and argues about a
 
 **Giving and setting are two writes, because they answer different questions.** `EquipmentService::giveCopies()` *adds*, and is what Control reaches for at the table: it knows what it is handing over and not what is already in the hand, so a give that set the count would quietly take away the two Shivs somebody was carrying. `setCopiesInHand()` replaces it, which is the correction — a card spent, a haul split, a number typed wrong. The give is one searchable form at the top of the list rather than a `select` per person, for the reason the shop's picker is a combobox: seventy-four cards against a roster of forty is two lists nobody finds anything in, and the card is drawn before it is given because the thing somebody at the table is holding is the artwork.
 
-**Handing a card to another player is still a conversation.** 2.1 permits it outright — the rulebook's own words are "or from other players" — and the application deliberately does not model the transfer: there is no route by which one player gives a card to another. Control writes down where the count ended up, which is what it does for the market, a gang splitting a haul and an auction. What changed is only *who* may end up holding one.
+**Players hand cards to each other, and that is 2.1's own second half.** "You may buy equipment, either from the market or from other players" — the market is the shop's counter, and the other players are `POST /equipment/give`. It is the one thing on `/equipment` that is not read-only.
+
+**Only the card moves, and there is deliberately no price box.** What came back — Credits, a favour, a share of the next job — is settled at the table, for the reason a research point trade settles there: 3.2.5 has players trading "by passing over the requisite tokens", so a transfer is one-way and one-sided, one hand goes down and the other goes up. That one-sidedness is also what makes it safe to hand a player at all. Giving spends only what is yours; a transfer that *also* took the recipient's Credits would be one player reaching into another's purse on the strength of a price only the giver had typed in. If a price ever does have to travel, it needs the other player's consent first, and that is a second act rather than a wider form.
+
+**`EquipmentService::transfer()` is the write**, in a transaction with the giver's row locked, because two copies given away at once out of the same hand is exactly what a double-clicked button is. The row is left at nought rather than deleted, as `setCopiesInHand` leaves one.
+
+**`CharacterPolicy::giveEquipment` is who and when**, and it is `ShopListingPolicy`'s division again: the seat, the claim and the clock are the policy's, and whether there are copies to give at all is the service's. The seat has to be *yours*, because giving spends what is in that hand — but who may **receive** is not asked at all, since 2.1 names no restriction on the far side and who may hold a card is Control's call. The clock is 2.1's own: buying equipment is listed under the Setup Phase, so a trade during the Action phase is a trade out of time, and being out of time is what `before()` exists for. Control trades out of anybody's hand at any point in the turn.
+
+The form is drawn on each hand rather than once at the top of the page, because a player may hold two seats and which of them is handing the card over is the first thing the trade has to say — putting the button on the hand answers that by where it is. Its refusal is kept on that hand for the reason the run screen's `useRunAction` keeps its own: two seats on one page reporting against the same keys would put one hand's refusal under every hand on screen.
+
+Everything else is still a conversation: splitting a haul and an auction end with Control writing down where the count ended up.
 
 **Every Runner opens the game carrying what their briefing prints**, seeded by `SeedEquipmentHoldings` from per-Runner lists in `config/running_hot.php` — per Runner because the briefings are one document per player, so there is deliberately no gang-level list to be mis-keyed against somebody else. Two readings are worth knowing. A briefing's **"Ability" section is a card too**: what is printed under it is the effect text of `EEP014`–`EEP016`, the three Reconnaissance cards, reproduced almost word for word, so Ballet, Bitter and Z3R0 are seeded as the cards they are. And a **Freelancer carrying nothing is the right answer**, not an unfinished one — all three are given "Special rules" in place of a kit, and none of those is an Equipment card.
 
@@ -1301,7 +1312,7 @@ The seeder **skips a code it cannot find**, which is right when Control has dele
 
 It is its own page rather than a corner of the dashboard, because a hand is what you work from: choosing three permanent items to equip means laying the cards out and reading them, so they are drawn as `CardFace`s grouped by category. The `×N` copy count sits *outside* `CardFace` and on top of it, for the reason the defence board's does — it has to stay legible over artwork as well as over the text box. The team band is drawn only for Control: a player holding one Runner already knows which gang they are in, and it is what makes forty hands readable.
 
-Read-only, on both sides of the line: a hand is read here and spent elsewhere. **Selling between Runners, handing a card to another player and splitting a haul stay conversations at the table**, so Control sets the count for those on their own panel. Buying from the market does not — see The shop, below.
+One thing on it is not read-only, and it is **handing a card to another player** (2.1) — see above. **Splitting a haul and an auction stay conversations at the table**, so Control sets the count for those on their own panel. Buying from the market does not — see The shop, below.
 
 **Technology trees attach to Corporations late.** A game is created before its roster exists, so `SeedTechnologies` writes every technology unattached and fills in `corporation_id` on a second run, after `CreateDefaultRoster`. `CreateDefaultFacilities` makes that second call. Note the codes do not identify the tree reliably — Gordon and Genetic Equity both take a `G` — so the tree comes from the sheet's own column.
 
@@ -1407,7 +1418,9 @@ Control hands it over on the card list page instead.
 
 **Which counter you see is the seat you hold.** 3.3.3 hands the Protection Card
 list to the Security players, so it goes to the Corporate seats; the market is
-the Runners'. A price list is not one of the things 3.4.2 keeps Secret, but
+the Runners' — and the other half of 2.1's sentence, one player buying from
+another, is on `/equipment` rather than here, because it spends out of a hand
+rather than off a shelf. A price list is not one of the things 3.4.2 keeps Secret, but
 handing every Runner a catalogue of the cards they are about to meet is
 reconnaissance the rulebook makes them pay for, so `ShopPresenter` draws the same
 line the rulebook does. Inside a Corporation the CEO and the Research player read

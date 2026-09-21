@@ -308,6 +308,12 @@ export type CharacterEquipment = {
     role: string;
     role_label: string;
     cards: EquipmentHolding[];
+    /**
+     * Whether the viewer may hand a card out of this hand (rulebook 2.1) —
+     * their own seat, in a running game, during Setup. Control may always, and
+     * false on the Control panel, which gives through its own route.
+     */
+    can_give: boolean;
 };
 
 /**

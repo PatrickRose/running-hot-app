@@ -30,6 +30,7 @@ use App\Http\Controllers\CouncilChairController;
 use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipmentController;
+use App\Http\Controllers\EquipmentTransferController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
 use App\Http\Controllers\FacilityTechnologyController;
@@ -106,6 +107,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // player sees the hands of whoever they have claimed, and Control sees
     // everybody, so the viewer is the whole of the question.
     Route::get('equipment', EquipmentController::class)->name('equipment');
+
+    // One player handing a card to another (rulebook 2.1). The other half of
+    // "either from the market or from other players" - the market being the
+    // shop's own counter. What travels is the card; what was agreed in
+    // exchange is settled at the table, as a research point trade is.
+    Route::post('equipment/give', EquipmentTransferController::class)
+        ->name('equipment.give');
 
     // The research sub-game (rulebook 3.2). None of these names a Corporation:
     // a player has exactly one, so the seat they hold decides which, and the

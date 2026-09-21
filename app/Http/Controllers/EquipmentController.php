@@ -28,9 +28,12 @@ use Inertia\Response;
  * that never has the conversation, and at the table you would have to ask.
  * Control sees everybody, because Control always does.
  *
- * Read-only. Every way a card changes hands is a conversation with Control, who
- * sets the count on their own panel - the same division the Protection Card
- * holdings live under.
+ * Handing a card to another player happens here, which is the one thing on this
+ * page that is not read-only: 2.1 has Runners buying equipment "from other
+ * players", and that half of the sentence had nowhere to happen. What travels
+ * is the card alone - whatever was agreed in exchange is settled at the table,
+ * for the reason a research point trade settles there. Every other way a count
+ * moves is still a conversation with Control, who sets it on their own panel.
  */
 class EquipmentController extends Controller
 {
@@ -42,6 +45,11 @@ class EquipmentController extends Controller
         return Inertia::render('equipment', [
             'game' => $game === null ? null : $presenter->summary($game),
             'holdings' => $game === null ? null : $presenter->equipmentHoldings($game, $user),
+            // Everybody a card can be handed to. The whole roster, because 2.1
+            // names no restriction on the far side of the trade and who may
+            // hold a card is Control's call - a Runner squaring a debt with a
+            // CEO is a trade the rulebook has nothing to say against.
+            'recipients' => $game === null ? [] : $presenter->equipmentRecipients($game),
             // So the page can say whose hands these are. Control is reading the
             // whole game and should be told so; a player is reading their own.
             'is_control' => $game !== null && $user !== null && $user->isControlFor($game),
