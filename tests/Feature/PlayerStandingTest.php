@@ -151,9 +151,39 @@ class PlayerStandingTest extends TestCase
                     ->where('standing.stability', 4)));
     }
 
-    public function test_a_game_that_is_not_running_carries_no_standing(): void
+    /**
+     * A game off the clock is read rather than hidden, so the strip follows the
+     * pages: somebody reading their briefing before the session wants to know
+     * what they are opening with, and the numbers are as true then as they are
+     * on the night. They were null until Game::current() answered for a game
+     * that is not running - a side effect of the lookup rather than a decision,
+     * which is why this used to assert the opposite.
+     *
+     * Procatorion's two numbers belong to the game, so an empty roster of
+     * characters is a strip of those alone rather than nothing at all.
+     */
+    public function test_a_game_that_is_not_running_still_carries_the_standing(): void
     {
         $this->game->forceFill(['status' => 'draft'])->save();
+
+        $runner = Character::factory()->for($this->game)->runner()->create([
+            'credits' => 5,
+        ]);
+
+        $this->actingAs($this->player($runner))
+            ->get(route('dashboard'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('standing.characters.0.credits', 5)
+                ->where('standing.stability', 4));
+    }
+
+    /**
+     * The null the strip actually has to cope with: no game at all, which is a
+     * fresh deployment rather than a game between states.
+     */
+    public function test_no_game_at_all_carries_no_standing(): void
+    {
+        Game::query()->delete();
 
         $this->actingAs(User::factory()->create())
             ->get(route('dashboard'))
