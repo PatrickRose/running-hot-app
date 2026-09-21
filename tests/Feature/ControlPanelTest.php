@@ -425,6 +425,11 @@ class ControlPanelTest extends TestCase
             'discord_webhook_url' => 'https://discord.com/api/webhooks/123456789/abcdef-ghij',
         ]);
 
+        // Freshly created, discord_provision_status is not hydrated yet and
+        // the presenter reads it. A controller route-model-binds from the
+        // database, so only a direct call needs this.
+        $game->refresh();
+
         $this->assertArrayNotHasKey(
             'discord_webhook_url',
             app(GamePresenter::class)->summary($game),
@@ -450,6 +455,8 @@ class ControlPanelTest extends TestCase
             'status' => GameStatus::Running,
             'discord_webhook_url' => $url,
         ]);
+
+        $game->refresh();
 
         $this->assertSame(
             $url,
