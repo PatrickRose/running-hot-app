@@ -21,10 +21,9 @@ use Illuminate\Validation\Rule;
  * the reason a research point trade settles there.
  *
  * Thin, like every other player-facing route here. Whether this seat is yours
- * and whether the shop's own clock is open are App\Policies\CharacterPolicy's;
- * whether there are copies to give is App\Services\EquipmentService's, which is
- * the one writer of that table. This class only says which three things are
- * being named.
+ * is App\Policies\CharacterPolicy's; whether there are copies to give is
+ * App\Services\EquipmentService's, which is the one writer of that table. This
+ * class only says which three things are being named.
  */
 class EquipmentTransferController extends Controller
 {

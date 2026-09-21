@@ -26,6 +26,9 @@ use Tests\TestCase;
  * the next job - is settled at the table, exactly as a research point trade is
  * (3.2.5). A transfer that also took the recipient's Credits would be one
  * player reaching into another's purse on a price only the giver had typed.
+ *
+ * And there is no clock on it, unlike the shop's counter: handing a card over
+ * is two players agreeing in a Discord channel, and those are open all turn.
  */
 class EquipmentTransferTest extends TestCase
 {
@@ -42,8 +45,6 @@ class EquipmentTransferTest extends TestCase
         $this->game = Game::factory()->create(['status' => GameStatus::Running]);
         $this->gang = Gang::factory()->for($this->game)->create(['name' => 'Facers']);
 
-        // 2.1 puts buying equipment in the Setup phase, which is where a turn
-        // opens.
         app(TurnEngine::class)->start($this->game);
         $this->game->refresh();
     }
@@ -201,10 +202,12 @@ class EquipmentTransferTest extends TestCase
     }
 
     /**
-     * 2.1 is the Setup Phase, so a trade during the Action phase is a trade out
-     * of time - and being out of time is exactly what Control waves through.
+     * There is no clock on a trade, which is where this parts company with the
+     * shop. The shop is a counter Control opens and shuts; handing a card over
+     * is two players agreeing in a Discord channel, and those are open all
+     * turn.
      */
-    public function test_a_trade_is_refused_outside_setup(): void
+    public function test_a_trade_is_allowed_outside_setup(): void
     {
         $user = User::factory()->create();
         $wicker = $this->runner('Wicker', $user);
@@ -222,20 +225,59 @@ class EquipmentTransferTest extends TestCase
                 'equipment_card_type_id' => $card->id,
                 'copies' => 1,
             ])
-            ->assertForbidden();
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $ghost->equipmentCopiesOf($card->id));
+    }
+
+    /**
+     * A game that is not running has no hands to move cards between, which is
+     * the one thing the policy still asks about.
+     */
+    public function test_a_trade_is_refused_before_the_game_starts(): void
+    {
+        $game = Game::factory()->create(['status' => GameStatus::Draft]);
+        $gang = Gang::factory()->for($game)->create();
+
+        $user = User::factory()->create();
+
+        $wicker = Character::factory()->for($game)->create([
+            'gang_id' => $gang->id,
+            'user_id' => $user->id,
+            'name' => 'Wicker',
+            'role' => CharacterRole::Runner,
+        ]);
+
+        $ghost = Character::factory()->for($game)->create([
+            'gang_id' => $gang->id,
+            'name' => 'Ghost',
+            'role' => CharacterRole::Runner,
+        ]);
+
+        $card = EquipmentCardType::factory()->for($game)->create();
+        app(EquipmentService::class)->setCopiesInHand($wicker, $card, 1);
+
+        // Game::current() is the running one, so the draft game's characters
+        // are not even on the roster this route reads.
+        $this->actingAs($user)
+            ->post('/equipment/give', [
+                'from_character_id' => $wicker->id,
+                'to_character_id' => $ghost->id,
+                'equipment_card_type_id' => $card->id,
+                'copies' => 1,
+            ])
+            ->assertSessionHasErrors('from_character_id');
 
         $this->assertSame(0, $ghost->equipmentCopiesOf($card->id));
     }
 
-    public function test_control_may_trade_out_of_time_and_out_of_anybodys_hand(): void
+    public function test_control_may_trade_out_of_anybodys_hand(): void
     {
         $wicker = $this->runner('Wicker');
         $ghost = $this->runner('Ghost');
 
         $card = $this->card();
         $this->hold($wicker, $card, 1);
-
-        $this->advancePastSetup();
 
         $this->actingAs($this->control())
             ->post('/equipment/give', [
@@ -275,7 +317,7 @@ class EquipmentTransferTest extends TestCase
         }
     }
 
-    public function test_the_payload_closes_the_give_outside_setup(): void
+    public function test_the_payload_keeps_the_give_open_outside_setup(): void
     {
         $user = User::factory()->create();
         $this->runner('Wicker', $user);
@@ -284,7 +326,7 @@ class EquipmentTransferTest extends TestCase
 
         $groups = app(GamePresenter::class)->equipmentHoldings($this->game, $user);
 
-        $this->assertFalse($groups[0]['members'][0]['can_give']);
+        $this->assertTrue($groups[0]['members'][0]['can_give']);
     }
 
     /**

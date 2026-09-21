@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Enums\GameStatus;
-use App\Enums\PhaseType;
 use App\Models\Character;
 use App\Models\User;
 
@@ -11,20 +10,18 @@ use App\Models\User;
  * What a player may do with a seat they hold.
  *
  * One ability so far, and the division is `ShopListingPolicy`'s: this answers
- * *who and when*, and App\Services\EquipmentService answers *what the rules
- * allow*. So the seat, the claim and the clock are here, and whether there are
- * copies to give at all is there. A refusal that would still be a refusal for
- * Control belongs in the service rather than in this file.
+ * *who*, and App\Services\EquipmentService answers *what the rules allow*. So
+ * the seat and the claim are here, and whether there are copies to give at all
+ * is there. A refusal that would still be a refusal for Control belongs in the
+ * service rather than in this file.
  */
 class CharacterPolicy
 {
     /**
-     * Control reaches every hand, at any point in the turn.
+     * Control reaches every hand.
      *
-     * A trade agreed in a Discord channel while the Action phase runs is
-     * exactly the kind of thing Control waves through, and a player who cannot
-     * get to their laptop still has cards to hand over. Control of *this game*,
-     * though: a seat on one game's Control team is not a seat on another's.
+     * Control of *this game*, though: a seat on one game's Control team is not
+     * a seat on another's.
      */
     public function before(User $user, string $ability, ?Character $character = null): ?bool
     {
@@ -43,20 +40,20 @@ class CharacterPolicy
      * the far side of the trade, and who may hold a card is Control's call
      * rather than a rule off the page.
      *
-     * The clock is a real part of the answer rather than tidiness. 2.1 is the
-     * Setup Phase, and buying equipment "from other players" is one of the
-     * things it lists there - so a trade during the Action phase is a trade out
-     * of time, and being out of time is what before() exists for.
+     * There is deliberately **no clock**, which is where this parts company
+     * with `ShopListingPolicy`. The shop is a counter Control opens and shuts,
+     * and 3.3.3 says so in as many words - but handing a card to somebody is
+     * two players agreeing in a Discord channel, and the channels are open all
+     * turn. 2.1 listing it under the Setup Phase describes when the market runs
+     * rather than forbidding a Runner from passing a Shiv across at any other
+     * moment, and a refusal here would only teach people to phone Control
+     * instead. The one thing the run loop needs is that a card already spent on
+     * a run is gone from the hand, and the service's own count is what holds
+     * that.
      */
     public function giveEquipment(User $user, Character $character): bool
     {
-        $game = $character->game;
-
-        if ($game->status !== GameStatus::Running) {
-            return false;
-        }
-
-        if ($game->currentPhase()?->type !== PhaseType::Setup) {
+        if ($character->game->status !== GameStatus::Running) {
             return false;
         }
 
