@@ -2150,6 +2150,58 @@ in the game's own components are deliberately left alone: those carry meaning
 rather than brand, and a warning that changes colour with the theme is a warning
 nobody can rely on.
 
+## A game off the clock
+
+**A game is readable before it starts and after it ends, and playable only in
+between.** Every player-facing page hangs off `Game::current()`, which used to
+answer only for a Running game — so a player reading their briefing the morning
+before a session and a player looking back at how last night went were both
+shown "No game is running", with the sidebar collapsed to the dashboard alone.
+There was never nothing to read: the roster, the Facilities, the card lists and
+the starting kits are all seeded when the game is created, and claiming already
+worked in a Draft game, so somebody could sign in successfully, have their seats
+bound, and be told the application had nothing for them. That reads as a broken
+application rather than as a queue.
+
+**Widening the lookup is the whole of the mechanism, and it is safe because the
+clock was never enforced there.** Every act asks about `GameStatus::Running` in
+its own right — `RunPolicy`, `FacilityPolicy`, `CorporationPolicy`,
+`CouncilSessionPolicy`, `ShopListingPolicy` and `AgendaCardPolicy`, plus
+`GamePresenter::mayDefend()` and `ShopPresenter::isOpen()` — so the pages come up
+read-only by construction rather than needing a second set of views. Do not move
+any of those checks into the lookup: a page that is read-only because nothing
+found it is a page that goes writable the moment somebody widens a query.
+
+**A running game always wins, whatever its id.** Otherwise Control setting next
+Saturday's game up mid-session would pull tonight's out from under the table it
+is being played on. Past that it is simply the newest game, which is the one
+coming rather than the one gone — a Draft over last night's Finished, because
+what a player wants before a session is the game they are about to play.
+
+**A seat is a fact about the roster; acting is a question about the clock.**
+`CouncilService::hasSeat()` used to answer no for a game that was not running,
+which would have left the Chamber 403ing at the very CEOs who sat in it while
+every other page opened. It carries no clock now, and the two acts that used to
+lean on it for one — `CouncilSessionPolicy::vote` and `AgendaCardPolicy::create`
+— ask `isRunning()` beside it, where the act is. Same division as *Who you are
+and what you may do are different questions* above.
+
+**The secrets stay kept.** `RunPresenter` and `CouncilPresenter` key what they
+withhold off the run and the sitting rather than off the game's status, so a
+stack's depth and a secret ballot's breakdown are as hidden the morning after as
+they were on the night. There is a real argument that a finished game should open
+its stacks — reading back what was actually in one is the debrief — but that is
+the designer's call to make deliberately rather than something to fall out of
+this change.
+
+**And the page says which it is.** `resources/js/components/game-state-notice.tsx`
+draws one line at the top of all seven player pages, because a board whose
+buttons have all gone is otherwise indistinguishable from a broken one. It
+enforces nothing and must not: the server has already refused everything: this is
+the sentence explaining what is on screen. A `game` of null now means there is no
+game at all rather than none running, which is why those empty states read "No
+game has been set up yet."
+
 ## Built so far
 
 The turn engine, the trackers, Discord-handle character claiming, Discord server provisioning with role assignment, Facility Defence — Facilities, the ordered stacks and the security budget — the game's three real card lists with the Protection Card inventory, their printed artwork and the icon font, the drag-and-drop board Security arranges their own defences on, logos wherever the application names a team or one of the three characters that is an organisation, the Council — the game's agenda deck with Control picking what goes up, the Chair's powers over it, and Political-Will-weighted voting with secret ballots — the research sub-game: the equation card game, the tech trees, deck customisation, point trading and technology copies — and Runs: submitting and ordering the groups at a Facility, the four steps, every consequence, both ways a run can end, the accesses a successful one buys, the screen players work it from, the Runners being let into the Facility's own Discord channels for the length of it, and what each Runner is carrying — the Equipment holdings, seeded from the briefings and handed out by Control — and the shop: Control putting cards out at a price with a stock behind them, and both counters players buy from, the Corporation shop out of the Corporation's Credits and the market out of their own.

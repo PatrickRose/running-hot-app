@@ -1,4 +1,5 @@
 import { Head, usePoll } from '@inertiajs/react';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { ShopCounter } from '@/components/shop-counter';
 import { dashboard } from '@/routes';
@@ -31,7 +32,10 @@ export default function Shop({ game, shop }: Props) {
             <>
                 <Head title="Shop" />
                 <div className="p-4">
-                    <Heading title="Shop" description="No game is running." />
+                    <Heading
+                        title="Shop"
+                        description="No game has been set up yet."
+                    />
                 </div>
             </>
         );
@@ -52,6 +56,8 @@ export default function Shop({ game, shop }: Props) {
                             : `${shop.phase ?? 'The game'} — the shop opens during Setup.`
                     }
                 />
+
+                <GameStateNotice game={game} />
 
                 {shop.is_control && (
                     <p className="text-sm text-muted-foreground">

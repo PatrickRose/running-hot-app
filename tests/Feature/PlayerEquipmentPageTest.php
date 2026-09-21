@@ -161,9 +161,20 @@ class PlayerEquipmentPageTest extends TestCase
         $this->actingAs($user)->get('/equipment')->assertOk();
     }
 
-    public function test_the_page_renders_with_no_game_running(): void
+    /**
+     * A player reading their kit before the game starts, which is most of what
+     * a Draft game is for. ReadOnlyGameViewTest holds the rest of that line.
+     */
+    public function test_the_page_renders_before_the_game_starts(): void
     {
         Game::query()->update(['status' => GameStatus::Draft]);
+
+        $this->actingAs(User::factory()->create())->get('/equipment')->assertOk();
+    }
+
+    public function test_the_page_renders_with_no_game_at_all(): void
+    {
+        Game::query()->delete();
 
         $this->actingAs(User::factory()->create())->get('/equipment')->assertOk();
     }

@@ -302,9 +302,23 @@ class FacilityBoardTest extends TestCase
         $this->get('/facilities')->assertRedirect('/login');
     }
 
-    public function test_the_page_copes_with_no_running_game(): void
+    /**
+     * A finished game is read rather than hidden - see ReadOnlyGameViewTest for
+     * the boundary that makes that safe. This end of it is that the page still
+     * comes up.
+     */
+    public function test_the_page_still_opens_once_the_game_has_finished(): void
     {
         $this->game->forceFill(['status' => GameStatus::Finished])->save();
+
+        $this->actingAs(User::factory()->create())
+            ->get('/facilities')
+            ->assertOk();
+    }
+
+    public function test_the_page_copes_with_no_game_at_all(): void
+    {
+        Game::query()->delete();
 
         $this->actingAs(User::factory()->create())
             ->get('/facilities')

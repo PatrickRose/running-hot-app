@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Support\GamePresenter;
 use App\Support\RunPresenter;
@@ -22,10 +21,7 @@ class RunBoardController extends Controller
 {
     public function __invoke(Request $request, GamePresenter $game, RunPresenter $runs): Response
     {
-        $current = Game::query()
-            ->where('status', GameStatus::Running)
-            ->latest('id')
-            ->first();
+        $current = Game::current();
 
         return Inertia::render('runs', [
             'game' => $current === null ? null : $game->summary($current),
