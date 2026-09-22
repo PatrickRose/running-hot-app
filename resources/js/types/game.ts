@@ -57,6 +57,14 @@ export type ControlMember = {
     is_you: boolean;
 };
 
+/**
+ * The game as anybody signed in may read it.
+ *
+ * It carries no webhook: an incoming webhook URL is a bearer credential, so
+ * `GamePresenter::summary()` deliberately leaves the key off the wire
+ * altogether rather than sending it to players who never render it. Control's
+ * shape is ControlGameSummary below.
+ */
 export type GameSummary = {
     id: number;
     name: string;
@@ -65,8 +73,6 @@ export type GameSummary = {
     stability: number;
     civil_unrest: number;
     auto_advance: boolean;
-    /** Null until the game's Discord server is provisioned. */
-    discord_webhook_url: string | null;
     durations: {
         setup_seconds: number;
         action_seconds: number;
@@ -75,6 +81,17 @@ export type GameSummary = {
     phase: PhaseSummary | null;
     discord: GameDiscord;
     server_time: string;
+};
+
+/**
+ * The game as Control reads it, from `GamePresenter::controlSummary()`.
+ *
+ * A page only takes this where it actually reads the webhook; everything else
+ * behind /control is happy with the shared shape above.
+ */
+export type ControlGameSummary = GameSummary & {
+    /** Null until the game's Discord server is provisioned. */
+    discord_webhook_url: string | null;
 };
 
 export type TrackerValues = Record<string, number>;

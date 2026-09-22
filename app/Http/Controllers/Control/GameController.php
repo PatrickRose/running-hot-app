@@ -31,7 +31,7 @@ class GameController extends Controller
             ))
             ->latest('id')
             ->get()
-            ->map(fn (Game $game): array => $presenter->summary($game))
+            ->map(fn (Game $game): array => $presenter->controlSummary($game))
             ->all();
 
         return Inertia::render('control/games/index', [
@@ -91,7 +91,7 @@ class GameController extends Controller
     public function show(Game $game, GamePresenter $presenter): Response
     {
         return Inertia::render('control/games/show', [
-            'game' => $presenter->summary($game),
+            'game' => $presenter->controlSummary($game),
             'trackers' => $presenter->trackers($game),
             'controlMembers' => $presenter->controlMembers($game),
             'discordSyncs' => $presenter->discordMemberSyncs($game),

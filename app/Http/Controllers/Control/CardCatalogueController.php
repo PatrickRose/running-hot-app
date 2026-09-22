@@ -30,7 +30,7 @@ class CardCatalogueController extends Controller
     public function index(Game $game, GamePresenter $presenter): Response
     {
         return Inertia::render('control/games/cards', [
-            'game' => $presenter->summary($game),
+            'game' => $presenter->controlSummary($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
             'equipment' => $presenter->equipmentCardTypes($game),
             // Who is carrying what, which is the one thing this page sets.

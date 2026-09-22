@@ -26,15 +26,15 @@ import { index as shopIndex } from '@/routes/control/shop';
 import { index as statsIndex } from '@/routes/control/stats';
 import type {
     CharacterSubject,
+    ControlGameSummary,
     ControlMember,
     DiscordBotGuilds,
     DiscordMemberSync,
-    GameSummary,
     GameTrackers,
 } from '@/types/game';
 
 type Props = {
-    game: GameSummary;
+    game: ControlGameSummary;
     trackers: GameTrackers;
     controlMembers: ControlMember[];
     discordSyncs: DiscordMemberSync[];

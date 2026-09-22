@@ -37,7 +37,7 @@ class CouncilController extends Controller
     public function index(Game $game, GamePresenter $games, CouncilPresenter $council, Request $request): Response
     {
         return Inertia::render('control/games/council', [
-            'game' => $games->summary($game),
+            'game' => $games->controlSummary($game),
             'council' => $council->forPlayer($game, $request->user()),
             'control' => $council->forControl($game),
         ]);
