@@ -230,6 +230,49 @@ class CouncilChairTest extends TestCase
     }
 
     /**
+     * Losing the seat loses the place in the rotation with it. Left behind,
+     * the number would put somebody silently back in the rotation the moment
+     * Control seated them again - which is the one thing the rotation, an
+     * order Control announces on the day, is not allowed to do for itself.
+     */
+    public function test_taking_a_seat_away_takes_it_out_of_the_rotation(): void
+    {
+        $government = $this->government();
+        $government->forceFill(['council_chair_order' => 1])->save();
+
+        $council = app(CouncilService::class);
+
+        $council->seat($government, null);
+
+        $this->assertNull($government->refresh()->council_chair_order);
+        $this->assertSame(
+            ['Gordon', 'DTC'],
+            $council->rotation($this->game)->pluck('name')->all(),
+        );
+
+        // And seating them again does not put them back in it.
+        $council->seat($government, 6);
+
+        $this->assertSame(
+            ['Gordon', 'DTC'],
+            $council->rotation($this->game)->pluck('name')->all(),
+        );
+    }
+
+    /**
+     * Changing what a seat is worth is not leaving it, so the order stays.
+     */
+    public function test_changing_a_seats_votes_leaves_its_place_alone(): void
+    {
+        $government = $this->government();
+        $government->forceFill(['council_chair_order' => 1])->save();
+
+        app(CouncilService::class)->seat($government, 4);
+
+        $this->assertSame(1, $government->refresh()->council_chair_order);
+    }
+
+    /**
      * A character with no seat would be written into the rotation and filtered
      * straight back out of it, which is a silent no-op rather than an answer.
      */

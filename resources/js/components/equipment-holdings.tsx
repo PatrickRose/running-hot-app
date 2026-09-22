@@ -1,20 +1,11 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
-import { SearchPicker } from '@/components/search-picker';
-import type { PickerOption } from '@/components/search-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { give, update } from '@/routes/control/equipment-holdings';
-import type {
-    CharacterEquipment,
-    EquipmentCardSummary,
-    EquipmentHoldingGroup,
-    EquipmentRecipient,
-} from '@/types/game';
+import { update } from '@/routes/control/equipment-holdings';
+import type { CharacterEquipment, EquipmentHoldingGroup } from '@/types/game';
 
 /**
  * Who is carrying which Equipment, and Control handing cards out (3.4.1).
@@ -31,24 +22,21 @@ import type {
  *
  * Two controls, and they answer different questions. Giving *adds* copies and
  * is the one Control reaches for at the table: it knows what it is handing over
- * and not what the player already has. Setting a count replaces it, which is
- * the correction - a card spent, a haul split, a number typed wrong.
+ * and not what the player already has - so it happens by clicking the card in
+ * the Equipment list above, where Control is already looking and the list's own
+ * search has already found it. Setting a count replaces it, and that is here,
+ * against the hand it corrects: a card spent, a haul split, a number typed
+ * wrong.
  */
 export function EquipmentHoldings({
     gameId,
     holdings,
-    cards,
-    recipients,
 }: {
     gameId: number;
     holdings: EquipmentHoldingGroup[];
-    cards: EquipmentCardSummary[];
-    recipients: EquipmentRecipient[];
 }) {
     return (
         <div className="flex flex-col gap-10">
-            <GiveACard gameId={gameId} cards={cards} recipients={recipients} />
-
             {holdings.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                     No characters yet, so nobody is carrying anything.
@@ -205,152 +193,4 @@ function SetCopies({
             </Button>
         </div>
     );
-}
-
-/**
- * Hand somebody a card.
- *
- * Which is how a card bought from the market, taken off another Runner or given
- * out by Control reaches a hand: Control is told, and writes it down.
- *
- * Both pickers search, for the reason the shop's do: seventy-four cards and a
- * roster of forty are two lists nobody finds anything in when they are a native
- * `select`, and worst of all on a phone. The card is drawn before it is given,
- * because the thing somebody at the table is holding is the artwork.
- */
-function GiveACard({
-    gameId,
-    cards,
-    recipients,
-}: {
-    gameId: number;
-    cards: EquipmentCardSummary[];
-    recipients: EquipmentRecipient[];
-}) {
-    const [characterId, setCharacterId] = useState<number | null>(null);
-    const [cardId, setCardId] = useState<number | null>(null);
-    const [copies, setCopies] = useState('1');
-    const [error, setError] = useState<string | null>(null);
-
-    const card = cards.find((option) => option.id === cardId) ?? null;
-
-    if (recipients.length === 0) {
-        return null;
-    }
-
-    return (
-        <div className="flex flex-col gap-3 rounded-md border p-4">
-            <p className="text-sm font-medium">Give somebody a card</p>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="grid gap-1">
-                    <Label htmlFor="give-equipment-character">To</Label>
-                    <SearchPicker
-                        id="give-equipment-character"
-                        options={recipientOptions(recipients)}
-                        value={characterId}
-                        onChange={setCharacterId}
-                        placeholder={`Search ${recipients.length} people…`}
-                        searchPlaceholder="Name, role or team…"
-                        emptyMessage="Nobody of that name is in this game."
-                    />
-                </div>
-
-                <div className="grid gap-1 lg:col-span-2">
-                    <Label htmlFor="give-equipment-card">Card</Label>
-                    <SearchPicker
-                        id="give-equipment-card"
-                        options={cardOptions(cards)}
-                        value={cardId}
-                        onChange={setCardId}
-                        placeholder={`Search ${cards.length} cards…`}
-                        searchPlaceholder="Name, code, category or effect…"
-                        emptyMessage="No card matches that."
-                    />
-                </div>
-
-                <div className="grid gap-1">
-                    <Label htmlFor="give-equipment-copies">Copies</Label>
-                    <Input
-                        id="give-equipment-copies"
-                        type="number"
-                        min={1}
-                        value={copies}
-                        onChange={(event) => setCopies(event.target.value)}
-                    />
-                </div>
-            </div>
-
-            {card ? (
-                <CardFace
-                    shape="portrait"
-                    name={card.name}
-                    code={card.code}
-                    imagePath={card.image_path}
-                    lines={[{ label: '', value: card.effect }]}
-                    footer={card.category_label}
-                />
-            ) : null}
-
-            {/* Kept on the form rather than read off the page: it is the only
-                refusal this control can meet, and a give that silently did
-                nothing is the bug every other panel here has already had. */}
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            <Button
-                size="sm"
-                className="self-start"
-                disabled={characterId === null || cardId === null}
-                onClick={() =>
-                    router.post(
-                        give.url({ game: gameId }),
-                        {
-                            character_id: characterId,
-                            equipment_card_type_id: cardId,
-                            copies: Number(copies),
-                        },
-                        {
-                            preserveScroll: true,
-                            onSuccess: () => {
-                                setError(null);
-                                setCardId(null);
-                                setCopies('1');
-                            },
-                            onError: (errors) =>
-                                setError(
-                                    Object.values(errors)[0] ??
-                                        'That card could not be given.',
-                                ),
-                        },
-                    )
-                }
-            >
-                Give
-            </Button>
-        </div>
-    );
-}
-
-function recipientOptions(recipients: EquipmentRecipient[]): PickerOption[] {
-    return recipients.map((person) => ({
-        value: person.character_id,
-        label: person.name,
-        hint: person.team
-            ? `${person.role_label} — ${person.team}`
-            : person.role_label,
-        search: [person.name, person.role_label, person.team]
-            .filter(Boolean)
-            .join(' '),
-    }));
-}
-
-function cardOptions(cards: EquipmentCardSummary[]): PickerOption[] {
-    return cards.map((card) => ({
-        value: card.id,
-        label: card.name,
-        hint: [card.code, card.category_label].filter(Boolean).join(' · '),
-        search: [card.name, card.code, card.category_label, card.effect]
-            .filter(Boolean)
-            .join(' '),
-    }));
 }

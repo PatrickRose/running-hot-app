@@ -594,6 +594,24 @@ keeps whatever order it had. Handing somebody the Chair *now* is a separate act
 and deliberately immediate — it is a ruling about the sitting in front of you,
 where the rotation is an order for the turns after.
 
+**Taking a seat away takes it out of the rotation with it**, which is the one
+thing about the rotation that is *not* Control's to announce: somebody who no
+longer sits at the Council cannot chair it. `CouncilService::seat()` clears
+`council_chair_order` alongside the votes, because an order left behind on the
+row would put them silently back in the rotation the moment Control seated them
+again — and seating somebody still never puts them in it, which is the
+asymmetry above. Changing what a seat is *worth* leaves its place alone.
+
+**The panel's rotation list is the server's, rearranged locally.** Laying a list
+out is local until it is saved, but *who is in it* is not: seating somebody,
+taking a seat away, and the Add and Take out buttons all post and come back with
+a new rotation. The list was `useState`'d once and never re-read, so those four
+went on drawing the list React was first handed — and Add and Take out, which
+post immediately rather than waiting for Save, looked like they did nothing at
+all. It re-syncs during render when the server's list changes, which is React's
+own answer for state derived from a prop; an order Control has rearranged and
+not yet saved survives a poll, because the server's list is unchanged.
+
 **The recess is a second clock inside the Setup phase**, and it is
 server-authoritative for the reason the phase clock is: `council_sessions.recess_at`
 is absolute, the browser only counts down between polls, and a pause moves it
@@ -1290,7 +1308,9 @@ None of it is a Tracker. A Tracker is a number the game moves and argues about a
 
 **Anybody on the roster may be handed one.** A Corporate seat was refused outright, on the reasoning that a CEO with a Katana in hand is a row nothing reads — and it turned out to be in the way of the thing it was protecting. 2.1 says a Runner "may buy equipment, either from the market or from other players", so a card reaches a Facility by way of whoever was holding it, and that is as likely to be a CEO who bought it to hand over as a gangmate. Who may hold what is Control's call, which means the refusal was the application making a ruling the rulebook does not. So `equipment_holdings` takes any character, `/equipment` is offered to anybody holding a seat, and `GamePresenter::equipmentHoldings()` groups by team rather than by gang — the gangs first, then the Corporations, then everybody in neither.
 
-**Giving and setting are two writes, because they answer different questions.** `EquipmentService::giveCopies()` *adds*, and is what Control reaches for at the table: it knows what it is handing over and not what is already in the hand, so a give that set the count would quietly take away the two Shivs somebody was carrying. `setCopiesInHand()` replaces it, which is the correction — a card spent, a haul split, a number typed wrong. The give is one searchable form at the top of the list rather than a `select` per person, for the reason the shop's picker is a combobox: seventy-four cards against a roster of forty is two lists nobody finds anything in, and the card is drawn before it is given because the thing somebody at the table is holding is the artwork.
+**Giving and setting are two writes, because they answer different questions.** `EquipmentService::giveCopies()` *adds*, and is what Control reaches for at the table: it knows what it is handing over and not what is already in the hand, so a give that set the count would quietly take away the two Shivs somebody was carrying. `setCopiesInHand()` replaces it, which is the correction — a card spent, a haul split, a number typed wrong.
+
+**A card is given by clicking it**, in the Equipment list itself rather than through a form beside it. The gesture is the card because the card is what is being asked for at the table: somebody wants the Katana, the list's own search has already narrowed to it, and it is on screen under Control's pointer — so picking it out of a second list of seventy-four was work the page had already done. What the dialog still asks for is who, which stays a `SearchPicker` for the reason the shop's is a combobox: a roster of forty is a list nobody finds anybody in as a native `select`. Setting a count stays where it corrects, on the hand.
 
 **Players hand cards to each other, and that is 2.1's own second half.** "You may buy equipment, either from the market or from other players" — the market is the shop's counter, and the other players are `POST /equipment/give`. It is the one thing on `/equipment` that is not read-only.
 
@@ -1304,7 +1324,9 @@ None of it is a Tracker. A Tracker is a number the game moves and argues about a
 
 **The game's own clock is asked about**, which is *A game off the clock* below drawing its line in the usual place: a seat is a fact about the roster and acting is a question about the clock. Reading a hand is why `/equipment` opens either side of the evening — the sidebar offers it to a CEO in a game that has not started — and handing a card over is an act, so `giveEquipment` asks `isRunning()` where the act is, exactly as `CouncilSessionPolicy::vote` does beside `hasSeat()`.
 
-The form is drawn on each hand rather than once at the top of the page, because a player may hold two seats and which of them is handing the card over is the first thing the trade has to say — putting the button on the hand answers that by where it is. Its refusal is kept on that hand for the reason the run screen's `useRunAction` keeps its own: two seats on one page reporting against the same keys would put one hand's refusal under every hand on screen.
+**And it is the same gesture on `/equipment`: click the card you are handing over.** Which seat is giving and which card is going are both answered by *which card you clicked*, on a page where a player may hold two seats and every card is already laid out to be read. `GiveCardDialog` is the one implementation, shared with Control's list above. A card in a hand nobody may give out of — somebody else's, or your own before the game is running — is drawn as the same card with no button around it, rather than a control that does nothing when pressed. The trigger is a real button wrapping the face rather than a click handler on it, so the keyboard reaches it, and it is the only tab stop on a card because `CardFace`'s own tooltip is deliberately not focusable.
+
+Its refusal is kept on the dialog for the reason the run screen's `useRunAction` keeps its own: a page draws a great many of these and they all report against the same handful of keys, so a page-level `errors` would put one card's refusal under every card on screen. The copies box carries no `max`, for the reason the run screen's top-up learned not to: a browser-side constraint that blocks the submit outright makes a refusal look like a dead button, so the server is what says how many are there.
 
 Everything else is still a conversation: splitting a haul and an auction end with Control writing down where the count ended up.
 

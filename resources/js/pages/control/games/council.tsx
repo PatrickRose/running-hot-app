@@ -669,29 +669,28 @@ function Rotation({
     gameId: number;
     control: CouncilControlBoard;
 }) {
-    const [order, setOrder] = useState(control.rotation.map((row) => row.key));
+    const announced = control.rotation.map((row) => row.key);
+    const [order, setOrder] = useState(announced);
+    const [drawn, setDrawn] = useState(announced.join('|'));
 
-    // Both kinds of seat in one map, keyed the way the server keys them: a
-    // Corporation and a character can share a row id, and the bare number
-    // would put one in the other's place.
-    const seats = new Map(control.rotation.map((row) => [row.key, row]));
-
-    for (const seat of control.own_seats) {
-        const key = `character:${seat.id}`;
-
-        if (!seats.has(key)) {
-            seats.set(key, {
-                key,
-                id: seat.id,
-                type: 'character',
-                name: seat.name,
-                logo_path: seat.logo_path,
-                colour: seat.colour,
-                chair_order: seat.chair_order,
-                is_chair: seat.is_chair,
-            });
-        }
+    // Rearranging is local; *who is in the list* is the server's. Seating
+    // somebody, taking their seat away, adding a seat to the rotation and
+    // taking one out all post and come back with a new rotation, and without
+    // this the list would go on drawing the one it was first handed - so the
+    // Add and Take out buttons looked like they did nothing at all.
+    //
+    // Adjusted during render rather than in an effect, which is React's own
+    // answer for state derived from a prop: an effect would draw the stale
+    // list once and correct it afterwards. An order Control has rearranged but
+    // not saved survives a poll, because the server's list is unchanged.
+    if (drawn !== announced.join('|')) {
+        setDrawn(announced.join('|'));
+        setOrder(announced);
     }
+
+    // Keyed the way the server keys them: a Corporation and a character can
+    // share a row id, and the bare number would put one in the other's place.
+    const seats = new Map(control.rotation.map((row) => [row.key, row]));
 
     const waiting = control.own_seats.filter(
         (seat) => !order.includes(`character:${seat.id}`),

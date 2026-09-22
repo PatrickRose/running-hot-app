@@ -1186,7 +1186,18 @@ class CouncilService
             ]);
         }
 
-        $character->forceFill(['council_votes' => $votes])->save();
+        $seat = ['council_votes' => $votes];
+
+        // Losing the seat loses the place in the rotation with it. The
+        // rotation is an order of who chairs, and somebody who no longer sits
+        // at the Council cannot - so leaving the number behind would put them
+        // silently back in the rotation the moment Control seated them again,
+        // which is the one thing the rotation is not allowed to do for itself.
+        if ($votes === null) {
+            $seat['council_chair_order'] = null;
+        }
+
+        $character->forceFill($seat)->save();
 
         return $character;
     }

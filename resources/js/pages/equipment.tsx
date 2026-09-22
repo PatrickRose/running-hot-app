@@ -1,13 +1,10 @@
 import { Head, router } from '@inertiajs/react';
-import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import { GameStateNotice } from '@/components/game-state-notice';
+import { GiveCardDialog } from '@/components/give-card-dialog';
 import Heading from '@/components/heading';
-import { SearchPicker } from '@/components/search-picker';
-import type { PickerOption } from '@/components/search-picker';
-import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -15,8 +12,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { give } from '@/routes/equipment';
 import type {
     CharacterEquipment,
@@ -95,7 +90,7 @@ export default function Equipment({
                     description={
                         is_control
                             ? 'Everybody in the game, because you are Control.'
-                            : 'What you are carrying. A card changes hands by talking to Control.'
+                            : 'What you are carrying. Click one of your cards to hand it to somebody else.'
                     }
                 />
 
@@ -181,6 +176,9 @@ function Hand({
                     {held === 0
                         ? 'Carrying nothing.'
                         : `Carrying ${held} ${held === 1 ? 'card' : 'cards'}.`}
+                    {character.can_give && held > 0
+                        ? ' Click a card to hand it over.'
+                        : ''}
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
@@ -203,174 +201,17 @@ function Hand({
                             <CategoryRow
                                 key={category}
                                 cards={cards}
+                                character={character}
+                                recipients={recipients}
                                 label={cards[0].category_label}
                                 glyph={cards[0].category_glyph}
                             />
                         );
                     })
                 )}
-
-                {character.can_give && character.cards.length > 0 ? (
-                    <GiveACard character={character} recipients={recipients} />
-                ) : null}
             </CardContent>
         </Card>
     );
-}
-
-/**
- * Handing one of your cards to somebody else (rulebook 2.1).
- *
- * On the hand it spends out of rather than once at the top of the page, because
- * a player may hold two seats and which of them is handing the card over is the
- * first thing the trade has to say - putting it on the hand answers that by
- * where the button is.
- *
- * Only the card moves. There is no price box, and that is deliberate: a
- * transfer that also took the other player's Credits would be one player
- * reaching into another's purse on the strength of a number only the giver had
- * typed. What was agreed in exchange is settled at the table, exactly as a
- * research point trade is.
- */
-function GiveACard({
-    character,
-    recipients,
-}: {
-    character: CharacterEquipment;
-    recipients: EquipmentRecipient[];
-}) {
-    const [cardId, setCardId] = useState<number | null>(null);
-    const [toId, setToId] = useState<number | null>(null);
-    const [copies, setCopies] = useState('1');
-    const [error, setError] = useState<string | null>(null);
-
-    // Never yourself: the card is already in that hand, and the server says so
-    // too rather than trusting this to have kept it off the list.
-    const others = recipients.filter(
-        (person) => person.character_id !== character.character_id,
-    );
-
-    const held = character.cards.filter((card) => card.copies > 0);
-
-    if (others.length === 0 || held.length === 0) {
-        return null;
-    }
-
-    return (
-        <div className="flex flex-col gap-3 border-t pt-4">
-            <p className="text-sm font-medium">Hand a card to somebody</p>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="grid gap-1">
-                    <Label htmlFor={`give-card-${character.character_id}`}>
-                        Card
-                    </Label>
-                    <SearchPicker
-                        id={`give-card-${character.character_id}`}
-                        options={heldOptions(held)}
-                        value={cardId}
-                        onChange={setCardId}
-                        placeholder={`Search ${held.length} cards…`}
-                        searchPlaceholder="Name, code or category…"
-                        emptyMessage="You are carrying nothing of that name."
-                    />
-                </div>
-
-                <div className="grid gap-1">
-                    <Label htmlFor={`give-to-${character.character_id}`}>
-                        To
-                    </Label>
-                    <SearchPicker
-                        id={`give-to-${character.character_id}`}
-                        options={recipientOptions(others)}
-                        value={toId}
-                        onChange={setToId}
-                        placeholder={`Search ${others.length} people…`}
-                        searchPlaceholder="Name, role or team…"
-                        emptyMessage="Nobody of that name is in this game."
-                    />
-                </div>
-
-                <div className="grid gap-1">
-                    <Label htmlFor={`give-copies-${character.character_id}`}>
-                        Copies
-                    </Label>
-                    <Input
-                        id={`give-copies-${character.character_id}`}
-                        type="number"
-                        min={1}
-                        value={copies}
-                        onChange={(event) => setCopies(event.target.value)}
-                    />
-                </div>
-            </div>
-
-            {/* Kept on this hand rather than read off the page: a player may
-                hold two seats and a game has a page of them, so a page-level
-                `errors` would put one hand's refusal under every hand on
-                screen. Same reasoning as the run screen's `useRunAction`. */}
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            <Button
-                size="sm"
-                className="self-start"
-                disabled={cardId === null || toId === null}
-                onClick={() =>
-                    router.post(
-                        give.url(),
-                        {
-                            from_character_id: character.character_id,
-                            to_character_id: toId,
-                            equipment_card_type_id: cardId,
-                            copies: Number(copies),
-                        },
-                        {
-                            preserveScroll: true,
-                            onSuccess: () => {
-                                setError(null);
-                                setCardId(null);
-                                setToId(null);
-                                setCopies('1');
-                            },
-                            onError: (errors) =>
-                                setError(
-                                    Object.values(errors)[0] ??
-                                        'That card could not be handed over.',
-                                ),
-                        },
-                    )
-                }
-            >
-                Hand it over
-            </Button>
-        </div>
-    );
-}
-
-function heldOptions(cards: EquipmentHolding[]): PickerOption[] {
-    return cards.map((card) => ({
-        value: card.card_type_id,
-        label: card.name,
-        hint: [card.code, card.category_label, `×${card.copies}`]
-            .filter(Boolean)
-            .join(' · '),
-        search: [card.name, card.code, card.category_label]
-            .filter(Boolean)
-            .join(' '),
-    }));
-}
-
-function recipientOptions(recipients: EquipmentRecipient[]): PickerOption[] {
-    return recipients.map((person) => ({
-        value: person.character_id,
-        label: person.name,
-        hint: person.team
-            ? `${person.role_label} — ${person.team}`
-            : person.role_label,
-        search: [person.name, person.role_label, person.team]
-            .filter(Boolean)
-            .join(' '),
-    }));
 }
 
 /**
@@ -383,10 +224,14 @@ function recipientOptions(recipients: EquipmentRecipient[]): PickerOption[] {
  */
 function CategoryRow({
     cards,
+    character,
+    recipients,
     label,
     glyph,
 }: {
     cards: EquipmentHolding[];
+    character: CharacterEquipment;
+    recipients: EquipmentRecipient[];
     label: string;
     glyph: string;
 }) {
@@ -399,15 +244,37 @@ function CategoryRow({
 
             <div className="flex flex-wrap gap-3">
                 {cards.map((card) => (
-                    <HeldCard key={card.card_type_id} card={card} />
+                    <HeldCard
+                        key={card.card_type_id}
+                        card={card}
+                        character={character}
+                        recipients={recipients}
+                    />
                 ))}
             </div>
         </div>
     );
 }
 
-function HeldCard({ card }: { card: EquipmentHolding }) {
-    return (
+/**
+ * One card in a hand, and the way it leaves that hand (rulebook 2.1).
+ *
+ * The card is the control: clicking it is how it is handed over, because the
+ * card is what the two players are talking about and it is already on screen.
+ * A hand nobody may give out of - somebody else's, or your own before the game
+ * is running - is the same card without the button around it, rather than a
+ * control that does nothing when pressed.
+ */
+function HeldCard({
+    card,
+    character,
+    recipients,
+}: {
+    card: EquipmentHolding;
+    character: CharacterEquipment;
+    recipients: EquipmentRecipient[];
+}) {
+    const face = (
         <div className="relative">
             <CardFace
                 name={card.name}
@@ -425,12 +292,55 @@ function HeldCard({ card }: { card: EquipmentHolding }) {
             />
 
             {/* Drawn on top of CardFace rather than inside it, because it has
-                to be legible over artwork as well as over the text box — the
+                to be legible over artwork as well as over the text box - the
                 same reason the defence board's copy count sits outside. */}
             <span className="pointer-events-none absolute top-1.5 left-1.5 rounded-md bg-background/90 px-1.5 py-0.5 text-xs font-medium tabular-nums shadow-sm ring-1 ring-border">
                 <span aria-hidden="true">&times;{card.copies}</span>
                 <span className="sr-only">{card.copies} in hand</span>
             </span>
         </div>
+    );
+
+    // Never yourself: the card is already in that hand, and the server refuses
+    // it too rather than trusting this to have kept it off the list.
+    const others = recipients.filter(
+        (person) => person.character_id !== character.character_id,
+    );
+
+    if (!character.can_give || others.length === 0 || card.copies < 1) {
+        return face;
+    }
+
+    return (
+        <GiveCardDialog
+            card={card}
+            recipients={others}
+            title={`Hand ${card.name} over`}
+            description={`Out of ${character.name}'s hand. Only the card moves — whatever was agreed for it is settled at the table.`}
+            actionLabel="Hand it over"
+            inHand={card.copies}
+            submit={(to, copies, handlers) =>
+                router.post(
+                    give.url(),
+                    {
+                        from_character_id: character.character_id,
+                        to_character_id: to,
+                        equipment_card_type_id: card.card_type_id,
+                        copies,
+                    },
+                    {
+                        preserveScroll: true,
+                        onSuccess: handlers.onSuccess,
+                        onError: (errors) =>
+                            handlers.onError(
+                                Object.values(errors)[0] ??
+                                    'That card could not be handed over.',
+                            ),
+                    },
+                )
+            }
+        >
+            {face}
+        </GiveCardDialog>
     );
 }
