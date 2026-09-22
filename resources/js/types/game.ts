@@ -331,6 +331,17 @@ export type EquipmentHoldingGroup = Faction & {
     members: CharacterEquipment[];
 };
 
+/**
+ * A Corporation Control can hand a Protection Card to, which is all of them.
+ *
+ * `EquipmentRecipient` one table along, and the difference is the rulebook's:
+ * 3.3.4 makes a Protection Card's copies the Corporation's where 3.4.1 makes an
+ * Equipment card a person's.
+ */
+export type ProtectionCardRecipient = Faction & {
+    corporation_id: number;
+};
+
 /** Somebody Control can hand an Equipment card to: anybody on the roster. */
 export type EquipmentRecipient = {
     character_id: number;

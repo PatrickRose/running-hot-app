@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { CardFace } from '@/components/card-face';
 import { SearchPicker } from '@/components/search-picker';
 import type { PickerOption } from '@/components/search-picker';
 import { Button } from '@/components/ui/button';
@@ -17,24 +16,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { EquipmentRecipient } from '@/types/game';
 
-/** The card being handed over, as either list has it. */
-export type GiveableCard = {
-    name: string;
-    code: string | null;
-    image_path: string | null;
-    effect: string;
-    category_label: string;
-    category_glyph: string;
+/** Who a card can go to, and the words the picker searches them with. */
+export type GiveRecipients = {
+    label: string;
+    options: PickerOption[];
+    placeholder: string;
+    searchPlaceholder: string;
+    emptyMessage: string;
 };
 
 /**
  * Handing a card over by picking it up.
  *
- * The card is the control. Both places a card changes hands — Control working
- * down the Equipment list, and a player looking at their own hand — are pages
- * of card faces, and the thing being talked about at the table is the card, so
+ * The card is the control. Every place a card changes hands — Control working
+ * down either catalogue, and a player looking at their own hand — is a page of
+ * card faces, and the thing being talked about at the table is the card, so
  * pointing at it is the gesture: click the card, say who it is going to, done.
- * A picker asking which of seventy-four cards you meant was a second list to
+ * A picker asking which of eighty-three cards you meant was a second list to
  * search when the answer was already on screen and under the pointer.
  *
  * The trigger is a real button wrapping the face rather than a click handler on
@@ -42,15 +40,18 @@ export type GiveableCard = {
  * because `CardFace`'s own tooltip is deliberately not focusable and a page can
  * list two hundred of them.
  *
- * Who it goes to is still a picker: a roster of forty is a list nobody finds
- * anybody in as a native `select`, which is the shop's reasoning exactly.
+ * Who it goes to is still a picker: a roster of forty, and five Corporations
+ * that a `select` would handle perfectly well but that read better beside their
+ * badges. The words are the caller's, because a person and a Corporation are
+ * searched by different things.
  *
- * Only the card moves, in both places. There is no price box and there
+ * Only the card moves wherever this is used. There is no price box and there
  * deliberately is not one: what was agreed in exchange is settled at the table,
  * as a research point trade is (3.2.5).
  */
 export function GiveCardDialog({
-    card,
+    name,
+    face,
     recipients,
     title,
     description,
@@ -59,8 +60,11 @@ export function GiveCardDialog({
     submit,
     children,
 }: {
-    card: GiveableCard;
-    recipients: EquipmentRecipient[];
+    /** The card's name, for the trigger's accessible label. */
+    name: string;
+    /** The card as it is drawn inside the dialog. */
+    face: ReactNode;
+    recipients: GiveRecipients;
     title: string;
     description: string;
     actionLabel: string;
@@ -96,7 +100,7 @@ export function GiveCardDialog({
             <DialogTrigger className="rounded-lg text-left ring-offset-background transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none">
                 {children}
                 <span className="sr-only">
-                    {actionLabel} — {card.name}
+                    {actionLabel} — {name}
                 </span>
             </DialogTrigger>
 
@@ -107,32 +111,21 @@ export function GiveCardDialog({
                 </DialogHeader>
 
                 <div className="flex flex-wrap items-start gap-4">
-                    <CardFace
-                        name={card.name}
-                        code={card.code}
-                        imagePath={card.image_path}
-                        shape="portrait"
-                        lines={[
-                            {
-                                label: 'Type',
-                                value: card.category_label,
-                                glyph: card.category_glyph,
-                            },
-                            { label: '', value: card.effect },
-                        ]}
-                    />
+                    {face}
 
                     <div className="flex min-w-48 flex-1 flex-col gap-3">
                         <div className="grid gap-1">
-                            <Label htmlFor="give-card-to">To</Label>
+                            <Label htmlFor="give-card-to">
+                                {recipients.label}
+                            </Label>
                             <SearchPicker
                                 id="give-card-to"
-                                options={recipientOptions(recipients)}
+                                options={recipients.options}
                                 value={toId}
                                 onChange={setToId}
-                                placeholder={`Search ${recipients.length} people…`}
-                                searchPlaceholder="Name, role or team…"
-                                emptyMessage="Nobody of that name is in this game."
+                                placeholder={recipients.placeholder}
+                                searchPlaceholder={recipients.searchPlaceholder}
+                                emptyMessage={recipients.emptyMessage}
                             />
                         </div>
 
@@ -191,17 +184,25 @@ export function GiveCardDialog({
     );
 }
 
-export function recipientOptions(
+/** People, searched by name, role and team. */
+export function peopleToGiveTo(
     recipients: EquipmentRecipient[],
-): PickerOption[] {
-    return recipients.map((person) => ({
-        value: person.character_id,
-        label: person.name,
-        hint: person.team
-            ? `${person.role_label} — ${person.team}`
-            : person.role_label,
-        search: [person.name, person.role_label, person.team]
-            .filter(Boolean)
-            .join(' '),
-    }));
+    label = 'To',
+): GiveRecipients {
+    return {
+        label,
+        options: recipients.map((person) => ({
+            value: person.character_id,
+            label: person.name,
+            hint: person.team
+                ? `${person.role_label} — ${person.team}`
+                : person.role_label,
+            search: [person.name, person.role_label, person.team]
+                .filter(Boolean)
+                .join(' '),
+        })),
+        placeholder: `Search ${recipients.length} people…`,
+        searchPlaceholder: 'Name, role or team…',
+        emptyMessage: 'Nobody of that name is in this game.',
+    };
 }

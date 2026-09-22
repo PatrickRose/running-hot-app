@@ -34,6 +34,9 @@ class CardCatalogueController extends Controller
         return Inertia::render('control/games/cards', [
             'game' => $presenter->controlSummary($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
+            // And the Corporations one can be given to, which is all of them:
+            // 3.3.4 makes the copies the Corporation's rather than a seat's.
+            'protectionCardRecipients' => $presenter->protectionCardRecipients($game),
             'equipment' => $presenter->equipmentCardTypes($game),
             // Who is carrying what, which is the one thing this page sets.
             'equipmentHoldings' => $presenter->equipmentHoldings($game),

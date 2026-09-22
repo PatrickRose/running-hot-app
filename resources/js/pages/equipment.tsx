@@ -3,7 +3,7 @@ import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import { GameStateNotice } from '@/components/game-state-notice';
-import { GiveCardDialog } from '@/components/give-card-dialog';
+import { GiveCardDialog, peopleToGiveTo } from '@/components/give-card-dialog';
 import Heading from '@/components/heading';
 import {
     Card,
@@ -313,8 +313,9 @@ function HeldCard({
 
     return (
         <GiveCardDialog
-            card={card}
-            recipients={others}
+            name={card.name}
+            face={face}
+            recipients={peopleToGiveTo(others)}
             title={`Hand ${card.name} over`}
             description={`Out of ${character.name}'s hand. Only the card moves — whatever was agreed for it is settled at the table.`}
             actionLabel="Hand it over"

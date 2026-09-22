@@ -940,6 +940,30 @@ class GamePresenter
     }
 
     /**
+     * The Corporations a Protection Card can be given to, which is all of them.
+     *
+     * `equipmentRecipients` one table along: 3.3.3 puts the card list in the
+     * Security players' hands and 3.3.4 makes the copies the *Corporation's*,
+     * so the recipient of a Protection Card is a Corporation where the
+     * recipient of an Equipment card is a person. The badge travels with the
+     * name for the reason it does everywhere else - a Corporation is a faction,
+     * and a row of them should read as one.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function protectionCardRecipients(Game $game): array
+    {
+        return $game->corporations()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Corporation $corporation): array => [
+                'corporation_id' => $corporation->id,
+                ...FactionBadge::for($corporation->name),
+            ])
+            ->all();
+    }
+
+    /**
      * The tech trees a technology can be put on.
      *
      * The set from the card sheet, plus whichever Corporations this game has -

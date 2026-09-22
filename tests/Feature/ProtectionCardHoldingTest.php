@@ -196,6 +196,71 @@ class ProtectionCardHoldingTest extends TestCase
         $this->assertSame(3, $this->defence()->copiesInHand($this->corporation, $card));
     }
 
+    /**
+     * Giving *adds*, which is the whole difference from setting: Control
+     * handing cards over at the table knows what it is giving and not what the
+     * Corporation already holds, so a give that set the count would quietly
+     * take away the four Angels it had.
+     */
+    public function test_control_can_give_copies_on_top_of_what_is_held(): void
+    {
+        $card = $this->card(copies: 2);
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$this->game->id}/protection-card-holdings/give", [
+                'corporation_id' => $this->corporation->id,
+                'protection_card_type_id' => $card->id,
+                'copies' => 3,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(5, $this->defence()->copiesInHand($this->corporation, $card));
+    }
+
+    public function test_giving_a_card_the_corporation_never_held_starts_the_count(): void
+    {
+        $card = ProtectionCardType::factory()->for($this->game)->create();
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$this->game->id}/protection-card-holdings/give", [
+                'corporation_id' => $this->corporation->id,
+                'protection_card_type_id' => $card->id,
+                'copies' => 2,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(2, $this->defence()->copiesInHand($this->corporation, $card));
+    }
+
+    public function test_giving_no_copies_is_refused(): void
+    {
+        $card = $this->card(copies: 2);
+
+        $this->actingAs($this->control())
+            ->post("/control/games/{$this->game->id}/protection-card-holdings/give", [
+                'corporation_id' => $this->corporation->id,
+                'protection_card_type_id' => $card->id,
+                'copies' => 0,
+            ])
+            ->assertSessionHasErrors('copies');
+
+        $this->assertSame(2, $this->defence()->copiesInHand($this->corporation, $card));
+    }
+
+    public function test_a_player_cannot_give_a_card(): void
+    {
+        $card = $this->card();
+
+        $this->actingAs(User::factory()->create())
+            ->post("/control/games/{$this->game->id}/protection-card-holdings/give", [
+                'corporation_id' => $this->corporation->id,
+                'protection_card_type_id' => $card->id,
+                'copies' => 1,
+            ])
+            ->assertForbidden();
+    }
+
     public function test_a_negative_count_is_refused(): void
     {
         $card = $this->card();

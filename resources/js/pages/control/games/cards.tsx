@@ -4,7 +4,8 @@ import { CardFace } from '@/components/card-face';
 import { CardFacesDialog } from '@/components/card-faces-dialog';
 import { EquipmentCardForm } from '@/components/equipment-card-form';
 import { EquipmentHoldings } from '@/components/equipment-holdings';
-import { GiveCardDialog } from '@/components/give-card-dialog';
+import { GiveCardDialog, peopleToGiveTo } from '@/components/give-card-dialog';
+import type { GiveRecipients } from '@/components/give-card-dialog';
 import Heading from '@/components/heading';
 import {
     ResearchSuitCost,
@@ -24,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { destroy as destroyEquipment } from '@/routes/control/equipment-cards';
 import { give as giveEquipment } from '@/routes/control/equipment-holdings';
 import { index, show } from '@/routes/control/games';
+import { give as giveProtection } from '@/routes/control/protection-card-holdings';
 import { destroy as destroyTechnology } from '@/routes/control/technologies';
 import type {
     EquipmentCardSummary,
@@ -31,6 +33,7 @@ import type {
     EquipmentRecipient,
     FacilityTypeSummary,
     GameSummary,
+    ProtectionCardRecipient,
     ProtectionCardSummary,
     ResearchSuitSummary,
     TechnologySummary,
@@ -40,6 +43,7 @@ import type {
 type Props = {
     game: GameSummary;
     protectionCards: ProtectionCardSummary[];
+    protectionCardRecipients: ProtectionCardRecipient[];
     equipment: EquipmentCardSummary[];
     equipmentHoldings: EquipmentHoldingGroup[];
     equipmentRecipients: EquipmentRecipient[];
@@ -67,6 +71,7 @@ type Props = {
 export default function ControlCards({
     game,
     protectionCards,
+    protectionCardRecipients,
     equipment,
     equipmentHoldings,
     equipmentRecipients,
@@ -160,36 +165,18 @@ export default function ControlCards({
                             sentence the card prints rather than a skill and a
                             number, because a good many of them are not — the
                             Runners may choose the skill, or the strength counts
-                            something only known once the card is met.
+                            something only known once the card is met. Click a
+                            card to give a Corporation copies of it; arranging
+                            them in a Facility is the Facility Defence page.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-3">
                         {shownProtection.map((card) => (
-                            <CardFace
+                            <GiveAProtectionCard
                                 key={card.id}
-                                name={card.name}
-                                code={card.code}
-                                imagePath={card.image_path}
-                                shape="landscape"
-                                lines={[
-                                    {
-                                        label: 'Kind',
-                                        value: card.kind_label,
-                                        glyph: card.kind_glyph,
-                                    },
-                                    {
-                                        label: 'Challenge',
-                                        value: card.challenge,
-                                    },
-                                    { label: '', value: card.consequence },
-                                    {
-                                        label: 'Charge',
-                                        value: card.charge_consequence
-                                            ? `${card.charge_cost}cr — ${card.charge_consequence}`
-                                            : null,
-                                    },
-                                ]}
-                                footer={card.availability_label}
+                                gameId={game.id}
+                                card={card}
+                                recipients={protectionCardRecipients}
                             />
                         ))}
                         {shownProtection.length === 0 && (
@@ -484,6 +471,106 @@ export default function ControlCards({
 }
 
 /**
+ * A card in the Protection Card list, and Control giving a Corporation copies
+ * of it by pointing at it.
+ *
+ * The same gesture as the Equipment list below and for the same reason, with
+ * the one difference the rulebook draws: 3.3.4 makes these copies the
+ * *Corporation's* rather than a person's, so the picker holds the five
+ * Corporations where that one holds the roster.
+ *
+ * Giving adds, as it does everywhere: Control handing cards over knows what it
+ * is giving and not what the Corporation already holds. Correcting a count
+ * outright is the Facility Defence page's, beside the stacks the count feeds.
+ */
+function GiveAProtectionCard({
+    gameId,
+    card,
+    recipients,
+}: {
+    gameId: number;
+    card: ProtectionCardSummary;
+    recipients: ProtectionCardRecipient[];
+}) {
+    const face = (
+        <CardFace
+            name={card.name}
+            code={card.code}
+            imagePath={card.image_path}
+            shape="landscape"
+            lines={[
+                {
+                    label: 'Kind',
+                    value: card.kind_label,
+                    glyph: card.kind_glyph,
+                },
+                { label: 'Challenge', value: card.challenge },
+                { label: '', value: card.consequence },
+                {
+                    label: 'Charge',
+                    value: card.charge_consequence
+                        ? `${card.charge_cost}cr — ${card.charge_consequence}`
+                        : null,
+                },
+            ]}
+            footer={card.availability_label}
+        />
+    );
+
+    if (recipients.length === 0) {
+        return face;
+    }
+
+    return (
+        <GiveCardDialog
+            name={card.name}
+            face={face}
+            recipients={corporationsToGiveTo(recipients)}
+            title={`Give ${card.name}`}
+            description="Straight into the Corporation's hand, where its Security player installs it. Copies are added to whatever it already holds — a count typed wrong is corrected on the Facility Defence page."
+            actionLabel="Give"
+            submit={(to, copies, handlers) =>
+                router.post(
+                    giveProtection.url({ game: gameId }),
+                    {
+                        corporation_id: to,
+                        protection_card_type_id: card.id,
+                        copies,
+                    },
+                    {
+                        preserveScroll: true,
+                        onSuccess: handlers.onSuccess,
+                        onError: (errors) =>
+                            handlers.onError(
+                                Object.values(errors)[0] ??
+                                    'That card could not be given.',
+                            ),
+                    },
+                )
+            }
+        >
+            {face}
+        </GiveCardDialog>
+    );
+}
+
+function corporationsToGiveTo(
+    recipients: ProtectionCardRecipient[],
+): GiveRecipients {
+    return {
+        label: 'To',
+        options: recipients.map((corporation) => ({
+            value: corporation.corporation_id,
+            label: corporation.name,
+            search: corporation.name,
+        })),
+        placeholder: `Search ${recipients.length} Corporations…`,
+        searchPlaceholder: 'Name…',
+        emptyMessage: 'No Corporation of that name is in this game.',
+    };
+}
+
+/**
  * A card in the Equipment list, and Control handing one over by pointing at it.
  *
  * The gesture is the card itself, because that is what is being asked for at
@@ -527,8 +614,9 @@ function GiveFromTheList({
 
     return (
         <GiveCardDialog
-            card={card}
-            recipients={recipients}
+            name={card.name}
+            face={face}
+            recipients={peopleToGiveTo(recipients)}
             title={`Give ${card.name}`}
             description="Straight into their hand. Copies are added to whatever they are already carrying — a count typed wrong is corrected below, under who is carrying what."
             actionLabel="Give"

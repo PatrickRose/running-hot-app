@@ -324,6 +324,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 // How many copies of a card a Corporation owns (rulebook 3.3.4).
                 // Control's to set: everything that moves it happens at the table.
+                Route::post('games/{game}/protection-card-holdings/give', [ProtectionCardHoldingController::class, 'give'])
+                    ->name('protection-card-holdings.give');
                 Route::patch('games/{game}/protection-card-holdings', [ProtectionCardHoldingController::class, 'update'])
                     ->name('protection-card-holdings.update');
 
