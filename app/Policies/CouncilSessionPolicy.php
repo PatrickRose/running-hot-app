@@ -63,10 +63,17 @@ class CouncilSessionPolicy
      * Every CEO may, the Chair included - and so may anybody Control has given
      * a seat of their own, which is how HM Government votes. That second case
      * is a ruling rather than a rule: 3.1 seats only the Corporations.
+     *
+     * The clock is asked about here rather than inside hasSeat(), because a
+     * seat is a fact about the roster and voting is an act: the same CEO may
+     * read back a finished sitting and may not cast a ballot in it.
      */
     public function vote(User $user, CouncilSession $session): bool
     {
-        return app(CouncilService::class)->hasSeat($session->turn->game, $user);
+        $game = $session->turn->game;
+
+        return $game->isRunning()
+            && app(CouncilService::class)->hasSeat($game, $user);
     }
 
     private function holdsCeoSeat(User $user, CouncilSession $session, ?int $corporationId): bool

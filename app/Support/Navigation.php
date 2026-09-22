@@ -12,9 +12,14 @@ use App\Services\CouncilService;
  *
  * A user holds characters rather than a side - somebody running a Freelancer on
  * Saturday may be sitting in a Security chair on Sunday - so what is worth
- * showing them is read off the seats they have claimed in the game that is
- * running, exactly as GamePresenter reads which tier of the Facility board they
- * get. There is no column for it and there should not be one.
+ * showing them is read off the seats they have claimed in the game they are in,
+ * exactly as GamePresenter reads which tier of the Facility board they get.
+ * There is no column for it and there should not be one.
+ *
+ * The clock is not asked about. A game that has not started and one that has
+ * finished are both readable, so the sections a seat earns are drawn either
+ * side of the evening; what the pages behind them will not do is each page's
+ * own answer, as below.
  *
  * This decides what is *drawn*, not what is reachable. Every page behind these
  * links already decides for itself what a given viewer may see of it - two

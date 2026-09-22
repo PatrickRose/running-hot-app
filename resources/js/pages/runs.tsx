@@ -1,4 +1,5 @@
 import { Head, usePoll } from '@inertiajs/react';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { RunPanel } from '@/components/run-panel';
 import { RunSubmitForm } from '@/components/run-submit-form';
@@ -43,7 +44,10 @@ export default function Runs({ game, board }: Props) {
             <>
                 <Head title="Runs" />
                 <div className="p-4">
-                    <Heading title="Runs" description="No game is running." />
+                    <Heading
+                        title="Runs"
+                        description="No game has been set up yet."
+                    />
                 </div>
             </>
         );
@@ -68,6 +72,8 @@ export default function Runs({ game, board }: Props) {
                               }`
                     }
                 />
+
+                <GameStateNotice game={game} />
 
                 {board.can_submit && (
                     <RunSubmitForm

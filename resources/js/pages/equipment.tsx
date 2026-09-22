@@ -2,6 +2,7 @@ import { Head } from '@inertiajs/react';
 import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import {
     Card,
@@ -54,7 +55,7 @@ export default function Equipment({ game, holdings, is_control }: Props) {
                 <div className="p-4">
                     <Heading
                         title="Equipment"
-                        description="No game is running."
+                        description="No game has been set up yet."
                     />
                 </div>
             </>
@@ -76,6 +77,8 @@ export default function Equipment({ game, holdings, is_control }: Props) {
                             : 'What you are carrying. A card changes hands by talking to Control.'
                     }
                 />
+
+                <GameStateNotice game={game} />
 
                 {runners.length === 0 ? (
                     <Card>

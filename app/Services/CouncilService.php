@@ -797,10 +797,18 @@ class CouncilService
      * may write a custom agenda. Control is not asked about here: Control
      * reaches all of it through the policies' before(), and a service that
      * answered "yes, Control" would have the override in two places.
+     *
+     * A seat is a fact about the roster and carries no clock, which is what
+     * lets a CEO read back the Chamber of a game that has finished and read
+     * ahead in one that has not started. Whether the sitting may be *acted* on
+     * is each act's own question, asked where the act is: CouncilSessionPolicy
+     * and AgendaCardPolicy each ask whether the game is running beside this.
+     * Reading the Chamber asks only this, because reading is the thing a game
+     * off the clock still allows.
      */
     public function hasSeat(Game $game, ?User $user): bool
     {
-        if ($user === null || ! $game->isRunning()) {
+        if ($user === null) {
             return false;
         }
 

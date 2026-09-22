@@ -65,7 +65,8 @@ class AgendaCardPolicy
      */
     public function create(User $user, Game $game): bool
     {
-        return app(CouncilService::class)->hasSeat($game, $user);
+        return $game->isRunning()
+            && app(CouncilService::class)->hasSeat($game, $user);
     }
 
     /**

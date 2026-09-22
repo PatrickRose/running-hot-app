@@ -1,6 +1,7 @@
 import { Head, Link, usePoll } from '@inertiajs/react';
 import { CharacterLogo } from '@/components/character-logo';
 import { FactionBadge } from '@/components/faction-badge';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
 import { Badge } from '@/components/ui/badge';
@@ -94,11 +95,15 @@ export default function Dashboard({
                 <Heading
                     title={game?.name ?? 'Running Hot'}
                     description={
-                        game
-                            ? 'The clock below is the one that counts.'
-                            : 'No game is running right now.'
+                        game === null
+                            ? 'No game has been set up yet.'
+                            : game.status === 'running'
+                              ? 'The clock below is the one that counts.'
+                              : 'Your seats in this game.'
                     }
                 />
+
+                {game && <GameStateNotice game={game} />}
 
                 <div className="flex flex-wrap gap-4">
                     {game && (

@@ -4,6 +4,7 @@ import { AgendaCardPanel } from '@/components/agenda-card-panel';
 import { AgendaComposer } from '@/components/agenda-composer';
 import { CouncilItem } from '@/components/council-item';
 import { FactionBadge } from '@/components/faction-badge';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { RecessClock } from '@/components/recess-clock';
 import { Badge } from '@/components/ui/badge';
@@ -49,7 +50,7 @@ export default function Council({ game, council }: Props) {
                 <div className="p-4">
                     <Heading
                         title="Council"
-                        description="No game is running."
+                        description="No game has been set up yet."
                     />
                 </div>
             </>
@@ -77,6 +78,8 @@ export default function Council({ game, council }: Props) {
                     />
                     {session && <RecessClock session={session} />}
                 </div>
+
+                <GameStateNotice game={game} />
 
                 {session === null ? (
                     <p className="text-sm text-muted-foreground">

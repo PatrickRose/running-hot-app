@@ -241,12 +241,26 @@ class Game extends Model
      * player pages carry no game in their URL because a player only ever has
      * one. Control's pages all name a game, because Control may be setting the
      * next one up while this one is being played.
+     *
+     * A game that has not started yet and one that has finished are answered
+     * for as well, rather than leaving every player looking at "no game is
+     * running" either side of the evening. Both are worth reading: a Draft game
+     * is where somebody reads their own briefing beforehand - the roster, the
+     * Facilities and the starting kits are all seeded at creation - and a
+     * Finished one is the record of what happened. What a player may *do* is
+     * unchanged by this, because every act is gated on Running in its own
+     * policy rather than on this lookup.
+     *
+     * A running game always wins, whatever its id, so Control setting next
+     * Saturday's game up mid-session cannot pull tonight's out from under the
+     * table it is being played on. Past that it is the newest game, which is
+     * the one coming rather than the one gone.
      */
     public static function current(): ?self
     {
         /** @var self|null */
         return self::query()
-            ->where('status', GameStatus::Running)
+            ->orderByRaw('case when status = ? then 0 else 1 end', [GameStatus::Running->value])
             ->latest('id')
             ->first();
     }

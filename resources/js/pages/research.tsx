@@ -1,5 +1,6 @@
 import { Head, usePoll } from '@inertiajs/react';
 import { FactionBadge } from '@/components/faction-badge';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { ResearchCardFace } from '@/components/research-card-face';
 import { ResearchPoints } from '@/components/research-points';
@@ -59,7 +60,7 @@ export default function Research({ game, research }: Props) {
                 <div className="p-4">
                     <Heading
                         title="Research"
-                        description="No game is running."
+                        description="No game has been set up yet."
                     />
                 </div>
             </>
@@ -83,6 +84,8 @@ export default function Research({ game, research }: Props) {
                               }`
                     }
                 />
+
+                <GameStateNotice game={game} />
 
                 {own && (
                     <ResearchPoints

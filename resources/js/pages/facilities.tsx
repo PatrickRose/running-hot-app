@@ -3,6 +3,7 @@ import { CardFace } from '@/components/card-face';
 import { FacilityDefenceBoard } from '@/components/facility-defence-board';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
+import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { StackEnd } from '@/components/stack-end';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +46,7 @@ export default function Facilities({ game, board }: Props) {
                 <div className="p-4">
                     <Heading
                         title="Facilities"
-                        description="No game is running."
+                        description="No game has been set up yet."
                     />
                 </div>
             </>
@@ -68,6 +69,8 @@ export default function Facilities({ game, board }: Props) {
                             : `Turn ${board.turn}`
                     }
                 />
+
+                <GameStateNotice game={game} />
 
                 {own?.can_defend && <FacilityDefenceBoard own={own} />}
 

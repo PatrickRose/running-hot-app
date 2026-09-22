@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DiscordSyncStatus;
-use App\Enums\GameStatus;
 use App\Models\Character;
 use App\Models\DiscordMemberSync;
 use App\Models\Game;
@@ -21,10 +20,7 @@ class DashboardController extends Controller
      */
     public function __invoke(Request $request, GamePresenter $presenter): Response
     {
-        $game = Game::query()
-            ->where('status', GameStatus::Running)
-            ->latest('id')
-            ->first();
+        $game = Game::current();
 
         $characters = $game === null ? [] : Character::query()
             ->where('game_id', $game->id)

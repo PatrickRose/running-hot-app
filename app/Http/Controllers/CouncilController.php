@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Services\CouncilService;
 use App\Support\CouncilPresenter;
@@ -33,10 +32,7 @@ class CouncilController extends Controller
         CouncilPresenter $council,
         CouncilService $seats,
     ): Response {
-        $game = Game::query()
-            ->where('status', GameStatus::Running)
-            ->latest('id')
-            ->first();
+        $game = Game::current();
 
         $user = $request->user();
 

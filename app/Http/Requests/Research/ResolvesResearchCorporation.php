@@ -23,7 +23,10 @@ trait ResolvesResearchCorporation
     private ?Corporation $researchCorporation = null;
 
     /**
-     * The running game, which is the only one players ever act in.
+     * The game this player is in.
+     *
+     * Which may be one off the clock, since those are readable - and acting in
+     * one is refused by CorporationPolicy rather than by finding no game here.
      */
     protected function researchGame(): ?Game
     {
