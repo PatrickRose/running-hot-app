@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\GameStatus;
 use App\Models\Character;
 use App\Models\User;
 
@@ -40,20 +39,27 @@ class CharacterPolicy
      * the far side of the trade, and who may hold a card is Control's call
      * rather than a rule off the page.
      *
-     * There is deliberately **no clock**, which is where this parts company
-     * with `ShopListingPolicy`. The shop is a counter Control opens and shuts,
-     * and 3.3.3 says so in as many words - but handing a card to somebody is
-     * two players agreeing in a Discord channel, and the channels are open all
-     * turn. 2.1 listing it under the Setup Phase describes when the market runs
-     * rather than forbidding a Runner from passing a Shiv across at any other
-     * moment, and a refusal here would only teach people to phone Control
-     * instead. The one thing the run loop needs is that a card already spent on
-     * a run is gone from the hand, and the service's own count is what holds
-     * that.
+     * There is deliberately **no phase clock**, which is where this parts
+     * company with `ShopListingPolicy`. The shop is a counter Control opens and
+     * shuts, and 3.3.3 says so in as many words - but handing a card to
+     * somebody is two players agreeing in a Discord channel, and the channels
+     * are open all turn. 2.1 listing it under the Setup Phase describes when
+     * the market runs rather than forbidding a Runner from passing a Shiv
+     * across at any other moment, and a refusal there would only teach people
+     * to phone Control instead. The one thing the run loop needs is that a card
+     * already spent on a run is gone from the hand, and the service's own count
+     * is what holds that.
+     *
+     * The *game's* clock is asked about, though, and that is the division "A
+     * game off the clock" draws: a seat is a fact about the roster, and acting
+     * is a question about the clock. Reading a hand is why `/equipment` opens
+     * either side of the evening; handing a card over is an act, so it asks
+     * `isRunning()` here where the act is, exactly as
+     * `CouncilSessionPolicy::vote` does beside `hasSeat()`.
      */
     public function giveEquipment(User $user, Character $character): bool
     {
-        if ($character->game->status !== GameStatus::Running) {
+        if (! $character->game->isRunning()) {
             return false;
         }
 

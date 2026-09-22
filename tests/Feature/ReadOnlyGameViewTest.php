@@ -235,8 +235,13 @@ class ReadOnlyGameViewTest extends TestCase
         $game = $this->game($status);
         $user = $this->seatIn($game, 'Gordon', CharacterRole::Ceo);
 
+        // Equipment among them: a hand is read by anybody holding a seat, a
+        // CEO included, since 2.1 has Runners buying equipment "from other
+        // players" and the card may be sitting with whoever bought it to hand
+        // over. Reading one is the thing a game off the clock still allows;
+        // handing it on is the act CharacterPolicy::giveEquipment refuses.
         $this->assertSame(
-            ['dashboard', 'facilities', 'runs', 'council', 'research', 'shop'],
+            ['dashboard', 'facilities', 'runs', 'equipment', 'council', 'research', 'shop'],
             app(Navigation::class)->sectionsFor($game, $user),
         );
     }

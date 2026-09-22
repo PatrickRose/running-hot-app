@@ -231,34 +231,28 @@ class EquipmentTransferTest extends TestCase
     }
 
     /**
-     * A game that is not running has no hands to move cards between, which is
-     * the one thing the policy still asks about.
+     * A game off the clock is readable and not playable, which is the division
+     * "A game off the clock" in CLAUDE.md draws: a seat is a fact about the
+     * roster, and acting is a question about the clock. Reading a hand is why
+     * `/equipment` opens either side of the evening; handing a card over is an
+     * act, so it is refused once the game has finished.
+     *
+     * The game is taken off the clock rather than a second game being made,
+     * which is what makes this a test of the policy at all: Game::current()
+     * still finds it, so the route reads the right roster and the 403 is the
+     * refusal rather than a character it could not look up.
      */
-    public function test_a_trade_is_refused_before_the_game_starts(): void
+    public function test_a_trade_is_refused_once_the_game_is_off_the_clock(): void
     {
-        $game = Game::factory()->create(['status' => GameStatus::Draft]);
-        $gang = Gang::factory()->for($game)->create();
-
         $user = User::factory()->create();
+        $wicker = $this->runner('Wicker', $user);
+        $ghost = $this->runner('Ghost');
 
-        $wicker = Character::factory()->for($game)->create([
-            'gang_id' => $gang->id,
-            'user_id' => $user->id,
-            'name' => 'Wicker',
-            'role' => CharacterRole::Runner,
-        ]);
+        $card = $this->card();
+        $this->hold($wicker, $card, 1);
 
-        $ghost = Character::factory()->for($game)->create([
-            'gang_id' => $gang->id,
-            'name' => 'Ghost',
-            'role' => CharacterRole::Runner,
-        ]);
+        $this->game->forceFill(['status' => GameStatus::Finished])->save();
 
-        $card = EquipmentCardType::factory()->for($game)->create();
-        app(EquipmentService::class)->setCopiesInHand($wicker, $card, 1);
-
-        // Game::current() is the running one, so the draft game's characters
-        // are not even on the roster this route reads.
         $this->actingAs($user)
             ->post('/equipment/give', [
                 'from_character_id' => $wicker->id,
@@ -266,8 +260,9 @@ class EquipmentTransferTest extends TestCase
                 'equipment_card_type_id' => $card->id,
                 'copies' => 1,
             ])
-            ->assertSessionHasErrors('from_character_id');
+            ->assertForbidden();
 
+        $this->assertSame(1, $wicker->equipmentCopiesOf($card->id));
         $this->assertSame(0, $ghost->equipmentCopiesOf($card->id));
     }
 
