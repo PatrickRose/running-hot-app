@@ -3,6 +3,7 @@ import {
     Backpack,
     Building2,
     Crosshair,
+    Dices,
     FlaskConical,
     Gavel,
     LayoutGrid,
@@ -24,6 +25,7 @@ import {
 import {
     council,
     dashboard,
+    dice,
     equipment,
     facilities,
     research,
@@ -76,6 +78,12 @@ const mainNavItems: Section[] = [
         title: 'Shop',
         href: shop(),
         icon: ShoppingCart,
+    },
+    {
+        section: 'dice',
+        title: 'Dice',
+        href: dice(),
+        icon: Dices,
     },
 ];
 

@@ -47,6 +47,7 @@ class Navigation
         'council',
         'research',
         'shop',
+        'dice',
     ];
 
     /**
@@ -118,6 +119,10 @@ class Navigation
             // and the market out of a Runner's own. Anybody holding a seat is
             // at one of them.
             $inTheField || $corporate ? 'shop' : null,
+
+            // Anybody may be asked to roll for a ruling, so anybody holding a
+            // seat is offered the dice.
+            $seats->isNotEmpty() ? 'dice' : null,
         ]));
     }
 }

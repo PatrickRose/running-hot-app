@@ -83,6 +83,17 @@ class SidebarNavigationTest extends TestCase
      * 3.4 hands the Facility game to a side rather than to one role, so a
      * Freelancer reads exactly as a Runner does.
      */
+    /**
+     * Anybody may be asked to roll for a ruling, so the dice follow a seat of
+     * any kind - and somebody holding none has nobody to roll as.
+     */
+    public function test_every_seat_is_offered_the_dice(): void
+    {
+        $this->assertContains('dice', $this->sectionsFor($this->seat(CharacterRole::Runner)));
+        $this->assertContains('dice', $this->sectionsFor($this->seat(CharacterRole::Ceo)));
+        $this->assertNotContains('dice', $this->sectionsFor(User::factory()->create()));
+    }
+
     public function test_a_freelancer_reads_as_a_runner_does(): void
     {
         $this->assertSame(
@@ -207,6 +218,6 @@ class SidebarNavigationTest extends TestCase
             ->get(route('dashboard'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'shop']));
+                ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'shop', 'dice']));
     }
 }

@@ -1605,3 +1605,27 @@ export type ShopControlBoard = {
     };
     statuses: { value: ShopListingStatus; label: string }[];
 };
+
+/**
+ * A pool of d6s and d8s a player rolled for Control to read. Rolled on the
+ * server; a 5 or better on either die is a success.
+ */
+export type DiceRoll = {
+    id: number;
+    d6: number;
+    d8: number;
+    faces: { d6: number[]; d8: number[] };
+    successes: number;
+    success_on: number;
+    purpose: string | null;
+    character_name: string | null;
+    user_name: string | null;
+    rolled_at: string | null;
+};
+
+/** A seat a player may roll as. */
+export type DiceSeat = {
+    character_id: number;
+    name: string;
+    role_label: string;
+};

@@ -132,6 +132,16 @@ class Game extends Model
         return $this->hasMany(EquipmentCardType::class);
     }
 
+    /**
+     * The rolls players have made for Control to read, outside any run.
+     *
+     * @return HasMany<DiceRoll, $this>
+     */
+    public function diceRolls(): HasMany
+    {
+        return $this->hasMany(DiceRoll::class);
+    }
+
     /** @return HasMany<TechnologyType, $this> */
     public function technologyTypes(): HasMany
     {

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/card';
 import { index as cardsIndex } from '@/routes/control/cards';
 import { index as councilIndex } from '@/routes/control/council';
+import { index as diceIndex } from '@/routes/control/dice';
 import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
@@ -125,6 +126,14 @@ export default function ControlGameShow({
                             }
                         >
                             Shop
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(diceIndex.url({ game: game.id }))
+                            }
+                        >
+                            Dice rolls
                         </Button>
                         <Button
                             variant="ghost"

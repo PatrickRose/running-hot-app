@@ -7,6 +7,7 @@ use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\ControlMemberController;
 use App\Http\Controllers\Control\CouncilController as ControlCouncilController;
+use App\Http\Controllers\Control\DiceRollController as ControlDiceRollController;
 use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\EquipmentCardTypeController;
 use App\Http\Controllers\Control\EquipmentHoldingController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\CouncilBallotController;
 use App\Http\Controllers\CouncilChairController;
 use App\Http\Controllers\CouncilController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DiceRollController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\EquipmentTransferController;
 use App\Http\Controllers\FacilityBoardController;
@@ -114,6 +116,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // exchange is settled at the table, as a research point trade is.
     Route::post('equipment/give', EquipmentTransferController::class)
         ->name('equipment.give');
+
+    // A pool of d6s and d8s, rolled on the server and shared with Control. The
+    // seat is named in the request because a player may hold two, and Control
+    // wants to know which of them was rolling.
+    Route::get('dice', [DiceRollController::class, 'index'])->name('dice');
+    Route::post('dice', [DiceRollController::class, 'store'])->name('dice.store');
 
     // The research sub-game (rulebook 3.2). None of these names a Corporation:
     // a player has exactly one, so the seat they hold decides which, and the
@@ -283,6 +291,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 // stats on a character sheet are edited nowhere else.
                 Route::get('games/{game}/stats', [StatsController::class, 'index'])
                     ->name('stats.index');
+
+                // What players have rolled for Control to read.
+                Route::get('games/{game}/dice', [ControlDiceRollController::class, 'index'])
+                    ->name('dice.index');
 
                 Route::post('games/{game}/trackers', [TrackerController::class, 'store'])->name('trackers.store');
                 Route::post('games/{game}/characters/{character}/remove-tag', [TrackerController::class, 'removeTag'])
