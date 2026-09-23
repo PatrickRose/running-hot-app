@@ -242,6 +242,51 @@ class CardCatalogueTest extends TestCase
         $this->assertFalse($deerHorns->isFree());
     }
 
+    /**
+     * Three cards reached the tree with no price at all, which made them look
+     * like starting technologies and let anybody research them for nothing.
+     */
+    public function test_the_cards_that_lost_their_prices_are_priced_as_printed(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->assertSame(
+            ['cog' => 0, 'brain' => 6, 'leaf' => 16, 'maths' => 0],
+            $game->technologyTypes()->where('code', 'RGR052')->sole()->cost(),
+        );
+        $this->assertSame(
+            ['cog' => 26, 'brain' => 26, 'leaf' => 0, 'maths' => 10],
+            $game->technologyTypes()->where('code', 'RGR064')->sole()->cost(),
+        );
+        $this->assertSame(
+            ['cog' => 8, 'brain' => 30, 'leaf' => 24, 'maths' => 20],
+            $game->technologyTypes()->where('code', 'RSR007')->sole()->cost(),
+        );
+    }
+
+    /**
+     * Free is a real price for three kinds of row and for nothing else: a
+     * starting technology, a deck customisation row (priced in amounts the
+     * player assigns rather than in the four columns), and the two honey traps,
+     * which are planted for a Runner to find rather than researched.
+     */
+    public function test_every_researchable_technology_costs_something(): void
+    {
+        $traps = ['RSR033', 'RSR034'];
+
+        foreach (TechnologyBlueprint::defaults() as $technology) {
+            if ($technology['starting'] || $technology['deck_grant'] !== null || in_array($technology['code'], $traps, true)) {
+                continue;
+            }
+
+            $this->assertGreaterThan(
+                0,
+                $technology['cog_cost'] + $technology['brain_cost'] + $technology['leaf_cost'] + $technology['maths_cost'],
+                $technology['code'].' '.$technology['name'].' has no price in any suit.',
+            );
+        }
+    }
+
     public function test_a_technology_keeps_its_prerequisites_as_printed_titles(): void
     {
         $game = Game::factory()->create();
