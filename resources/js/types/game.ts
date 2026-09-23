@@ -1124,6 +1124,12 @@ export type CouncilControlBoard = {
     /** What Control's penalty field is pre-filled with, not a rule. */
     absence_penalty: number;
     recess_seconds: number;
+    /**
+     * Whose turn it is by the rotation, which is who is chairing on every turn
+     * the Council has not sat yet — most of the time Control is looking at the
+     * panel, since the sitting is made when Setup opens.
+     */
+    next_chair: CouncilVoter | null;
 };
 
 /**

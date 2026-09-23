@@ -863,6 +863,13 @@ class GamePresenter
             }
 
             $cards = $character->equipmentHoldings
+                // A hand holds what it holds. `EquipmentService` leaves a row
+                // at nought rather than deleting it - the count is where it
+                // ended up, and a deleted row is a count that never existed -
+                // but a card somebody has handed over or spent is not in their
+                // hand, and drawing it as a face with a x0 on it is the page
+                // saying they are carrying something they are not.
+                ->filter(fn (EquipmentHolding $holding): bool => $holding->copies > 0)
                 ->map(fn (EquipmentHolding $holding): array => [
                     'card_type_id' => $holding->equipment_card_type_id,
                     'code' => $holding->cardType->code,

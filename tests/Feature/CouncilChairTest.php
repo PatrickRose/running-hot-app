@@ -347,6 +347,42 @@ class CouncilChairTest extends TestCase
         $this->assertSame(1, $control['own_seats'][0]['chair_order']);
     }
 
+    /**
+     * And it says who is chairing before the Council has sat, which is most of
+     * the time Control is looking at the panel: the sitting is made when Setup
+     * opens, so until then there is no chair to mark and the page could only
+     * say nothing. Whose turn it is by the rotation is the honest answer, and
+     * the server works it out rather than the browser stepping through the
+     * order by turn number.
+     */
+    public function test_the_panel_names_the_next_chair_before_the_council_sits(): void
+    {
+        $government = $this->government();
+        $government->forceFill(['council_chair_order' => 1])->save();
+
+        $control = app(CouncilPresenter::class)->forControl($this->game);
+
+        $this->assertSame('HM Government', $control['next_chair']['name']);
+        $this->assertSame('character:'.$government->id, $control['next_chair']['key']);
+
+        // Nothing is chairing yet, so the panel has nothing else to go on.
+        $this->assertSame(
+            [false, false, false],
+            array_column($control['rotation'], 'is_chair'),
+        );
+    }
+
+    /**
+     * A game with nobody in the rotation at all has nobody to name, which is a
+     * roster Control has not built yet rather than an error.
+     */
+    public function test_the_next_chair_is_nobody_where_the_rotation_is_empty(): void
+    {
+        $empty = Game::factory()->create();
+
+        $this->assertNull(app(CouncilPresenter::class)->forControl($empty)['next_chair']);
+    }
+
     private function government(?User $user = null): Character
     {
         return Character::factory()->for($this->game)->create([

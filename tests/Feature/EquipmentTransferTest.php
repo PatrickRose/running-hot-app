@@ -346,6 +346,33 @@ class EquipmentTransferTest extends TestCase
         );
     }
 
+    /**
+     * ...and the page does not draw it. The row stays because the count is
+     * where it ended up, but a card somebody has handed over is not in their
+     * hand, and a card face with a x0 on it says they are carrying something
+     * they are not.
+     */
+    public function test_a_hand_does_not_draw_a_card_it_has_none_of(): void
+    {
+        $wicker = $this->runner('Wicker');
+        $ghost = $this->runner('Ghost');
+
+        $card = $this->card();
+        $this->hold($wicker, $card, 1);
+
+        app(EquipmentService::class)->transfer($wicker, $ghost, $card);
+
+        $hands = collect(app(GamePresenter::class)->equipmentHoldings($this->game))
+            ->flatMap(fn (array $group): array => $group['members'])
+            ->keyBy('name');
+
+        $this->assertSame([], $hands['Wicker']['cards']);
+        $this->assertSame(
+            [$card->name],
+            array_column($hands['Ghost']['cards'], 'name'),
+        );
+    }
+
     public function test_the_route_needs_a_login(): void
     {
         $this->post('/equipment/give', [])->assertRedirect('/login');

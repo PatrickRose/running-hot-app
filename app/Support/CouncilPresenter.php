@@ -15,6 +15,7 @@ use App\Models\CouncilBallot;
 use App\Models\CouncilSeat;
 use App\Models\CouncilSession;
 use App\Models\Game;
+use App\Models\Turn;
 use App\Models\User;
 use App\Policies\CouncilSessionPolicy;
 use App\Services\CouncilService;
@@ -131,7 +132,26 @@ class CouncilPresenter
                 ->all(),
             'absence_penalty' => (int) config('running_hot.council.absence_penalty'),
             'recess_seconds' => $game->council_recess_seconds,
+            // Whose turn it is by the rotation, which is the answer to "who is
+            // chairing?" on every turn the Council has not sat yet - and that
+            // is most of the time Control is looking at this panel, since the
+            // sitting is made when the Setup phase opens. Without it the panel
+            // could only say who is in the Chair once somebody already was.
+            'next_chair' => $this->voter($this->nextChair($game, $turn)),
         ];
+    }
+
+    /**
+     * Whose turn it is to chair, or the front of the rotation where the game
+     * has not started and there is no turn to count from.
+     */
+    private function nextChair(Game $game, ?Turn $turn): Corporation|Character|null
+    {
+        if ($turn !== null) {
+            return $this->council->nextChair($turn);
+        }
+
+        return $this->council->rotation($game)->first();
     }
 
     /**
