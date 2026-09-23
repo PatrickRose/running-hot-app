@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Actions\RollDice;
+use App\Models\Character;
 use App\Models\DiceRoll;
 use App\Models\Game;
 use App\Models\User;
@@ -18,8 +19,18 @@ use App\Models\User;
  */
 class DiceRollPresenter
 {
-    /** How many rolls either page carries. */
+    /** How many rolls a player's own page carries. */
     public const RECENT = 50;
+
+    /**
+     * How many Control's log carries.
+     *
+     * More than a player's, because Control searches it - "when did Wicker
+     * last roll?" - and a search over the last fifty is a search that misses.
+     * The list is filtered in the browser, so this is the whole of what it can
+     * find.
+     */
+    public const CONTROL_LOG = 500;
 
     /**
      * The rolls this viewer may read, newest first.
@@ -30,12 +41,14 @@ class DiceRollPresenter
      */
     public function recent(Game $game, User $viewer): array
     {
-        $query = $game->diceRolls()
-            ->with(['user', 'character'])
-            ->latest('id')
-            ->limit(self::RECENT);
+        $isControl = $viewer->isControlFor($game);
 
-        if (! $viewer->isControlFor($game)) {
+        $query = $game->diceRolls()
+            ->with(['user', 'character.gang', 'character.corporation', 'phase.turn'])
+            ->latest('id')
+            ->limit($isControl ? self::CONTROL_LOG : self::RECENT);
+
+        if (! $isControl) {
             $query->where('user_id', $viewer->id);
         }
 
@@ -62,8 +75,36 @@ class DiceRollPresenter
             'success_on' => RollDice::SUCCESS_ON,
             'purpose' => $roll->purpose,
             'character_name' => $roll->character?->name,
+            // Only the characters that are organisations have artwork of their
+            // own, so this is null for almost everybody - the team's badge is
+            // the one that is always drawn.
+            'character_logo_path' => $roll->character === null ? null : LogoImage::pathFor($roll->character->name),
+            'team' => $this->teamOf($roll->character),
+            'turn' => $roll->phase?->turn->number,
+            'phase_label' => $roll->phase?->type->label(),
             'user_name' => $roll->user?->name,
             'rolled_at' => $roll->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * The gang or Corporation a character rolled for, as a badge.
+     *
+     * Null for somebody in neither - the press, HM Government, a Freelancer -
+     * and for Control rolling as itself.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function teamOf(?Character $character): ?array
+    {
+        if ($character?->gang_id !== null) {
+            return FactionBadge::for($character->gang->name);
+        }
+
+        if ($character?->corporation_id !== null) {
+            return FactionBadge::for($character->corporation->name);
+        }
+
+        return null;
     }
 }

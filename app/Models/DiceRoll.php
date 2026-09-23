@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $game_id
  * @property int|null $user_id
  * @property int|null $character_id
+ * @property int|null $phase_id
  * @property int $d6
  * @property int $d8
  * @property array{d6: array<int, int>, d8: array<int, int>} $faces
@@ -29,8 +30,9 @@ use Illuminate\Support\Carbon;
  * @property-read Game $game
  * @property-read User|null $user
  * @property-read Character|null $character
+ * @property-read Phase|null $phase
  */
-#[Fillable(['game_id', 'user_id', 'character_id', 'd6', 'd8', 'faces', 'successes', 'purpose'])]
+#[Fillable(['game_id', 'user_id', 'character_id', 'phase_id', 'd6', 'd8', 'faces', 'successes', 'purpose'])]
 class DiceRoll extends Model
 {
     /**
@@ -62,5 +64,11 @@ class DiceRoll extends Model
     public function character(): BelongsTo
     {
         return $this->belongsTo(Character::class);
+    }
+
+    /** @return BelongsTo<Phase, $this> */
+    public function phase(): BelongsTo
+    {
+        return $this->belongsTo(Phase::class);
     }
 }

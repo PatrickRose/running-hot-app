@@ -1619,6 +1619,13 @@ export type DiceRoll = {
     success_on: number;
     purpose: string | null;
     character_name: string | null;
+    /** Only the characters that are organisations have one. */
+    character_logo_path: string | null;
+    /** The gang or Corporation rolled for; null for somebody in neither. */
+    team: Faction | null;
+    /** Null for a roll made with no phase running. */
+    turn: number | null;
+    phase_label: string | null;
     user_name: string | null;
     rolled_at: string | null;
 };

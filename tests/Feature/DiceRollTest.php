@@ -8,8 +8,10 @@ use App\Models\Character;
 use App\Models\ControlMember;
 use App\Models\DiceRoll;
 use App\Models\Game;
+use App\Models\Gang;
 use App\Models\User;
 use App\Services\Dice;
+use App\Services\TurnEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\FakeDice;
 use Tests\TestCase;
@@ -214,6 +216,56 @@ class DiceRollTest extends TestCase
                 ->where('rolls.0.successes', 0)
                 ->where('rolls.1.character_name', 'Wicker')
                 ->where('rolls.1.successes', 1));
+    }
+
+    /**
+     * "Which turn was that?" is what Control asks about a roll after the fact,
+     * so the roll keeps the phase it was made in - and says who it was for.
+     */
+    public function test_a_roll_carries_its_turn_phase_and_team(): void
+    {
+        app(TurnEngine::class)->start($this->game);
+
+        $gang = Gang::factory()->for($this->game)->create(['name' => 'Test Dice Crew']);
+        $user = User::factory()->create();
+        $runner = Character::factory()->runner($gang)->create([
+            'game_id' => $this->game->id,
+            'user_id' => $user->id,
+            'name' => 'Wicker',
+        ]);
+
+        $this->dice->will([5]);
+
+        $this->actingAs($user)->post('/dice', ['character_id' => $runner->id, 'd6' => 1, 'd8' => 0]);
+
+        $this->assertSame($this->game->currentPhase()?->id, DiceRoll::query()->sole()->phase_id);
+
+        $this->actingAs($this->control())
+            ->get("/control/games/{$this->game->id}/dice")
+            ->assertInertia(fn ($page) => $page
+                ->where('rolls.0.turn', 1)
+                ->where('rolls.0.phase_label', 'Setup')
+                ->where('rolls.0.team.name', 'Test Dice Crew'));
+    }
+
+    /**
+     * Before the first Setup there is no phase, and somebody in neither a gang
+     * nor a Corporation has no team - both are normal, not missing.
+     */
+    public function test_a_roll_with_no_phase_and_no_team_says_so(): void
+    {
+        [$user, $runner] = $this->seat('Wicker');
+
+        $this->dice->will([5]);
+
+        $this->actingAs($user)->post('/dice', ['character_id' => $runner->id, 'd6' => 1, 'd8' => 0]);
+
+        $this->actingAs($user)
+            ->get('/dice')
+            ->assertInertia(fn ($page) => $page
+                ->where('rolls.0.turn', null)
+                ->where('rolls.0.phase_label', null)
+                ->where('rolls.0.team', null));
     }
 
     public function test_a_player_cannot_open_controls_log(): void

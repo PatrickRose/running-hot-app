@@ -1,18 +1,7 @@
 import { Head, router, usePoll } from '@inertiajs/react';
-import {
-    DiceFaces,
-    poolLabel,
-    successLabel,
-} from '@/components/dice-roll-result';
+import { DiceRollGrid } from '@/components/dice-roll-result';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { show } from '@/routes/control/games';
 import type { ControlGameSummary, DiceRoll } from '@/types/game';
 
@@ -49,37 +38,10 @@ export default function ControlDice({ game, rolls }: Props) {
                     </Button>
                 </div>
 
-                {rolls.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        Nobody has rolled yet.
-                    </p>
-                ) : (
-                    rolls.map((roll) => (
-                        <Card key={roll.id}>
-                            <CardHeader>
-                                <CardTitle className="text-base">
-                                    {roll.character_name ??
-                                        roll.user_name ??
-                                        'Somebody'}
-                                    : {successLabel(roll.successes)}
-                                </CardTitle>
-                                <CardDescription>
-                                    {poolLabel(roll)}
-                                    {roll.purpose ? ` — ${roll.purpose}` : ''}
-                                    {roll.character_name && roll.user_name
-                                        ? ` · rolled by ${roll.user_name}`
-                                        : ''}
-                                    {roll.rolled_at
-                                        ? ` · ${new Date(roll.rolled_at).toLocaleTimeString()}`
-                                        : ''}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <DiceFaces roll={roll} />
-                            </CardContent>
-                        </Card>
-                    ))
-                )}
+                <DiceRollGrid
+                    rolls={rolls}
+                    emptyMessage="Nobody has rolled yet."
+                />
             </div>
         </>
     );

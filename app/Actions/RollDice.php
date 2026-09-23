@@ -59,6 +59,9 @@ class RollDice
         return $game->diceRolls()->create([
             'user_id' => $user?->id,
             'character_id' => $character?->id,
+            // Paused counts: a roll made while Control has stopped the clock
+            // still belongs to the phase it was made in.
+            'phase_id' => $game->currentPhase()?->id,
             'd6' => $d6,
             'd8' => $d8,
             'faces' => $faces,

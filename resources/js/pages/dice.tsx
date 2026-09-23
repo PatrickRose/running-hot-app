@@ -2,11 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { Minus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import {
-    DiceFaces,
-    poolLabel,
-    successLabel,
-} from '@/components/dice-roll-result';
+import { DiceRollGrid, poolLabel } from '@/components/dice-roll-result';
 import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
@@ -65,8 +61,6 @@ export default function Dice({
         );
     }
 
-    const [latest, ...earlier] = rolls;
-
     return (
         <>
             <Head title="Dice" />
@@ -91,25 +85,10 @@ export default function Dice({
                     />
                 ) : null}
 
-                {latest === undefined ? (
-                    <p className="text-sm text-muted-foreground">
-                        Nothing rolled yet.
-                    </p>
-                ) : (
-                    <>
-                        <RollCard roll={latest} emphasis />
-                        {earlier.length > 0 ? (
-                            <section className="flex flex-col gap-3">
-                                <h2 className="text-sm font-medium">
-                                    Earlier rolls
-                                </h2>
-                                {earlier.map((roll) => (
-                                    <RollCard key={roll.id} roll={roll} />
-                                ))}
-                            </section>
-                        ) : null}
-                    </>
-                )}
+                <DiceRollGrid
+                    rolls={rolls}
+                    emptyMessage="Nothing rolled yet."
+                />
             </div>
         </>
     );
@@ -306,34 +285,5 @@ function DieCount({
                 </Button>
             </div>
         </div>
-    );
-}
-
-function RollCard({
-    roll,
-    emphasis = false,
-}: {
-    roll: DiceRoll;
-    emphasis?: boolean;
-}) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className={emphasis ? 'text-xl' : 'text-base'}>
-                    {successLabel(roll.successes)}
-                </CardTitle>
-                <CardDescription>
-                    {poolLabel(roll)}
-                    {roll.character_name ? ` as ${roll.character_name}` : ''}
-                    {roll.purpose ? ` — ${roll.purpose}` : ''}
-                    {roll.rolled_at
-                        ? ` · ${new Date(roll.rolled_at).toLocaleTimeString()}`
-                        : ''}
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <DiceFaces roll={roll} />
-            </CardContent>
-        </Card>
     );
 }
