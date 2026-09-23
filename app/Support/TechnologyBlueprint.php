@@ -782,6 +782,7 @@ class TechnologyBlueprint
                 tree: self::GENETIC_EQUITY,
                 description: 'We have the power to begin doing this',
                 effect: 'You are able to splice DNA from small mammals into other small mammals',
+                cost: ['brain' => 6, 'leaf' => 16],
                 prerequisites: ['Deoxyribonucleic editing'],
                 requiresFacility: FacilityTypeBlueprint::RESEARCH,
                 copyStrength: 4,
@@ -875,6 +876,7 @@ class TechnologyBlueprint
                 description: 'There’s always more to know',
                 effect: 'Once a turn, you may take a Reconnaissance action. Roll 8d8 – if you '
                     .'roll 6s, 7s and 8s than you do 1s and 2s then you are successful',
+                cost: ['cog' => 26, 'brain' => 26, 'maths' => 10],
                 prerequisites: ['Advanced advertising', 'Upload stability'],
                 requiresFacility: FacilityTypeBlueprint::CORPORATE,
                 copyStrength: 4,
@@ -1287,6 +1289,7 @@ class TechnologyBlueprint
                 tree: self::COMMON,
                 description: 'What can we find in the forest of dreams?',
                 effect: 'Unlock: Turul',
+                cost: ['cog' => 8, 'brain' => 30, 'leaf' => 24, 'maths' => 20],
                 prerequisites: ['Forests of dreams'],
                 copyStrength: 4,
                 destroyStrength: 4,
