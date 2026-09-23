@@ -446,6 +446,16 @@ export type ProtectionCardSummary = {
     installed_count: number;
 };
 
+/**
+ * The card lists every player reads at `/cards`: the catalogue as printed, and
+ * none of what Control keeps beside it. How many copies stand in the game's
+ * Facilities is reconnaissance, and the notes are Control's own.
+ */
+export type PublicCardList = {
+    protection: Omit<ProtectionCardSummary, 'notes' | 'installed_count'>[];
+    equipment: Omit<EquipmentCardSummary, 'notes'>[];
+};
+
 export type InstalledProtectionCard = {
     id: number;
     /** 1 is the card Runners meet first. */

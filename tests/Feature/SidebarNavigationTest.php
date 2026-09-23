@@ -186,7 +186,7 @@ class SidebarNavigationTest extends TestCase
     {
         $sections = $this->sectionsFor(User::factory()->create());
 
-        $this->assertSame(['dashboard', 'facilities'], $sections);
+        $this->assertSame(['dashboard', 'facilities', 'cards'], $sections);
     }
 
     /**
@@ -218,6 +218,6 @@ class SidebarNavigationTest extends TestCase
             ->get(route('dashboard'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'shop', 'dice']));
+                ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'cards', 'shop', 'dice']));
     }
 }

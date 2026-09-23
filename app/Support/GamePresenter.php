@@ -30,6 +30,7 @@ use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
 use App\Services\TechnologyService;
 use App\Support\Discord\GuildBlueprint;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -1093,6 +1094,34 @@ class GamePresenter
             'kind_glyph' => $cardType->kind->glyph(),
             'copies_in_hand' => $inHand,
             'installed' => $installed,
+        ];
+    }
+
+    /**
+     * The card list every player may read: the Protection Cards and the
+     * Equipment, as printed, and nothing Control keeps beside them.
+     *
+     * A catalogue is not one of the things 3.4.2 keeps Secret - which cards
+     * stand in which Facility is, and so is how many - so the rows carry the
+     * card and not the game's use of it. `installed_count` is gone because it
+     * says how many copies of a card are standing across the game's
+     * Facilities, which is reconnaissance by arithmetic, and `notes` because
+     * those are Control's own. Technologies are left off altogether: they are
+     * the research game's, and a tech tree is a Corporation's to read.
+     *
+     * @return array{protection: array<int, array<string, mixed>>, equipment: array<int, array<string, mixed>>}
+     */
+    public function publicCardList(Game $game): array
+    {
+        return [
+            'protection' => array_map(
+                fn (array $card): array => Arr::except($card, ['installed_count', 'notes']),
+                $this->protectionCardTypes($game),
+            ),
+            'equipment' => array_map(
+                fn (array $card): array => Arr::except($card, ['notes']),
+                $this->equipmentCardTypes($game),
+            ),
         ];
     }
 
