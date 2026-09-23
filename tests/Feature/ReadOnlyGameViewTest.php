@@ -241,7 +241,7 @@ class ReadOnlyGameViewTest extends TestCase
         // over. Reading one is the thing a game off the clock still allows;
         // handing it on is the act CharacterPolicy::giveEquipment refuses.
         $this->assertSame(
-            ['dashboard', 'facilities', 'runs', 'equipment', 'council', 'research', 'shop', 'dice'],
+            ['dashboard', 'facilities', 'runs', 'equipment', 'cards', 'council', 'research', 'shop', 'dice'],
             app(Navigation::class)->sectionsFor($game, $user),
         );
     }

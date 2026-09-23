@@ -44,6 +44,7 @@ class Navigation
         'facilities',
         'runs',
         'equipment',
+        'cards',
         'council',
         'research',
         'shop',
@@ -106,6 +107,11 @@ class Navigation
             // one, so anybody holding a seat is offered the page - and
             // somebody holding none has no hand to read.
             $seats->isNotEmpty() ? 'equipment' : null,
+
+            // The printed card lists, which are everybody's for the reason
+            // the Facility list is: a catalogue says what a card does, not
+            // where one is standing.
+            'cards',
 
             $council ? 'council' : null,
 

@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     Backpack,
     Building2,
+    Layers,
     Crosshair,
     Dices,
     FlaskConical,
@@ -23,6 +24,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import {
+    cards,
     council,
     dashboard,
     dice,
@@ -60,6 +62,12 @@ const mainNavItems: Section[] = [
         title: 'Equipment',
         href: equipment(),
         icon: Backpack,
+    },
+    {
+        section: 'cards',
+        title: 'Cards',
+        href: cards(),
+        icon: Layers,
     },
     {
         section: 'council',

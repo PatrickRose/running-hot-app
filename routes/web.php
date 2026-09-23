@@ -3,6 +3,7 @@
 use App\Http\Controllers\AgendaCardController;
 use App\Http\Controllers\Auth\CharacterClaimController;
 use App\Http\Controllers\Auth\DiscordController;
+use App\Http\Controllers\CardListController;
 use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\ControlMemberController;
@@ -111,6 +112,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // player sees the hands of whoever they have claimed, and Control sees
     // everybody, so the viewer is the whole of the question.
     Route::get('equipment', EquipmentController::class)->name('equipment');
+
+    // The Protection Card and Equipment lists, as printed (3.3.2, 3.4.1).
+    // Everybody's: a catalogue is not what 3.4.2 keeps Secret - which cards
+    // stand in which Facility is.
+    Route::get('cards', CardListController::class)->name('cards');
 
     // One player handing a card to another (rulebook 2.1). The other half of
     // "either from the market or from other players" - the market being the
