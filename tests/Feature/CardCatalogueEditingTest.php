@@ -223,6 +223,100 @@ class CardCatalogueEditingTest extends TestCase
         $this->assertNotNull($technology->fresh());
     }
 
+    /**
+     * @param  array<string, int|string>  $overrides
+     * @return array<string, int|string>
+     */
+    protected function costPayload(array $overrides = []): array
+    {
+        return [
+            'cog_cost' => 8,
+            'brain_cost' => 30,
+            'leaf_cost' => 24,
+            'maths_cost' => 20,
+            ...$overrides,
+        ];
+    }
+
+    public function test_control_can_reprice_a_technology(): void
+    {
+        $game = Game::factory()->create();
+        $technology = $game->technologyTypes()->where('code', 'RSR001')->sole();
+
+        $this->actingAs($this->control())
+            ->patch("/control/games/{$game->id}/technologies/{$technology->id}/cost", $this->costPayload())
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            ['cog' => 8, 'brain' => 30, 'leaf' => 24, 'maths' => 20],
+            $technology->fresh()?->cost(),
+        );
+    }
+
+    /**
+     * The whole-row update rebuilds the prerequisites from what it is sent, so
+     * repricing has to leave the rest of the card exactly where it was.
+     */
+    public function test_repricing_leaves_the_rest_of_the_card_alone(): void
+    {
+        $game = Game::factory()->create();
+        $technology = $game->technologyTypes()->where('code', 'RMR010')->sole();
+        $before = $technology->only(['name', 'description', 'effect', 'prerequisites', 'tree', 'corporation_id', 'copy_strength', 'destroy_strength']);
+
+        $this->actingAs($this->control())
+            ->patch("/control/games/{$game->id}/technologies/{$technology->id}/cost", $this->costPayload())
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            $before,
+            $technology->fresh()?->only(array_keys($before)),
+        );
+    }
+
+    public function test_a_cost_must_be_a_whole_number_of_points(): void
+    {
+        $game = Game::factory()->create();
+        $technology = $game->technologyTypes()->where('code', 'RSR001')->sole();
+
+        $this->actingAs($this->control())
+            ->patch("/control/games/{$game->id}/technologies/{$technology->id}/cost", $this->costPayload([
+                'cog_cost' => -1,
+                'maths_cost' => '',
+            ]))
+            ->assertSessionHasErrors(['cog_cost', 'maths_cost']);
+
+        $this->assertSame(
+            ['cog' => 0, 'brain' => 10, 'leaf' => 8, 'maths' => 0],
+            $technology->fresh()?->cost(),
+        );
+    }
+
+    public function test_a_technology_from_another_game_cannot_be_repriced(): void
+    {
+        $game = Game::factory()->create();
+        $other = Game::factory()->create();
+        $technology = $other->technologyTypes()->where('code', 'RSR001')->sole();
+
+        $this->actingAs($this->control())
+            ->patch("/control/games/{$game->id}/technologies/{$technology->id}/cost", $this->costPayload())
+            ->assertNotFound();
+
+        $this->assertSame(10, $technology->fresh()?->brain_cost);
+    }
+
+    public function test_a_player_cannot_reprice_a_technology(): void
+    {
+        $game = Game::factory()->create();
+        $technology = $game->technologyTypes()->where('code', 'RSR001')->sole();
+
+        $this->actingAs(User::factory()->create())
+            ->patch("/control/games/{$game->id}/technologies/{$technology->id}/cost", $this->costPayload())
+            ->assertForbidden();
+
+        $this->assertSame(10, $technology->fresh()?->brain_cost);
+    }
+
     public function test_a_player_cannot_edit_either_list(): void
     {
         $game = Game::factory()->create();

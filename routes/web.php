@@ -394,6 +394,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('technologies.store');
                 Route::patch('games/{game}/technologies/{technology}', [TechnologyTypeController::class, 'update'])
                     ->name('technologies.update');
+                Route::patch('games/{game}/technologies/{technology}/cost', [TechnologyTypeController::class, 'cost'])
+                    ->name('technologies.cost');
                 Route::delete('games/{game}/technologies/{technology}', [TechnologyTypeController::class, 'destroy'])
                     ->name('technologies.destroy');
 

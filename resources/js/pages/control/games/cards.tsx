@@ -12,6 +12,7 @@ import {
     ResearchSuitIcon,
 } from '@/components/research-suit-cost';
 import { StockCertificateControl } from '@/components/stock-certificate-control';
+import { TechnologyCostDialog } from '@/components/technology-cost-dialog';
 import { TechnologyForm } from '@/components/technology-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -418,10 +419,17 @@ export default function ControlCards({
                                                 </Badge>
                                             </td>
                                             <td className="py-2 pr-4 text-xs">
-                                                <ResearchSuitCost
-                                                    cost={technology.cost}
-                                                    suits={researchSuits}
-                                                />
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <ResearchSuitCost
+                                                        cost={technology.cost}
+                                                        suits={researchSuits}
+                                                    />
+                                                    <TechnologyCostDialog
+                                                        gameId={game.id}
+                                                        technology={technology}
+                                                        suits={researchSuits}
+                                                    />
+                                                </div>
                                             </td>
                                             <td className="max-w-72 py-2 pr-4 text-muted-foreground">
                                                 {technology.effect ?? '—'}
