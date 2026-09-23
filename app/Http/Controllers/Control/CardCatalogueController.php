@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Game;
 use App\Support\CardImage;
 use App\Support\GamePresenter;
+use App\Support\StockCertificatePresenter;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,18 +25,32 @@ use Inertia\Response;
  *
  * The one thing set here is who is *carrying* which Equipment (3.4.1), which
  * belongs under the Equipment list because that is where Control is already
- * looking when a Runner asks for a card.
+ * looking when somebody asks for a card. Anybody on the roster may be handed
+ * one: 2.1 has Runners buying equipment "from other players", so the card may
+ * be going to whoever is about to pass it on.
  */
 class CardCatalogueController extends Controller
 {
-    public function index(Game $game, GamePresenter $presenter): Response
+    public function index(Request $request, Game $game, GamePresenter $presenter, StockCertificatePresenter $certificates): Response
     {
         return Inertia::render('control/games/cards', [
             'game' => $presenter->controlSummary($game),
             'protectionCards' => $presenter->protectionCardTypes($game),
+            // And the Corporations one can be given to, which is all of them:
+            // 3.3.4 makes the copies the Corporation's rather than a seat's.
+            'protectionCardRecipients' => $presenter->protectionCardRecipients($game),
             'equipment' => $presenter->equipmentCardTypes($game),
             // Who is carrying what, which is the one thing this page sets.
             'equipmentHoldings' => $presenter->equipmentHoldings($game),
+            // And everybody a card can be handed to, for the picker that does
+            // it: the whole roster, because 2.1 has a Runner buying equipment
+            // from another player and the card may be going to whoever passes
+            // it on.
+            'equipmentRecipients' => $presenter->equipmentRecipients($game),
+            // Every Stock Certificate in the game, cashed or not (3.4.3). The
+            // Corporations one can be a share of are protectionCardRecipients
+            // above, which is all of them.
+            'stockCertificates' => $certificates->forGame($game, $request->user()),
             'technologies' => $presenter->technologyTypes($game),
             'researchSuits' => $presenter->researchSuits(),
             // For the forms that add a card: which trees a technology may sit

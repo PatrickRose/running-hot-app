@@ -83,6 +83,17 @@ class SidebarNavigationTest extends TestCase
      * 3.4 hands the Facility game to a side rather than to one role, so a
      * Freelancer reads exactly as a Runner does.
      */
+    /**
+     * Anybody may be asked to roll for a ruling, so the dice follow a seat of
+     * any kind - and somebody holding none has nobody to roll as.
+     */
+    public function test_every_seat_is_offered_the_dice(): void
+    {
+        $this->assertContains('dice', $this->sectionsFor($this->seat(CharacterRole::Runner)));
+        $this->assertContains('dice', $this->sectionsFor($this->seat(CharacterRole::Ceo)));
+        $this->assertNotContains('dice', $this->sectionsFor(User::factory()->create()));
+    }
+
     public function test_a_freelancer_reads_as_a_runner_does(): void
     {
         $this->assertSame(
@@ -91,7 +102,7 @@ class SidebarNavigationTest extends TestCase
         );
     }
 
-    public function test_a_security_player_gets_the_research_table_but_not_a_kit(): void
+    public function test_a_security_player_gets_the_research_table_and_a_hand(): void
     {
         $corporation = Corporation::factory()->create(['game_id' => $this->game->id]);
 
@@ -107,8 +118,10 @@ class SidebarNavigationTest extends TestCase
         $this->assertContains('runs', $sections);
         $this->assertContains('shop', $sections);
 
-        // A Corporate seat is refused Equipment outright.
-        $this->assertNotContains('equipment', $sections);
+        // And a hand of their own. 2.1 has Runners buying equipment "from
+        // other players", so a Corporate seat may be holding the card it
+        // bought to hand over.
+        $this->assertContains('equipment', $sections);
     }
 
     /**
@@ -205,6 +218,6 @@ class SidebarNavigationTest extends TestCase
             ->get(route('dashboard'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'shop']));
+                ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'shop', 'dice']));
     }
 }

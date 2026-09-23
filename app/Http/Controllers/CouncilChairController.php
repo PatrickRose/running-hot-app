@@ -207,20 +207,28 @@ class CouncilChairController extends Controller
     }
 
     /**
-     * The CEO who is chairing, so an amendment records who asked for it.
+     * The character who is chairing, so an amendment records who asked for it.
      *
-     * Null when Control is acting, which is the honest answer: Control is not
-     * sitting in the Chair's seat, it is standing behind it.
+     * A Corporation in the Chair is spoken for by its CEO; a seat Control has
+     * given somebody chairs as itself. Null when Control is acting, which is the
+     * honest answer: Control is not sitting in the Chair's seat, it is standing
+     * behind it.
      */
     private function chairSeat(Request $request, CouncilSession $session): ?Character
     {
-        if ($session->chair_corporation_id === null) {
+        if ($session->chair_id === null) {
             return null;
         }
 
-        return $session->turn->game->characters()
-            ->where('user_id', $request->user()?->id)
-            ->where('corporation_id', $session->chair_corporation_id)
+        $characters = $session->turn->game->characters()
+            ->where('user_id', $request->user()?->id);
+
+        if ($session->chair_type === (new Character)->getMorphClass()) {
+            return $characters->whereKey($session->chair_id)->first();
+        }
+
+        return $characters
+            ->where('corporation_id', $session->chair_id)
             ->where('role', CharacterRole::Ceo)
             ->first();
     }

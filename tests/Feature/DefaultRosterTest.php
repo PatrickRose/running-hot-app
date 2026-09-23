@@ -9,6 +9,7 @@ use App\Models\Corporation;
 use App\Models\Game;
 use App\Models\Gang;
 use App\Models\User;
+use App\Services\CouncilService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -180,6 +181,43 @@ class DefaultRosterTest extends TestCase
         foreach ($others as $character) {
             $this->assertNull($character->council_votes, $character->name);
         }
+    }
+
+    /**
+     * And it opens the game in the Chair.
+     *
+     * The rotation is an order Council Control announces on the day (3.1.1),
+     * so nothing derives it - the roster writes one down, and the Government
+     * takes the first place with the Corporations following it round. A seat
+     * that was not first would simply never come round in a five-turn game.
+     */
+    public function test_the_government_opens_the_game_in_the_chair(): void
+    {
+        $game = Game::factory()->create();
+
+        $this->roster()->handle($game);
+
+        $government = Character::query()
+            ->where('game_id', $game->id)
+            ->where('name', 'HM Government')
+            ->sole();
+
+        $this->assertSame(1, $government->council_chair_order);
+
+        // The Corporations follow rather than colliding with it, in the order
+        // the roster lists them.
+        $this->assertSame(
+            [2, 3, 4, 5, 6],
+            Corporation::query()
+                ->where('game_id', $game->id)
+                ->orderBy('council_chair_order')
+                ->pluck('council_chair_order')
+                ->all(),
+        );
+
+        $this->assertTrue(
+            $government->is(app(CouncilService::class)->rotation($game)->first()),
+        );
     }
 
     /**

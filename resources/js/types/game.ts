@@ -300,24 +300,55 @@ export type EquipmentHolding = {
     copies: number;
 };
 
-/** What one Runner is carrying. Per Character, because that is what 3.4.1 caps. */
-export type RunnerEquipment = {
+/** What one person is carrying. Per Character, because that is what 3.4.1 caps. */
+export type CharacterEquipment = {
     character_id: number;
     name: string;
-    role: 'runner' | 'freelancer';
+    /** The `CharacterRole` value, as `CharacterSubject.role` carries it. */
+    role: string;
     role_label: string;
     cards: EquipmentHolding[];
+    /**
+     * Whether the viewer may hand a card out of this hand (rulebook 2.1) —
+     * their own seat, in a running game. There is no clock on a trade, unlike
+     * the shop's counter. Control may always, and it is false on the Control
+     * panel, which gives through its own route.
+     */
+    can_give: boolean;
 };
 
 /**
- * One gang's Runners and their hands, or the Freelancers, who run with nobody.
+ * One team's hands: a gang, a Corporation, or everybody who belongs to neither.
+ *
+ * Not only the side that runs — 2.1 has Runners buying equipment "from other
+ * players", so a card may be sitting with whoever bought it to hand over.
  */
-export type GangEquipmentHoldings = Faction & {
-    /** Null for the Freelancers, who are grouped together rather than banded. */
-    gang_id: number | null;
+export type EquipmentHoldingGroup = Faction & {
+    /** `gang:3`, `corporation:2`, or `unaffiliated` for the odd group out. */
+    key: string;
     /** False for that group, whose name is what they are rather than a faction. */
     has_badge: boolean;
-    runners: RunnerEquipment[];
+    members: CharacterEquipment[];
+};
+
+/**
+ * A Corporation Control can hand a Protection Card to, which is all of them.
+ *
+ * `EquipmentRecipient` one table along, and the difference is the rulebook's:
+ * 3.3.4 makes a Protection Card's copies the Corporation's where 3.4.1 makes an
+ * Equipment card a person's.
+ */
+export type ProtectionCardRecipient = Faction & {
+    corporation_id: number;
+};
+
+/** Somebody Control can hand an Equipment card to: anybody on the roster. */
+export type EquipmentRecipient = {
+    character_id: number;
+    name: string;
+    role_label: string;
+    /** Their Corporation or gang, or null for somebody in neither. */
+    team: string | null;
 };
 
 /** A card Runners carry into a Run (rulebook 3.4.1). */
@@ -980,7 +1011,12 @@ export type CouncilItem = {
 
 export type CouncilSessionView = {
     id: number;
-    chair: (Faction & { id: number }) | null;
+    /**
+     * Who is in the Chair: usually a Corporation, spoken for by its CEO, and
+     * sometimes a seat Control has given somebody — the game opens with HM
+     * Government chairing. Null is a vacant Chair.
+     */
+    chair: CouncilVoter | null;
     recess_at: string | null;
     recess_seconds_remaining: number | null;
     in_recess: boolean;
@@ -999,7 +1035,7 @@ export type CouncilSessionView = {
 
 export type CouncilViewer = {
     is_control: boolean;
-    /** You hold the CEO seat of the Corporation chairing this turn. */
+    /** You hold the seat that is chairing this turn — a CEO's, or your own. */
     is_chair: boolean;
     /**
      * You may use the Chair's controls — the Chair, or Control standing behind
@@ -1048,7 +1084,15 @@ export type CouncilSeatCandidate = {
     team: string | null;
     /** Null for somebody who holds no seat yet. */
     votes: number | null;
+    /** Null for a seat Control has not put in the Chair rotation. */
+    chair_order: number | null;
 };
+
+/** A seat Control has already given somebody, which may also take the Chair. */
+export type CouncilOwnSeat = CouncilSeatCandidate &
+    Faction & {
+        is_chair: boolean;
+    };
 
 export type CouncilControlBoard = {
     deck: AgendaCardView[];
@@ -1060,16 +1104,32 @@ export type CouncilControlBoard = {
             proposed_by: string | null;
         }
     >;
+    /**
+     * The Chair rotation: every Corporation, plus whichever seats Control has
+     * put in it. `key` and `type` are what tells the two kinds apart.
+     */
     rotation: Array<
-        Faction & { id: number; chair_order: number | null; is_chair: boolean }
+        Faction & {
+            key: string;
+            id: number;
+            type: string;
+            chair_order: number | null;
+            is_chair: boolean;
+        }
     >;
     seats: CouncilSeatView[];
     /** Seats that are not Corporations — HM Government's, and any Control adds. */
-    own_seats: CouncilSeatCandidate[];
+    own_seats: CouncilOwnSeat[];
     seatable: CouncilSeatCandidate[];
     /** What Control's penalty field is pre-filled with, not a rule. */
     absence_penalty: number;
     recess_seconds: number;
+    /**
+     * Whose turn it is by the rotation, which is who is chairing on every turn
+     * the Council has not sat yet — most of the time Control is looking at the
+     * panel, since the sitting is made when Setup opens.
+     */
+    next_chair: CouncilVoter | null;
 };
 
 /**
@@ -1544,4 +1604,63 @@ export type ShopControlBoard = {
         equipment: ShopBuyerOption[];
     };
     statuses: { value: ShopListingStatus; label: string }[];
+};
+
+/**
+ * A pool of d6s and d8s a player rolled for Control to read. Rolled on the
+ * server; a 5 or better on either die is a success.
+ */
+export type DiceRoll = {
+    id: number;
+    d6: number;
+    d8: number;
+    faces: { d6: number[]; d8: number[] };
+    successes: number;
+    success_on: number;
+    purpose: string | null;
+    character_name: string | null;
+    /** Only the characters that are organisations have one. */
+    character_logo_path: string | null;
+    /** The gang or Corporation rolled for; null for somebody in neither. */
+    team: Faction | null;
+    /** Null for a roll made with no phase running. */
+    turn: number | null;
+    phase_label: string | null;
+    user_name: string | null;
+    rolled_at: string | null;
+};
+
+/** A seat a player may roll as. */
+export type DiceSeat = {
+    character_id: number;
+    name: string;
+    role_label: string;
+};
+
+/** One way of cashing a Stock Certificate in, priced against today's Income. */
+export type StockCertificateOptionQuote = {
+    value: 'half' | 'quarter';
+    label: string;
+    credits: number;
+    income_reduction: number;
+};
+
+/**
+ * A share in a Corporation's Income, taken out of one of its Corporate
+ * Facilities (rulebook 3.4.3) and cashed in once by whoever holds it.
+ */
+export type StockCertificate = {
+    id: number;
+    corporation: Faction & { id: number; income: number };
+    holder_character_id: number | null;
+    holder_name: string | null;
+    text: string;
+    options: StockCertificateOptionQuote[];
+    cashed: boolean;
+    cashed_as: string | null;
+    credits_paid: number | null;
+    cashed_by: string | null;
+    cashed_at: string | null;
+    can_cash: boolean;
+    can_give: boolean;
 };

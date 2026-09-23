@@ -580,10 +580,38 @@ class FacilityDefenceService
      */
     public function giveCopy(Corporation $corporation, ProtectionCardType $cardType): void
     {
-        $corporation->protectionCardHoldings()->firstOrCreate(
+        $this->giveCopies($corporation, $cardType, 1);
+    }
+
+    /**
+     * Hand several copies over at once.
+     *
+     * Adding rather than setting, which is the difference between this and
+     * setCopiesInHand and the reason both exist: Control handing cards over
+     * knows what it is giving and not what the Corporation already holds, so a
+     * give that set the count would quietly take away the four Angels it had.
+     * EquipmentService::giveCopies is the same method one table along.
+     */
+    public function giveCopies(
+        Corporation $corporation,
+        ProtectionCardType $cardType,
+        int $copies = 1,
+    ): ProtectionCardHolding {
+        if ($copies < 1) {
+            throw ValidationException::withMessages([
+                'copies' => 'Giving a Corporation no copies of a card is not giving it anything.',
+            ]);
+        }
+
+        /** @var ProtectionCardHolding $holding */
+        $holding = $corporation->protectionCardHoldings()->firstOrCreate(
             ['protection_card_type_id' => $cardType->id],
             ['copies' => 0],
-        )->increment('copies');
+        );
+
+        $holding->increment('copies', $copies);
+
+        return $holding->refresh();
     }
 
     /**

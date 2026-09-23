@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import {
     attendance,
     chair,
@@ -34,8 +35,10 @@ import { store as seatSomebody } from '@/routes/control/council/seats';
 import { index, show } from '@/routes/control/games';
 import type {
     AgendaCardView,
+    CouncilVoter,
     CouncilBoard,
     CouncilControlBoard,
+    CouncilOwnSeat,
     CouncilSeatCandidate,
     CouncilSeatView,
     CouncilSessionView,
@@ -109,6 +112,12 @@ export default function ControlCouncil({ game, council, control }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4">
+                        <InTheChair
+                            chair={session?.chair ?? null}
+                            nextChair={control.next_chair}
+                            hasSat={session !== null}
+                        />
+
                         {session && (
                             <p className="text-sm text-muted-foreground">
                                 {session.tabled_count} of{' '}
@@ -279,8 +288,10 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             their Corporation&rsquo;s Political Will. Anybody
                             else is here because you put them here — HM
                             Government and its bloc of six, or whoever a Runner
-                            Representative turns out to be. A seat votes and
-                            nothing else: it never takes the Chair.
+                            Representative turns out to be. A seat may take the
+                            Chair as readily as a Corporation: the rotation is
+                            an order you announce on the day, and the game opens
+                            with the Government chairing.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">
@@ -481,23 +492,27 @@ function DeckPicker({
  * changing it is the likely thing to want: a bloc is a judgement Control makes
  * and may revise mid-game.
  */
-function OwnSeat({
-    gameId,
-    seat,
-}: {
-    gameId: number;
-    seat: CouncilSeatCandidate;
-}) {
+function OwnSeat({ gameId, seat }: { gameId: number; seat: CouncilOwnSeat }) {
     const [votes, setVotes] = useState(String(seat.votes ?? ''));
     const changed = votes !== String(seat.votes ?? '');
 
     return (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
             <div>
-                <p className="font-medium">{seat.name}</p>
+                <p className="font-medium">
+                    {seat.name}
+                    {seat.is_chair && (
+                        <Badge variant="outline" className="ml-2">
+                            In the Chair this turn
+                        </Badge>
+                    )}
+                </p>
                 <p className="text-muted-foreground">
                     {seat.role_label}
                     {seat.team && ` · ${seat.team}`}
+                    {seat.chair_order === null
+                        ? ' · not in the Chair rotation'
+                        : ` · ${seat.chair_order} in the Chair rotation`}
                 </p>
             </div>
 
@@ -529,6 +544,20 @@ function OwnSeat({
                     }
                 >
                     Set
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={seat.is_chair}
+                    onClick={() =>
+                        router.post(
+                            chair.url({ game: gameId }),
+                            { chair_type: 'character', chair_id: seat.id },
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    Give them the Chair now
                 </Button>
                 <Button
                     size="sm"
@@ -629,6 +658,18 @@ function SeatSomebody({
     );
 }
 
+/**
+ * The Chair rotation, which Council Control announces on the day (3.1.1).
+ *
+ * Every Corporation is in it because it is a Corporation. A seat Control has
+ * given somebody is in it only when Control has put it there — so the list
+ * below is the rotation, and the seats under it are the ones waiting to join.
+ * The game opens with HM Government at the front of it.
+ *
+ * Rearranging is local until it is saved, because that is what laying a list
+ * out is. Giving somebody the Chair now is immediate, because it is a ruling
+ * about the sitting in front of you rather than an order for the turns after.
+ */
 function Rotation({
     gameId,
     control,
@@ -636,11 +677,43 @@ function Rotation({
     gameId: number;
     control: CouncilControlBoard;
 }) {
-    const [order, setOrder] = useState(control.rotation.map((row) => row.id));
+    const announced = control.rotation.map((row) => row.key);
+    const [order, setOrder] = useState(announced);
+    const [drawn, setDrawn] = useState(announced.join('|'));
 
-    const move = (id: number, direction: -1 | 1) => {
+    // Rearranging is local; *who is in the list* is the server's. Seating
+    // somebody, taking their seat away, adding a seat to the rotation and
+    // taking one out all post and come back with a new rotation, and without
+    // this the list would go on drawing the one it was first handed - so the
+    // Add and Take out buttons looked like they did nothing at all.
+    //
+    // Adjusted during render rather than in an effect, which is React's own
+    // answer for state derived from a prop: an effect would draw the stale
+    // list once and correct it afterwards. An order Control has rearranged but
+    // not saved survives a poll, because the server's list is unchanged.
+    if (drawn !== announced.join('|')) {
+        setDrawn(announced.join('|'));
+        setOrder(announced);
+    }
+
+    // Keyed the way the server keys them: a Corporation and a character can
+    // share a row id, and the bare number would put one in the other's place.
+    const seats = new Map(control.rotation.map((row) => [row.key, row]));
+
+    const waiting = control.own_seats.filter(
+        (seat) => !order.includes(`character:${seat.id}`),
+    );
+
+    // Only where nothing is chairing yet: once the Council has sat, the seat in
+    // the Chair *is* the answer, and a second marker beside it saying the same
+    // thing about the same turn would read as two different seats.
+    const chairsNext = control.rotation.some((seat) => seat.is_chair)
+        ? null
+        : (control.next_chair?.key ?? null);
+
+    const move = (key: string, direction: -1 | 1) => {
         setOrder((current) => {
-            const index = current.indexOf(id);
+            const index = current.indexOf(key);
             const target = index + direction;
 
             if (index === -1 || target < 0 || target >= current.length) {
@@ -654,63 +727,132 @@ function Rotation({
         });
     };
 
-    const byId = new Map(control.rotation.map((row) => [row.id, row]));
+    const save = (next: string[]) =>
+        router.post(
+            rotation.url({ game: gameId }),
+            {
+                order: next.map((key) => {
+                    const [type, id] = key.split(':');
+
+                    return { type, id: Number(id) };
+                }),
+            },
+            { preserveScroll: true },
+        );
 
     return (
         <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">Chair rotation</p>
-            <ol className="flex flex-col gap-1">
-                {order.map((id, index) => {
-                    const corporation = byId.get(id);
 
-                    if (!corporation) {
+            {/* One row shape for every seat, so the columns line up down the
+                list: the name takes the slack and everything after it starts at
+                the same place on every row. Anything that varies per row - the
+                In the Chair badge, a seat's Remove - sits inside a column
+                rather than between two of them, which is what made the list
+                ragged when it was one flex-wrap row of controls. */}
+            <ol className="flex flex-col gap-1">
+                {order.map((key, index) => {
+                    const seat = seats.get(key);
+
+                    if (!seat) {
                         return null;
                     }
 
                     return (
                         <li
-                            key={id}
-                            className="flex flex-wrap items-center gap-2 text-sm"
+                            key={key}
+                            className={cn(
+                                'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                                seat.is_chair &&
+                                    'bg-primary/10 ring-1 ring-primary/30',
+                            )}
                         >
-                            <span className="w-6 font-mono text-muted-foreground tabular-nums">
+                            <span className="w-6 shrink-0 font-mono text-muted-foreground tabular-nums">
                                 {index + 1}.
                             </span>
-                            <FactionBadge faction={corporation} size="small" />
-                            {corporation.name}
-                            {corporation.is_chair && (
-                                <Badge variant="outline">
-                                    In the Chair this turn
-                                </Badge>
-                            )}
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                aria-label={`Move ${corporation.name} earlier`}
-                                onClick={() => move(id, -1)}
-                            >
-                                ↑
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                aria-label={`Move ${corporation.name} later`}
-                                onClick={() => move(id, 1)}
-                            >
-                                ↓
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                    router.post(
-                                        chair.url({ game: gameId }),
-                                        { corporation_id: id },
-                                        { preserveScroll: true },
-                                    )
-                                }
-                            >
-                                Give them the Chair now
-                            </Button>
+                            <FactionBadge faction={seat} size="small" />
+                            <span className="flex min-w-0 flex-1 items-center gap-2">
+                                <span className="truncate">{seat.name}</span>
+                                {seat.is_chair ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="shrink-0"
+                                    >
+                                        In the Chair
+                                    </Badge>
+                                ) : chairsNext === key ? (
+                                    <Badge
+                                        variant="secondary"
+                                        className="shrink-0"
+                                    >
+                                        Chairs next
+                                    </Badge>
+                                ) : null}
+                                {/* A Corporation cannot leave the rotation; a
+                                    seat Control put in it can. It sits on this
+                                    side rather than after the actions because
+                                    only some rows have one, and a button that
+                                    appears on one row in six would push that
+                                    row's arrows and Chair now out of line with
+                                    every other row's. */}
+                                {seat.type === 'character' && (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="shrink-0 text-destructive"
+                                        aria-label={`Take ${seat.name} out of the rotation`}
+                                        onClick={() =>
+                                            save(
+                                                order.filter(
+                                                    (other) => other !== key,
+                                                ),
+                                            )
+                                        }
+                                    >
+                                        Remove
+                                    </Button>
+                                )}
+                            </span>
+
+                            <span className="flex shrink-0 items-center">
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={`Move ${seat.name} earlier`}
+                                    onClick={() => move(key, -1)}
+                                >
+                                    ↑
+                                </Button>
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={`Move ${seat.name} later`}
+                                    onClick={() => move(key, 1)}
+                                >
+                                    ↓
+                                </Button>
+                            </span>
+
+                            <span className="flex shrink-0 items-center gap-1">
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={seat.is_chair}
+                                    aria-label={`Give ${seat.name} the Chair now`}
+                                    onClick={() =>
+                                        router.post(
+                                            chair.url({ game: gameId }),
+                                            {
+                                                chair_type: seat.type,
+                                                chair_id: seat.id,
+                                            },
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    Chair now
+                                </Button>
+                            </span>
                         </li>
                     );
                 })}
@@ -720,16 +862,111 @@ function Rotation({
                 size="sm"
                 variant="outline"
                 className="self-start"
-                onClick={() =>
-                    router.post(
-                        rotation.url({ game: gameId }),
-                        { order },
-                        { preserveScroll: true },
-                    )
-                }
+                onClick={() => save(order)}
             >
                 Save the rotation
             </Button>
+
+            {waiting.length > 0 && (
+                <div className="mt-2 flex flex-col gap-1">
+                    <p className="text-xs text-muted-foreground">
+                        Seats that vote but never come round to chair. Adding
+                        one puts it at the end of the rotation.
+                    </p>
+                    {/* Marked here too, because a seat can be in the Chair
+                        without being in the rotation at all - which is exactly
+                        how a game opens, with HM Government chairing. Left
+                        unmarked, the one thing the panel most needs to say was
+                        the one place it did not say it. */}
+                    {waiting.map((seat) => (
+                        <div
+                            key={seat.id}
+                            className={cn(
+                                'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                                seat.is_chair &&
+                                    'bg-primary/10 ring-1 ring-primary/30',
+                            )}
+                        >
+                            <span className="w-6 shrink-0" />
+                            <FactionBadge faction={seat} size="small" />
+                            <span className="flex min-w-0 flex-1 items-center gap-2">
+                                <span className="truncate">{seat.name}</span>
+                                {seat.is_chair && (
+                                    <Badge
+                                        variant="outline"
+                                        className="shrink-0"
+                                    >
+                                        In the Chair
+                                    </Badge>
+                                )}
+                            </span>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="shrink-0"
+                                onClick={() =>
+                                    save([...order, `character:${seat.id}`])
+                                }
+                            >
+                                Add to the rotation
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Who is in the Chair, said as plainly as the panel can say it.
+ *
+ * It was a badge inside the rotation list and nothing else, which failed twice
+ * over: a seat can be in the Chair without being in the rotation at all — how
+ * every game opens, with HM Government chairing — and most of the time Control
+ * is looking at this panel the Council has not sat yet, so there was no chair
+ * to mark and the page said nothing at all.
+ *
+ * So the three states are drawn rather than the one. Before the sitting is
+ * made, whose turn it is by the rotation is the honest answer and the server
+ * works it out (`next_chair`), because stepping through the order by turn
+ * number is arithmetic the browser should not be repeating.
+ */
+function InTheChair({
+    chair,
+    nextChair,
+    hasSat,
+}: {
+    chair: CouncilVoter | null;
+    nextChair: CouncilVoter | null;
+    hasSat: boolean;
+}) {
+    const seat = chair ?? (hasSat ? null : nextChair);
+
+    return (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-primary/10 px-3 py-2 ring-1 ring-primary/30">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {chair ? 'In the Chair' : hasSat ? 'The Chair' : 'Chairs next'}
+            </span>
+
+            {seat ? (
+                <span className="flex items-center gap-2">
+                    <FactionBadge faction={seat} size="small" />
+                    <span className="text-base font-semibold">{seat.name}</span>
+                </span>
+            ) : (
+                <span className="text-base font-semibold">
+                    {hasSat ? 'Vacant' : 'Nobody is in the rotation yet'}
+                </span>
+            )}
+
+            <span className="text-sm text-muted-foreground">
+                {chair
+                    ? 'Chairing this turn.'
+                    : hasSat
+                      ? 'Nobody is chairing this turn. Give somebody the Chair below.'
+                      : 'The Council has not sat this turn. This is whose turn it is by the rotation.'}
+            </span>
         </div>
     );
 }

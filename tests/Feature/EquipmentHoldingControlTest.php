@@ -124,10 +124,14 @@ class EquipmentHoldingControlTest extends TestCase
     }
 
     /**
-     * Equipment belongs to the side that runs. A CEO with a Katana in hand
-     * would be a row nothing reads and a line on the page nobody can explain.
+     * A Corporate seat may hold Equipment, which it could not before.
+     *
+     * 2.1 has Runners buying equipment "from other players", so a card reaches
+     * the Facility by way of whoever was holding it - and that is as likely to
+     * be a CEO who bought it to hand over as a gangmate. Who may hold what is
+     * Control's call.
      */
-    public function test_a_corporate_character_cannot_be_given_equipment(): void
+    public function test_a_corporate_character_can_be_given_equipment(): void
     {
         $corporation = Corporation::factory()->for($this->game)->create();
 
@@ -146,9 +150,83 @@ class EquipmentHoldingControlTest extends TestCase
                 'equipment_card_type_id' => $card->id,
                 'copies' => 1,
             ])
-            ->assertSessionHasErrors('character_id');
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame(0, $ceo->equipmentCopiesOf($card->id));
+        $this->assertSame(1, $ceo->equipmentCopiesOf($card->id));
+    }
+
+    /**
+     * Giving adds to what somebody already has, which is the whole difference
+     * between it and setting a count: Control knows what it is handing over
+     * and not what is already in the hand.
+     */
+    public function test_giving_adds_to_the_hand(): void
+    {
+        $runner = $this->runner('Wicker');
+        $card = $this->card();
+
+        app(EquipmentService::class)->setCopiesInHand($runner, $card, 2);
+
+        $this->actingAs($this->control())
+            ->post($this->giveUrl(), [
+                'character_id' => $runner->id,
+                'equipment_card_type_id' => $card->id,
+                'copies' => 3,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(5, $runner->equipmentCopiesOf($card->id));
+    }
+
+    public function test_giving_a_first_copy_opens_a_row(): void
+    {
+        $runner = $this->runner('Wicker');
+        $card = $this->card();
+
+        $this->actingAs($this->control())
+            ->post($this->giveUrl(), [
+                'character_id' => $runner->id,
+                'equipment_card_type_id' => $card->id,
+                'copies' => 1,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $runner->equipmentCopiesOf($card->id));
+    }
+
+    /**
+     * Handing somebody no copies of a card is not handing them anything, so it
+     * is refused rather than written as a no-op.
+     */
+    public function test_giving_nothing_is_refused(): void
+    {
+        $runner = $this->runner('Wicker');
+        $card = $this->card();
+
+        $this->actingAs($this->control())
+            ->post($this->giveUrl(), [
+                'character_id' => $runner->id,
+                'equipment_card_type_id' => $card->id,
+                'copies' => 0,
+            ])
+            ->assertSessionHasErrors('copies');
+    }
+
+    public function test_only_control_may_give_a_card(): void
+    {
+        $runner = $this->runner('Wicker');
+        $card = $this->card();
+
+        $this->actingAs(User::factory()->create())
+            ->post($this->giveUrl(), [
+                'character_id' => $runner->id,
+                'equipment_card_type_id' => $card->id,
+                'copies' => 1,
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(0, $runner->equipmentCopiesOf($card->id));
     }
 
     /**
@@ -233,10 +311,10 @@ class EquipmentHoldingControlTest extends TestCase
     }
 
     /**
-     * The payload the panel reads: grouped by gang, a hand per Runner, and the
-     * Freelancers together at the end rather than banded as one more gang.
+     * The payload the panel reads: grouped by team, a hand per person, and
+     * everybody in no team together at the end rather than banded as one more.
      */
-    public function test_the_panel_lists_every_runner_grouped_by_gang(): void
+    public function test_the_panel_lists_everybody_grouped_by_team(): void
     {
         $wicker = $this->runner('Wicker');
         $this->runner('Con');
@@ -247,8 +325,7 @@ class EquipmentHoldingControlTest extends TestCase
             'role' => CharacterRole::Freelancer,
         ]);
 
-        // A Corporate seat has no Equipment and does not belong on this list.
-        $corporation = Corporation::factory()->for($this->game)->create();
+        $corporation = Corporation::factory()->for($this->game)->create(['name' => 'Gordon']);
         Character::factory()->create([
             'game_id' => $this->game->id,
             'corporation_id' => $corporation->id,
@@ -261,26 +338,55 @@ class EquipmentHoldingControlTest extends TestCase
 
         $groups = app(GamePresenter::class)->equipmentHoldings($this->game);
 
-        $this->assertCount(2, $groups);
+        $this->assertCount(3, $groups);
 
         $this->assertSame('Facers', $groups[0]['name']);
         $this->assertTrue($groups[0]['has_badge']);
-        $this->assertSame(['Con', 'Wicker'], array_column($groups[0]['runners'], 'name'));
+        $this->assertSame(['Con', 'Wicker'], array_column($groups[0]['members'], 'name'));
 
-        $this->assertSame('Freelancers', $groups[1]['name']);
-        $this->assertNull($groups[1]['gang_id']);
-        $this->assertFalse($groups[1]['has_badge']);
-        $this->assertSame(['Jack Scanton'], array_column($groups[1]['runners'], 'name'));
+        $this->assertSame('Gordon', $groups[1]['name']);
+        $this->assertSame(['Ada Bellweather'], array_column($groups[1]['members'], 'name'));
 
-        $hands = array_column($groups[0]['runners'], 'cards', 'name');
+        $this->assertSame('Unaffiliated', $groups[2]['name']);
+        $this->assertFalse($groups[2]['has_badge']);
+        $this->assertSame(['Jack Scanton'], array_column($groups[2]['members'], 'name'));
+
+        $hands = array_column($groups[0]['members'], 'cards', 'name');
         $this->assertSame([], $hands['Con']);
         $this->assertSame('Katana', $hands['Wicker'][0]['name']);
         $this->assertSame(3, $hands['Wicker'][0]['copies']);
     }
 
+    /**
+     * The picker Control gives a card from offers the whole roster, because a
+     * card may be going to whoever is about to pass it on.
+     */
+    public function test_the_give_picker_offers_the_whole_roster(): void
+    {
+        $this->runner('Wicker');
+
+        $corporation = Corporation::factory()->for($this->game)->create(['name' => 'Gordon']);
+        Character::factory()->create([
+            'game_id' => $this->game->id,
+            'corporation_id' => $corporation->id,
+            'name' => 'Ada Bellweather',
+            'role' => CharacterRole::Ceo,
+        ]);
+
+        $recipients = app(GamePresenter::class)->equipmentRecipients($this->game);
+
+        $this->assertSame(['Ada Bellweather', 'Wicker'], array_column($recipients, 'name'));
+        $this->assertSame(['Gordon', 'Facers'], array_column($recipients, 'team'));
+    }
+
     private function url(): string
     {
         return "/control/games/{$this->game->id}/equipment-holdings";
+    }
+
+    private function giveUrl(): string
+    {
+        return "/control/games/{$this->game->id}/equipment-holdings/give";
     }
 
     private function control(): User

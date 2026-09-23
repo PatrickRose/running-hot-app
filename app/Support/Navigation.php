@@ -47,6 +47,7 @@ class Navigation
         'council',
         'research',
         'shop',
+        'dice',
     ];
 
     /**
@@ -99,9 +100,12 @@ class Navigation
             // seats whose buildings they are walking into.
             $inTheField || $corporate ? 'runs' : null,
 
-            // A hand is a Runner's. A Corporate seat is refused Equipment
-            // outright, so the page would be empty for one.
-            $inTheField ? 'equipment' : null,
+            // A hand is mostly a Runner's, but not only: 2.1 has Runners
+            // buying equipment "from other players", so a CEO may be carrying
+            // a card bought to hand over. Anybody holding a seat can be given
+            // one, so anybody holding a seat is offered the page - and
+            // somebody holding none has no hand to read.
+            $seats->isNotEmpty() ? 'equipment' : null,
 
             $council ? 'council' : null,
 
@@ -115,6 +119,10 @@ class Navigation
             // and the market out of a Runner's own. Anybody holding a seat is
             // at one of them.
             $inTheField || $corporate ? 'shop' : null,
+
+            // Anybody may be asked to roll for a ruling, so anybody holding a
+            // seat is offered the dice.
+            $seats->isNotEmpty() ? 'dice' : null,
         ]));
     }
 }

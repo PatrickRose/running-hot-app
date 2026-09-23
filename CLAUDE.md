@@ -276,6 +276,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Spending Research Points, and everything after | `App\Services\TechnologyService` |
 | Research payload shaping | `App\Support\ResearchPresenter` |
 | The research table on screen | `resources/js/components/research-table.tsx` |
+| A roll a player makes for Control to read, outside any run | `App\Actions\RollDice`, `App\Support\DiceRollPresenter`, `resources/js/pages/dice.tsx` |
+| Stock Certificates: handing out, handing on, cashing in | `App\Services\StockCertificateService`, `App\Enums\StockCertificateOption`, `App\Support\StockCertificatePresenter` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | Who Control is, per game | `App\Models\ControlMember`, `App\Actions\ClaimControlSeatsForUser` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |
@@ -289,6 +291,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Inertia payload shaping | `App\Support\GamePresenter` |
 | What a player may see of the Facilities | `App\Http\Controllers\FacilityBoardController` |
 | What a player may see of their Equipment | `App\Http\Controllers\EquipmentController`, `resources/js/pages/equipment.tsx` |
+| One player handing a card to another | `App\Http\Controllers\EquipmentTransferController`, `App\Services\EquipmentService::transfer()`, `App\Policies\CharacterPolicy` |
 | Security arranging their own stacks | `App\Http\Controllers\FacilityDefenceController`, `App\Policies\FacilityPolicy` |
 | Moving a stored technology between Facilities | `App\Http\Controllers\FacilityTechnologyController`, `App\Services\TechnologyService::place()` |
 | The drag-and-drop defence board | `resources/js/components/facility-defence-board.tsx` |
@@ -484,9 +487,25 @@ So `council_ballots.voter` is a morph rather than a `corporation_id`: a CEO
 votes for their Corporation, the Government votes for itself, and neither gets
 a nullable column it never uses. `CouncilService::votesFor()` is the one place
 that knows which weight a seat carries, and the pages say "votes" rather than
-"Political Will" because both kinds are at the same ballot form. The seat votes
-and does nothing else — it never chairs, because the Chair rotates between the
-Corporations.
+"Political Will" because both kinds are at the same ballot form.
+
+**And the same reasoning reaches the Chair**, which used to be the one thing a
+seat could not do. `council_sessions.chair` is a morph too, for the reason the
+ballot's voter is: a CEO chairs for their Corporation and the Government chairs
+as itself. It was a `chair_corporation_id` on the reading that 3.1 rotates the
+Chair between the Corporations — but footnote 1 makes the rotation "an order
+announced by Council Control on the day" rather than a rule about who may be in
+it, and the game opens with HM Government in the Chair, so the column was
+refusing the first sitting of every game. `CouncilSession::isChairedBy()` is
+how anything asks, because a Corporation and a character can share a row id and
+the bare number would put one in the other's place.
+
+**A CEO still never chairs as themselves.** They chair for their Corporation,
+which is what goes in the Chair, so `setChair()` refuses one by name and points
+at the Corporation instead — the same answer `seat()` already gives a CEO asking
+for a bloc of their own. `CouncilSessionPolicy::chair()` then reads the Chair
+back the way it was stored: a Corporation's authority from the CEO seat it
+fields, a character's from the character itself.
 
 **Political Will weights a vote; it is never spent on one.** The rulebook has a
 CEO write down the Political Will they *have* (3.1.2) and nothing in 3.1 takes
@@ -558,6 +577,46 @@ turn it is — Council Control announces the order on the day (3.1.1) — so
 roster's own order down as a starting point rather than leaving something to
 guess later. Each sitting then stores its own chair, so handing the Chair to
 somebody for one turn does not shuffle every turn after it.
+
+**A Corporation is in the rotation by being a Corporation; a seat is in it only
+when Control has put it there.** That asymmetry is the rule rather than an
+oversight, and `characters.council_chair_order` is its half: a Corporation with
+a CEO has a seat whether or not anybody has ordered it, so one Control has not
+ordered sorts last rather than dropping out, while a bloc Control has seated
+votes without ever coming round to chair unless Control says otherwise. The
+roster writes HM Government in at 1 and the Corporations follow from 2, which
+is the whole of "the game starts with HM Government being the chair" — and
+`CreateDefaultRoster::reservedChairOrders()` is why the Corporations start after
+it rather than colliding with it.
+
+Saving the rotation saves the *whole* list, because that is what rearranging one
+is, and it is what lets a seat leave the rotation by being left out of it. A
+Corporation cannot leave: it is in either way, so a Corporation the list omits
+keeps whatever order it had. Handing somebody the Chair *now* is a separate act
+and deliberately immediate — it is a ruling about the sitting in front of you,
+where the rotation is an order for the turns after.
+
+**Taking a seat away takes it out of the rotation with it**, which is the one
+thing about the rotation that is *not* Control's to announce: somebody who no
+longer sits at the Council cannot chair it. `CouncilService::seat()` clears
+`council_chair_order` alongside the votes, because an order left behind on the
+row would put them silently back in the rotation the moment Control seated them
+again — and seating somebody still never puts them in it, which is the
+asymmetry above. Changing what a seat is *worth* leaves its place alone.
+
+**Who is chairing is said outright on Control's panel**, not left to be found. It was only a badge inside the rotation list, which failed twice over: a seat can be in the Chair without being in the rotation at all — how every game opens, with HM Government chairing from the "seats that never come round to chair" line underneath — and **most of the time Control is looking at the panel the Council has not sat yet**, so there was no chair to mark and the page said nothing whatsoever. So the sitting card carries a banner in all three states rather than the one: who is chairing, that the Chair is vacant, or, before the sitting is made, whose turn it is by the rotation. That last is `next_chair` on the control payload, stepped through the order by turn number server-side, because a browser repeating that arithmetic is a second implementation of the rotation. Both lists mark the chairing seat, and the rotation marks who chairs next *only* while nothing is chairing — after that the seat in the Chair is the answer, and a second marker about the same turn reads as two different seats. The Chamber already said it in as many words, which is why nothing moved there.
+
+**The rotation reads as columns, not as a wrapped row of controls.** Every row is the same shape — number, badge, name, the two arrows, then the actions — with the name taking the slack, so everything after it starts at the same place down the list. Anything that varies per row (the In the Chair badge, a seat's Remove) sits *inside* the name's column rather than between two of them, which is what made the list ragged when it was one `flex-wrap` line — Remove in particular is on the far side of the name from the actions, because a button one row in six carries would otherwise push that row's arrows and Chair now out of line with every other row's. The buttons lost their sentences for the same reason: five copies of "Give them the Chair now" is what the width was going on, and the sentence lives in each button's `aria-label` where it is still read out.
+
+**The panel's rotation list is the server's, rearranged locally.** Laying a list
+out is local until it is saved, but *who is in it* is not: seating somebody,
+taking a seat away, and the Add and Take out buttons all post and come back with
+a new rotation. The list was `useState`'d once and never re-read, so those four
+went on drawing the list React was first handed — and Add and Take out, which
+post immediately rather than waiting for Save, looked like they did nothing at
+all. It re-syncs during render when the server's list changes, which is React's
+own answer for state derived from a prop; an order Control has rearranged and
+not yet saved survives a poll, because the server's list is unchanged.
 
 **The recess is a second clock inside the Setup phase**, and it is
 server-authoritative for the reason the phase clock is: `council_sessions.recess_at`
@@ -1251,17 +1310,43 @@ Control sets any count outright via `ProtectionCardHoldingController`. Auctions,
 
 None of it is a Tracker. A Tracker is a number the game moves and argues about afterwards, which is why every one of those leaves a `tracker_adjustments` row; how many Shivs somebody is carrying is a holding, and a holding records where a count ended up rather than replaying how it got there.
 
-**Control hands cards out at `/control/games/{game}/cards`**, under the Equipment list rather than on a page of its own — that is where Control is already looking when a Runner asks for a card. The rest of that page is still a card list to read: the Protection Card catalogue is edited on the Facility Defence page instead, beside installing. A Corporate seat is **refused** Equipment rather than quietly given it, because a CEO with a Katana in hand is a row nothing reads; a Freelancer is not, since 3.4 hands the Facility game to a side rather than to a roster.
+**Control hands cards out at `/control/games/{game}/cards`**, under the Equipment list rather than on a page of its own — that is where Control is already looking when somebody asks for a card. The rest of that page is still a card list to read: the Protection Card catalogue is edited on the Facility Defence page instead, beside installing.
+
+**Anybody on the roster may be handed one.** A Corporate seat was refused outright, on the reasoning that a CEO with a Katana in hand is a row nothing reads — and it turned out to be in the way of the thing it was protecting. 2.1 says a Runner "may buy equipment, either from the market or from other players", so a card reaches a Facility by way of whoever was holding it, and that is as likely to be a CEO who bought it to hand over as a gangmate. Who may hold what is Control's call, which means the refusal was the application making a ruling the rulebook does not. So `equipment_holdings` takes any character, `/equipment` is offered to anybody holding a seat, and `GamePresenter::equipmentHoldings()` groups by team rather than by gang — the gangs first, then the Corporations, then everybody in neither.
+
+**Giving and setting are two writes, because they answer different questions.** `EquipmentService::giveCopies()` *adds*, and is what Control reaches for at the table: it knows what it is handing over and not what is already in the hand, so a give that set the count would quietly take away the two Shivs somebody was carrying. `setCopiesInHand()` replaces it, which is the correction — a card spent, a haul split, a number typed wrong.
+
+**A card is given by clicking it**, in the card list itself rather than through a form beside it. The gesture is the card because the card is what is being asked for at the table: somebody wants the Katana, the list's own search has already narrowed to it, and it is on screen under Control's pointer — so picking it out of a second list of seventy-four was work the page had already done. What the dialog still asks for is who, which stays a `SearchPicker` for the reason the shop's is a combobox: a roster of forty is a list nobody finds anybody in as a native `select`. Setting a count stays where it corrects, on the hand.
+
+**Both catalogues take that gesture, and the one difference is the rulebook's.** An Equipment card goes to a *person* (3.4.1 caps and takes it away per player); a Protection Card goes to a *Corporation*, because 3.3.4 makes those copies the Corporation's rather than the Security player's. So the picker holds the roster in one list and the Corporations in the other, `GamePresenter::equipmentRecipients()` and `protectionCardRecipients()` are the two lists, and `FacilityDefenceService::giveCopies()` is the Protection Card write — `EquipmentService::giveCopies()`'s counterpart, adding where `setCopiesInHand()` replaces, and now what `giveCopy()` is one copy of. Correcting a Protection Card count outright stays on the Facility Defence page, beside the stacks the count feeds: the card list is where a card is handed over, and that page is where one is argued about.
+
+**Players hand cards to each other, and that is 2.1's own second half.** "You may buy equipment, either from the market or from other players" — the market is the shop's counter, and the other players are `POST /equipment/give`. It is the one thing on `/equipment` that is not read-only.
+
+**Only the card moves, and there is deliberately no price box.** What came back — Credits, a favour, a share of the next job — is settled at the table, for the reason a research point trade settles there: 3.2.5 has players trading "by passing over the requisite tokens", so a transfer is one-way and one-sided, one hand goes down and the other goes up. That one-sidedness is also what makes it safe to hand a player at all. Giving spends only what is yours; a transfer that *also* took the recipient's Credits would be one player reaching into another's purse on the strength of a price only the giver had typed in. If a price ever does have to travel, it needs the other player's consent first, and that is a second act rather than a wider form.
+
+**`EquipmentService::transfer()` is the write**, in a transaction with the giver's row locked, because two copies given away at once out of the same hand is exactly what a double-clicked button is. The row is left at nought rather than deleted, as `setCopiesInHand` leaves one — **and the page does not draw it**: a hand holds what it holds, and a card face with a `×0` on it says somebody is carrying something they handed over. `GamePresenter::equipmentHoldings()` filters the empty rows out, so the row goes on recording where the count ended up without the hand claiming it.
+
+**`CharacterPolicy::giveEquipment` is who**, and it is `ShopListingPolicy`'s division again: the seat and the claim are the policy's, and whether there are copies to give at all is the service's. The seat has to be *yours*, because giving spends what is in that hand — but who may **receive** is not asked at all, since 2.1 names no restriction on the far side and who may hold a card is Control's call. Control trades out of anybody's hand.
+
+**There is deliberately no *phase* clock on a trade**, and that is where it parts company with the shop. The shop is a counter Control opens and shuts and 3.3.3 says so in as many words, but handing a card to somebody is two players agreeing in a Discord channel, and the channels are open all turn. 2.1 listing it under the Setup Phase describes when the *market* runs rather than forbidding a Runner from passing a Shiv across during the Action phase — and a refusal there would only have taught people to phone Control instead, which is the shape of rule this application keeps deciding against. The one thing the run loop needs is that a card already spent is gone from the hand, and the service's own count holds that.
+
+**The game's own clock is asked about**, which is *A game off the clock* below drawing its line in the usual place: a seat is a fact about the roster and acting is a question about the clock. Reading a hand is why `/equipment` opens either side of the evening — the sidebar offers it to a CEO in a game that has not started — and handing a card over is an act, so `giveEquipment` asks `isRunning()` where the act is, exactly as `CouncilSessionPolicy::vote` does beside `hasSeat()`.
+
+**And it is the same gesture on `/equipment`: click the card you are handing over.** Which seat is giving and which card is going are both answered by *which card you clicked*, on a page where a player may hold two seats and every card is already laid out to be read. `GiveCardDialog` is the one implementation, shared with Control's list above. A card in a hand nobody may give out of — somebody else's, or your own before the game is running — is drawn as the same card with no button around it, rather than a control that does nothing when pressed. The trigger is a real button wrapping the face rather than a click handler on it, so the keyboard reaches it, and it is the only tab stop on a card because `CardFace`'s own tooltip is deliberately not focusable.
+
+Its refusal is kept on the dialog for the reason the run screen's `useRunAction` keeps its own: a page draws a great many of these and they all report against the same handful of keys, so a page-level `errors` would put one card's refusal under every card on screen. The copies box carries no `max`, for the reason the run screen's top-up learned not to: a browser-side constraint that blocks the submit outright makes a refusal look like a dead button, so the server is what says how many are there.
+
+Everything else is still a conversation: splitting a haul and an auction end with Control writing down where the count ended up.
 
 **Every Runner opens the game carrying what their briefing prints**, seeded by `SeedEquipmentHoldings` from per-Runner lists in `config/running_hot.php` — per Runner because the briefings are one document per player, so there is deliberately no gang-level list to be mis-keyed against somebody else. Two readings are worth knowing. A briefing's **"Ability" section is a card too**: what is printed under it is the effect text of `EEP014`–`EEP016`, the three Reconnaissance cards, reproduced almost word for word, so Ballet, Bitter and Z3R0 are seeded as the cards they are. And a **Freelancer carrying nothing is the right answer**, not an unfinished one — all three are given "Special rules" in place of a kit, and none of those is an Equipment card.
 
 The seeder **skips a code it cannot find**, which is right when Control has deleted a card and wrong when somebody has fat-fingered a digit — and the two are indistinguishable at run time, so a Runner would simply open the game one card lighter than their briefing. `EquipmentSeedingTest` checks the configuration against the catalogue for exactly that, rather than transcribing the eighteen kits a second time where they would agree with themselves instead of with the briefings.
 
-**Players read their own hand at `/equipment`, and the tier line is a ruling rather than a reading.** You see the Runners and Freelancers you have claimed and nobody else; Control sees everybody. The rulebook does *not* make a hand Secret the way 3.4.2 makes a Facility's stack — this is here because a gang reading each other's kit off a screen is a gang that never has the conversation, and at the table you would have to ask. `GamePresenter::equipmentHoldings()` takes an optional viewer and is the only thing that decides: passing nobody is the Control panel's whole-game view, passing a player narrows to their own seats, and passing Control widens again. One implementation, so the page filters nothing and a hand that is not yours never reaches the browser.
+**Players read their own hand at `/equipment`, and the tier line is a ruling rather than a reading.** You see the seats you have claimed and nobody else; Control sees everybody. The rulebook does *not* make a hand Secret the way 3.4.2 makes a Facility's stack — this is here because a gang reading each other's kit off a screen is a gang that never has the conversation, and at the table you would have to ask. `GamePresenter::equipmentHoldings()` takes an optional viewer and is the only thing that decides: passing nobody is the Control panel's whole-game view, passing a player narrows to their own seats, and passing Control widens again. One implementation, so the page filters nothing and a hand that is not yours never reaches the browser.
 
-It is its own page rather than a corner of the dashboard, because a hand is what you work from: choosing three permanent items to equip means laying the cards out and reading them, so they are drawn as `CardFace`s grouped by category. The `×N` copy count sits *outside* `CardFace` and on top of it, for the reason the defence board's does — it has to stay legible over artwork as well as over the text box. The gang band is drawn only for Control: a player holding one Runner already knows which gang they are in, and it is what makes twenty-one hands readable.
+It is its own page rather than a corner of the dashboard, because a hand is what you work from: choosing three permanent items to equip means laying the cards out and reading them, so they are drawn as `CardFace`s grouped by category. The `×N` copy count sits *outside* `CardFace` and on top of it, for the reason the defence board's does — it has to stay legible over artwork as well as over the text box. The team band is drawn only for Control: a player holding one Runner already knows which gang they are in, and it is what makes forty hands readable.
 
-Read-only, on both sides of the line: a hand is read here and spent elsewhere. **Selling between Runners and splitting a haul stay conversations at the table**, so Control sets the count for those on their own panel. Buying from the market does not — see The shop, below.
+One thing on it is not read-only, and it is **handing a card to another player** (2.1) — see above. **Splitting a haul and an auction stay conversations at the table**, so Control sets the count for those on their own panel. Buying from the market does not — see The shop, below.
 
 **Technology trees attach to Corporations late.** A game is created before its roster exists, so `SeedTechnologies` writes every technology unattached and fills in `corporation_id` on a second run, after `CreateDefaultRoster`. `CreateDefaultFacilities` makes that second call. Note the codes do not identify the tree reliably — Gordon and Genetic Equity both take a `G` — so the tree comes from the sheet's own column.
 
@@ -1359,11 +1444,17 @@ market there too — so `ShopListingPolicy` asks about the phase, the seat and t
 claim, and `before()` hands Control the lot. A player will phone a purchase in or
 turn up at the desk between phases, and none of that can wait for the clock to
 come round again. What `ShopService` refuses, though, it refuses to Control as
-well: a Katana in a CEO's hand is a row nothing reads whoever wrote it.
+well: the market bills the buyer's *own* Credits and a Corporate seat has none —
+they spend their Corporation's. That is the whole of why a CEO cannot buy from
+it, and it is no longer a rule about who may *hold* an Equipment card: 2.1 has
+Runners buying equipment "from other players", so anybody may hold one and
+Control hands it over on the card list page instead.
 
 **Which counter you see is the seat you hold.** 3.3.3 hands the Protection Card
 list to the Security players, so it goes to the Corporate seats; the market is
-the Runners'. A price list is not one of the things 3.4.2 keeps Secret, but
+the Runners' — and the other half of 2.1's sentence, one player buying from
+another, is on `/equipment` rather than here, because it spends out of a hand
+rather than off a shelf. A price list is not one of the things 3.4.2 keeps Secret, but
 handing every Runner a catalogue of the cards they are about to meet is
 reconnaissance the rulebook makes them pay for, so `ShopPresenter` draws the same
 line the rulebook does. Inside a Corporation the CEO and the Research player read
@@ -2080,10 +2171,12 @@ rather than blanking itself mid-poll.
 
 Dashboard and Facilities are everybody's — the Facility list is posted in a
 Discord channel the whole game reads, and a Runner picks their target off it.
-Everything else follows the seat: Runs and Shop to both sides, Equipment to the
-Runners (a Corporate seat is refused Equipment outright), Research to any
+Everything else follows the seat: Runs and Shop to both sides, Research to any
 Corporate seat, Council to a CEO or to a character Control has written
-`council_votes` on. Control gets the lot, as everywhere.
+`council_votes` on. Equipment goes to anybody holding a seat at all, since 2.1
+has Runners buying equipment from other players and a Corporate seat may be
+holding the card it bought to hand over — and to nobody holding none, who has no
+hand to read. Control gets the lot, as everywhere.
 
 **Research is narrower than the rest of this file describes it**, and that is
 the designer's ruling rather than a reading. The table's public tier is called

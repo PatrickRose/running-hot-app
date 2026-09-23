@@ -1,9 +1,11 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { CardFace } from '@/components/card-face';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import { GameStateNotice } from '@/components/game-state-notice';
+import { GiveCardDialog, peopleToGiveTo } from '@/components/give-card-dialog';
 import Heading from '@/components/heading';
+import { StockCertificateCard } from '@/components/stock-certificate-card';
 import {
     Card,
     CardContent,
@@ -11,16 +13,21 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { give } from '@/routes/equipment';
 import type {
+    CharacterEquipment,
     EquipmentHolding,
-    GangEquipmentHoldings,
+    EquipmentHoldingGroup,
+    EquipmentRecipient,
     GameSummary,
-    RunnerEquipment,
+    StockCertificate,
 } from '@/types/game';
 
 type Props = {
     game: GameSummary | null;
-    holdings: GangEquipmentHoldings[] | null;
+    holdings: EquipmentHoldingGroup[] | null;
+    recipients: EquipmentRecipient[];
+    certificates: StockCertificate[];
     is_control: boolean;
 };
 
@@ -32,22 +39,35 @@ type Props = {
 const CATEGORY_ORDER = ['permanent', 'this-run', 'single-use'] as const;
 
 /**
- * What a Runner is carrying (rulebook 3.4.1).
+ * What you are carrying (rulebook 3.4.1).
  *
  * Its own page rather than a corner of the dashboard, because a hand is what
  * you work from: choosing three permanent items to equip means laying the cards
  * out and reading them, so they are drawn as cards rather than listed as names.
+ *
+ * Not only a Runner's. 2.1 has Runners buying equipment "from other players",
+ * so a card may be sitting with whoever bought it to hand over - which is as
+ * likely to be a CEO as a gangmate, and they need to read it too.
  *
  * You see your own and nobody else's, and Control sees everybody. The server
  * decides which - `GamePresenter::equipmentHoldings()` takes the viewer - so
  * there is nothing here that filters, and a hand that is not yours never
  * reaches the browser.
  *
- * Read-only. Every way a card changes hands is a conversation with Control, who
- * sets the count, which is the division a Corporation's Protection Card
- * holdings already live under.
+ * Handing a card to another player happens here, and it is the one thing on
+ * this page that is not read-only: 2.1 has Runners buying equipment "from other
+ * players", and that half of the sentence had nowhere to happen. Only the card
+ * moves - what was agreed in exchange is settled at the table, as a research
+ * point trade is. Every other way a count moves is still a conversation with
+ * Control, who sets it on their own panel.
  */
-export default function Equipment({ game, holdings, is_control }: Props) {
+export default function Equipment({
+    game,
+    holdings,
+    recipients,
+    certificates,
+    is_control,
+}: Props) {
     if (game === null || holdings === null) {
         return (
             <>
@@ -62,7 +82,7 @@ export default function Equipment({ game, holdings, is_control }: Props) {
         );
     }
 
-    const runners = holdings.flatMap((gang) => gang.runners);
+    const hands = holdings.flatMap((group) => group.members);
 
     return (
         <>
@@ -73,30 +93,32 @@ export default function Equipment({ game, holdings, is_control }: Props) {
                     title="Equipment"
                     description={
                         is_control
-                            ? 'Every Runner in the game, because you are Control.'
-                            : 'What you are carrying. A card changes hands by talking to Control.'
+                            ? 'Everybody in the game, because you are Control.'
+                            : 'What you are carrying. Click one of your cards to hand it to somebody else.'
                     }
                 />
 
                 <GameStateNotice game={game} />
 
-                {runners.length === 0 ? (
+                {hands.length === 0 ? (
                     <Card>
                         <CardHeader>
                             <CardTitle>Nothing to show</CardTitle>
                             <CardDescription>
                                 {is_control
-                                    ? 'This game has no Runners or Freelancers yet.'
-                                    : 'You are not holding a Runner or Freelancer in this game. Equipment is carried by the side that runs — a Corporate seat has none.'}
+                                    ? 'This game has no characters yet.'
+                                    : 'You are holding no character in this game, so there is no hand to read.'}
                             </CardDescription>
                         </CardHeader>
                     </Card>
                 ) : (
-                    holdings.map((gang) => (
-                        <GangHands
-                            key={gang.gang_id ?? 'freelancers'}
-                            gang={gang}
-                            showGangHeading={is_control}
+                    holdings.map((group) => (
+                        <TeamHands
+                            key={group.key}
+                            group={group}
+                            recipients={recipients}
+                            certificates={certificates}
+                            showTeamHeading={is_control}
                         />
                     ))
                 )}
@@ -105,56 +127,83 @@ export default function Equipment({ game, holdings, is_control }: Props) {
     );
 }
 
-function GangHands({
-    gang,
-    showGangHeading,
+function TeamHands({
+    group,
+    recipients,
+    certificates,
+    showTeamHeading,
 }: {
-    gang: GangEquipmentHoldings;
-    showGangHeading: boolean;
+    group: EquipmentHoldingGroup;
+    recipients: EquipmentRecipient[];
+    certificates: StockCertificate[];
+    showTeamHeading: boolean;
 }) {
     return (
         <section className="flex flex-col gap-4">
             {/* A player holding one Runner already knows which gang they are
-                in, so the band is Control's: it is what makes twenty-one hands
+                in, so the band is Control's: it is what makes forty hands
                 readable. */}
-            {showGangHeading ? (
+            {showTeamHeading ? (
                 <h2 className="flex items-center gap-2 text-sm font-medium">
-                    {gang.has_badge ? (
-                        <FactionBadge faction={gang} size="small" />
+                    {group.has_badge ? (
+                        <FactionBadge faction={group} size="small" />
                     ) : null}
-                    {gang.name}
+                    {group.name}
                 </h2>
             ) : null}
 
-            {gang.runners.map((runner) => (
-                <RunnerHand key={runner.character_id} runner={runner} />
+            {group.members.map((member) => (
+                <Hand
+                    key={member.character_id}
+                    character={member}
+                    recipients={recipients}
+                    certificates={certificates.filter(
+                        (certificate) =>
+                            certificate.holder_character_id ===
+                            member.character_id,
+                    )}
+                />
             ))}
         </section>
     );
 }
 
-function RunnerHand({ runner }: { runner: RunnerEquipment }) {
-    const held = runner.cards.reduce((total, card) => total + card.copies, 0);
+function Hand({
+    character,
+    recipients,
+    certificates,
+}: {
+    character: CharacterEquipment;
+    recipients: EquipmentRecipient[];
+    certificates: StockCertificate[];
+}) {
+    const held = character.cards.reduce(
+        (total, card) => total + card.copies,
+        0,
+    );
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>{runner.name}</CardTitle>
+                <CardTitle>{character.name}</CardTitle>
                 <CardDescription>
                     {held === 0
                         ? 'Carrying nothing.'
                         : `Carrying ${held} ${held === 1 ? 'card' : 'cards'}.`}
+                    {character.can_give && held > 0
+                        ? ' Click a card to hand it over.'
+                        : ''}
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
-                {runner.cards.length === 0 ? (
+                {character.cards.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         Your briefing named no Equipment, or Control has not
                         given you any yet.
                     </p>
                 ) : (
                     CATEGORY_ORDER.map((category) => {
-                        const cards = runner.cards.filter(
+                        const cards = character.cards.filter(
                             (card) => card.category === category,
                         );
 
@@ -166,12 +215,33 @@ function RunnerHand({ runner }: { runner: RunnerEquipment }) {
                             <CategoryRow
                                 key={category}
                                 cards={cards}
+                                character={character}
+                                recipients={recipients}
                                 label={cards[0].category_label}
                                 glyph={cards[0].category_glyph}
                             />
                         );
                     })
                 )}
+
+                {/* Not Equipment, but carried and handed on the same way,
+                    so it is read where the rest of a hand is (3.4.3). */}
+                {certificates.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">
+                            Stock Certificates
+                        </h3>
+                        <div className="flex flex-wrap gap-3">
+                            {certificates.map((certificate) => (
+                                <StockCertificateCard
+                                    key={certificate.id}
+                                    certificate={certificate}
+                                    recipients={recipients}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
             </CardContent>
         </Card>
     );
@@ -187,10 +257,14 @@ function RunnerHand({ runner }: { runner: RunnerEquipment }) {
  */
 function CategoryRow({
     cards,
+    character,
+    recipients,
     label,
     glyph,
 }: {
     cards: EquipmentHolding[];
+    character: CharacterEquipment;
+    recipients: EquipmentRecipient[];
     label: string;
     glyph: string;
 }) {
@@ -203,15 +277,37 @@ function CategoryRow({
 
             <div className="flex flex-wrap gap-3">
                 {cards.map((card) => (
-                    <HeldCard key={card.card_type_id} card={card} />
+                    <HeldCard
+                        key={card.card_type_id}
+                        card={card}
+                        character={character}
+                        recipients={recipients}
+                    />
                 ))}
             </div>
         </div>
     );
 }
 
-function HeldCard({ card }: { card: EquipmentHolding }) {
-    return (
+/**
+ * One card in a hand, and the way it leaves that hand (rulebook 2.1).
+ *
+ * The card is the control: clicking it is how it is handed over, because the
+ * card is what the two players are talking about and it is already on screen.
+ * A hand nobody may give out of - somebody else's, or your own before the game
+ * is running - is the same card without the button around it, rather than a
+ * control that does nothing when pressed.
+ */
+function HeldCard({
+    card,
+    character,
+    recipients,
+}: {
+    card: EquipmentHolding;
+    character: CharacterEquipment;
+    recipients: EquipmentRecipient[];
+}) {
+    const face = (
         <div className="relative">
             <CardFace
                 name={card.name}
@@ -229,12 +325,56 @@ function HeldCard({ card }: { card: EquipmentHolding }) {
             />
 
             {/* Drawn on top of CardFace rather than inside it, because it has
-                to be legible over artwork as well as over the text box — the
+                to be legible over artwork as well as over the text box - the
                 same reason the defence board's copy count sits outside. */}
             <span className="pointer-events-none absolute top-1.5 left-1.5 rounded-md bg-background/90 px-1.5 py-0.5 text-xs font-medium tabular-nums shadow-sm ring-1 ring-border">
                 <span aria-hidden="true">&times;{card.copies}</span>
                 <span className="sr-only">{card.copies} in hand</span>
             </span>
         </div>
+    );
+
+    // Never yourself: the card is already in that hand, and the server refuses
+    // it too rather than trusting this to have kept it off the list.
+    const others = recipients.filter(
+        (person) => person.character_id !== character.character_id,
+    );
+
+    if (!character.can_give || others.length === 0 || card.copies < 1) {
+        return face;
+    }
+
+    return (
+        <GiveCardDialog
+            name={card.name}
+            face={face}
+            recipients={peopleToGiveTo(others)}
+            title={`Hand ${card.name} over`}
+            description={`Out of ${character.name}'s hand. Only the card moves — whatever was agreed for it is settled at the table.`}
+            actionLabel="Hand it over"
+            inHand={card.copies}
+            submit={(to, copies, handlers) =>
+                router.post(
+                    give.url(),
+                    {
+                        from_character_id: character.character_id,
+                        to_character_id: to,
+                        equipment_card_type_id: card.card_type_id,
+                        copies,
+                    },
+                    {
+                        preserveScroll: true,
+                        onSuccess: handlers.onSuccess,
+                        onError: (errors) =>
+                            handlers.onError(
+                                Object.values(errors)[0] ??
+                                    'That card could not be handed over.',
+                            ),
+                    },
+                )
+            }
+        >
+            {face}
+        </GiveCardDialog>
     );
 }

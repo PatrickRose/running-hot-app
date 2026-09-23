@@ -4,11 +4,14 @@ import { CardFace } from '@/components/card-face';
 import { CardFacesDialog } from '@/components/card-faces-dialog';
 import { EquipmentCardForm } from '@/components/equipment-card-form';
 import { EquipmentHoldings } from '@/components/equipment-holdings';
+import { GiveCardDialog, peopleToGiveTo } from '@/components/give-card-dialog';
+import type { GiveRecipients } from '@/components/give-card-dialog';
 import Heading from '@/components/heading';
 import {
     ResearchSuitCost,
     ResearchSuitIcon,
 } from '@/components/research-suit-cost';
+import { StockCertificateControl } from '@/components/stock-certificate-control';
 import { TechnologyForm } from '@/components/technology-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,15 +24,20 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { destroy as destroyEquipment } from '@/routes/control/equipment-cards';
+import { give as giveEquipment } from '@/routes/control/equipment-holdings';
 import { index, show } from '@/routes/control/games';
+import { give as giveProtection } from '@/routes/control/protection-card-holdings';
 import { destroy as destroyTechnology } from '@/routes/control/technologies';
 import type {
     EquipmentCardSummary,
+    EquipmentHoldingGroup,
+    EquipmentRecipient,
     FacilityTypeSummary,
-    GangEquipmentHoldings,
     GameSummary,
+    ProtectionCardRecipient,
     ProtectionCardSummary,
     ResearchSuitSummary,
+    StockCertificate,
     TechnologySummary,
     TechnologyTreeSummary,
 } from '@/types/game';
@@ -37,8 +45,11 @@ import type {
 type Props = {
     game: GameSummary;
     protectionCards: ProtectionCardSummary[];
+    protectionCardRecipients: ProtectionCardRecipient[];
     equipment: EquipmentCardSummary[];
-    equipmentHoldings: GangEquipmentHoldings[];
+    equipmentHoldings: EquipmentHoldingGroup[];
+    equipmentRecipients: EquipmentRecipient[];
+    stockCertificates: StockCertificate[];
     technologies: TechnologySummary[];
     researchSuits: ResearchSuitSummary[];
     technologyTrees: TechnologyTreeSummary[];
@@ -63,8 +74,11 @@ type Props = {
 export default function ControlCards({
     game,
     protectionCards,
+    protectionCardRecipients,
     equipment,
     equipmentHoldings,
+    equipmentRecipients,
+    stockCertificates,
     technologies,
     researchSuits,
     technologyTrees,
@@ -155,36 +169,18 @@ export default function ControlCards({
                             sentence the card prints rather than a skill and a
                             number, because a good many of them are not — the
                             Runners may choose the skill, or the strength counts
-                            something only known once the card is met.
+                            something only known once the card is met. Click a
+                            card to give a Corporation copies of it; arranging
+                            them in a Facility is the Facility Defence page.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-3">
                         {shownProtection.map((card) => (
-                            <CardFace
+                            <GiveAProtectionCard
                                 key={card.id}
-                                name={card.name}
-                                code={card.code}
-                                imagePath={card.image_path}
-                                shape="landscape"
-                                lines={[
-                                    {
-                                        label: 'Kind',
-                                        value: card.kind_label,
-                                        glyph: card.kind_glyph,
-                                    },
-                                    {
-                                        label: 'Challenge',
-                                        value: card.challenge,
-                                    },
-                                    { label: '', value: card.consequence },
-                                    {
-                                        label: 'Charge',
-                                        value: card.charge_consequence
-                                            ? `${card.charge_cost}cr — ${card.charge_consequence}`
-                                            : null,
-                                    },
-                                ]}
-                                footer={card.availability_label}
+                                gameId={game.id}
+                                card={card}
+                                recipients={protectionCardRecipients}
                             />
                         ))}
                         {shownProtection.length === 0 && (
@@ -209,7 +205,9 @@ export default function ControlCards({
                             Protection Cards are met and then go back to
                             Control. The list carries no prices — the market is
                             its own piece of work, and it does not work the way
-                            the card sheet's cost column suggests.
+                            the card sheet's cost column suggests. Click a card
+                            to hand it to somebody: the card is what is being
+                            asked for at the table, and it is already on screen.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-6">
@@ -219,24 +217,10 @@ export default function ControlCards({
                                     key={card.id}
                                     className="flex flex-col items-start gap-1"
                                 >
-                                    <CardFace
-                                        name={card.name}
-                                        code={card.code}
-                                        imagePath={card.image_path}
-                                        shape="portrait"
-                                        lines={[
-                                            {
-                                                label: 'Type',
-                                                value: card.category_label,
-                                                glyph: card.category_glyph,
-                                            },
-                                            { label: '', value: card.effect },
-                                        ]}
-                                        footer={
-                                            card.cost === null
-                                                ? null
-                                                : `${card.cost} Credits`
-                                        }
+                                    <GiveFromTheList
+                                        gameId={game.id}
+                                        card={card}
+                                        recipients={equipmentRecipients}
                                     />
                                     <Button
                                         size="sm"
@@ -271,22 +255,46 @@ export default function ControlCards({
                     <CardHeader>
                         <CardTitle>Who is carrying what</CardTitle>
                         <CardDescription>
-                            Equipment is held per Runner, because that is what
+                            Equipment is held per person, because that is what
                             the rulebook caps and what it takes away — three
                             equipped permanent items are theirs, and their
                             permanent Equipment goes to the Security player if
-                            they are carried out of a Facility. Set a count
-                            outright: buying from the market, selling to another
-                            Runner, splitting a haul and being handed a card for
-                            a job that went well all happen at the table, so
-                            what is recorded here is where the count ended up.
+                            they are carried out of a Facility. Anybody on the
+                            roster can be handed one: 2.1 has Runners buying
+                            equipment from other players, so a card may be
+                            sitting with whoever bought it to hand over. Give a
+                            card by clicking it in the Equipment list above,
+                            which adds copies; setting a count here replaces it,
+                            which is the correction when a card is spent, a haul
+                            is split or a number was typed wrong.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <EquipmentHoldings
                             gameId={game.id}
                             holdings={equipmentHoldings}
-                            cards={equipment}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Stock Certificates</CardTitle>
+                        <CardDescription>
+                            A Runner who gets into a Corporate Facility may
+                            spend an access on its own effect and choose a
+                            certificate (3.4.3); hand it to them here. Its
+                            holder cashes it in once or hands it on from their
+                            Equipment page, and what it pays is worked out from
+                            the Corporation&apos;s Income when it is cashed.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <StockCertificateControl
+                            gameId={game.id}
+                            certificates={stockCertificates}
+                            corporations={protectionCardRecipients}
+                            people={equipmentRecipients}
                         />
                     </CardContent>
                 </Card>
@@ -485,6 +493,181 @@ export default function ControlCards({
                 </Card>
             </div>
         </>
+    );
+}
+
+/**
+ * A card in the Protection Card list, and Control giving a Corporation copies
+ * of it by pointing at it.
+ *
+ * The same gesture as the Equipment list below and for the same reason, with
+ * the one difference the rulebook draws: 3.3.4 makes these copies the
+ * *Corporation's* rather than a person's, so the picker holds the five
+ * Corporations where that one holds the roster.
+ *
+ * Giving adds, as it does everywhere: Control handing cards over knows what it
+ * is giving and not what the Corporation already holds. Correcting a count
+ * outright is the Facility Defence page's, beside the stacks the count feeds.
+ */
+function GiveAProtectionCard({
+    gameId,
+    card,
+    recipients,
+}: {
+    gameId: number;
+    card: ProtectionCardSummary;
+    recipients: ProtectionCardRecipient[];
+}) {
+    const face = (
+        <CardFace
+            name={card.name}
+            code={card.code}
+            imagePath={card.image_path}
+            shape="landscape"
+            lines={[
+                {
+                    label: 'Kind',
+                    value: card.kind_label,
+                    glyph: card.kind_glyph,
+                },
+                { label: 'Challenge', value: card.challenge },
+                { label: '', value: card.consequence },
+                {
+                    label: 'Charge',
+                    value: card.charge_consequence
+                        ? `${card.charge_cost}cr — ${card.charge_consequence}`
+                        : null,
+                },
+            ]}
+            footer={card.availability_label}
+        />
+    );
+
+    if (recipients.length === 0) {
+        return face;
+    }
+
+    return (
+        <GiveCardDialog
+            name={card.name}
+            face={face}
+            recipients={corporationsToGiveTo(recipients)}
+            title={`Give ${card.name}`}
+            description="Straight into the Corporation's hand, where its Security player installs it. Copies are added to whatever it already holds — a count typed wrong is corrected on the Facility Defence page."
+            actionLabel="Give"
+            submit={(to, copies, handlers) =>
+                router.post(
+                    giveProtection.url({ game: gameId }),
+                    {
+                        corporation_id: to,
+                        protection_card_type_id: card.id,
+                        copies,
+                    },
+                    {
+                        preserveScroll: true,
+                        onSuccess: handlers.onSuccess,
+                        onError: (errors) =>
+                            handlers.onError(
+                                Object.values(errors)[0] ??
+                                    'That card could not be given.',
+                            ),
+                    },
+                )
+            }
+        >
+            {face}
+        </GiveCardDialog>
+    );
+}
+
+function corporationsToGiveTo(
+    recipients: ProtectionCardRecipient[],
+): GiveRecipients {
+    return {
+        label: 'To',
+        options: recipients.map((corporation) => ({
+            value: corporation.corporation_id,
+            label: corporation.name,
+            search: corporation.name,
+        })),
+        placeholder: `Search ${recipients.length} Corporations…`,
+        searchPlaceholder: 'Name…',
+        emptyMessage: 'No Corporation of that name is in this game.',
+    };
+}
+
+/**
+ * A card in the Equipment list, and Control handing one over by pointing at it.
+ *
+ * The gesture is the card itself, because that is what is being asked for at
+ * the table — somebody wants the Katana, and the Katana is on screen in front
+ * of Control with the list's own search already narrowing to it. Picking the
+ * card out of a second list of seventy-four was work the page had already done.
+ *
+ * A game with nobody on the roster draws the card and no button around it,
+ * rather than a control that does nothing when pressed.
+ */
+function GiveFromTheList({
+    gameId,
+    card,
+    recipients,
+}: {
+    gameId: number;
+    card: EquipmentCardSummary;
+    recipients: EquipmentRecipient[];
+}) {
+    const face = (
+        <CardFace
+            name={card.name}
+            code={card.code}
+            imagePath={card.image_path}
+            shape="portrait"
+            lines={[
+                {
+                    label: 'Type',
+                    value: card.category_label,
+                    glyph: card.category_glyph,
+                },
+                { label: '', value: card.effect },
+            ]}
+            footer={card.cost === null ? null : `${card.cost} Credits`}
+        />
+    );
+
+    if (recipients.length === 0) {
+        return face;
+    }
+
+    return (
+        <GiveCardDialog
+            name={card.name}
+            face={face}
+            recipients={peopleToGiveTo(recipients)}
+            title={`Give ${card.name}`}
+            description="Straight into their hand. Copies are added to whatever they are already carrying — a count typed wrong is corrected below, under who is carrying what."
+            actionLabel="Give"
+            submit={(to, copies, handlers) =>
+                router.post(
+                    giveEquipment.url({ game: gameId }),
+                    {
+                        character_id: to,
+                        equipment_card_type_id: card.id,
+                        copies,
+                    },
+                    {
+                        preserveScroll: true,
+                        onSuccess: handlers.onSuccess,
+                        onError: (errors) =>
+                            handlers.onError(
+                                Object.values(errors)[0] ??
+                                    'That card could not be given.',
+                            ),
+                    },
+                )
+            }
+        >
+            {face}
+        </GiveCardDialog>
     );
 }
 

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -15,17 +16,18 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $turn_id
- * @property int|null $chair_corporation_id
+ * @property string|null $chair_type
+ * @property int|null $chair_id
  * @property Carbon|null $recess_at
  * @property Carbon|null $handed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Turn $turn
- * @property-read Corporation|null $chair
+ * @property-read Corporation|Character|null $chair
  * @property-read Collection<int, CouncilAgendaItem> $items
  * @property-read Collection<int, CouncilSeat> $seats
  */
-#[Fillable(['turn_id', 'chair_corporation_id', 'recess_at', 'handed_at'])]
+#[Fillable(['turn_id', 'chair_type', 'chair_id', 'recess_at', 'handed_at'])]
 class CouncilSession extends Model
 {
     /**
@@ -62,10 +64,37 @@ class CouncilSession extends Model
         return $this->belongsTo(Turn::class);
     }
 
-    /** @return BelongsTo<Corporation, $this> */
-    public function chair(): BelongsTo
+    /**
+     * Who holds the Chair this turn: a Corporation, whose CEO speaks for it, or
+     * a character holding a seat of its own (App\Models\Character::sitsOnCouncil()).
+     *
+     * A morph for the reason a ballot's voter is one - 3.1 rotates the Chair
+     * between the Corporations, and it is Control's ruling that a seat it has
+     * given somebody may take it too. Null is a vacant Chair, which is a real
+     * state rather than a missing row.
+     *
+     * @return MorphTo<Model, $this>
+     */
+    public function chair(): MorphTo
     {
-        return $this->belongsTo(Corporation::class, 'chair_corporation_id');
+        return $this->morphTo();
+    }
+
+    /**
+     * Whether a given Corporation or seat is the one in the Chair.
+     *
+     * Asked of the columns rather than the relation, so nothing has to be
+     * loaded to answer it, and asked of both halves because a Corporation and
+     * a character can share a row id.
+     */
+    public function isChairedBy(Corporation|Character|null $chair): bool
+    {
+        if ($chair === null) {
+            return $this->chair_id === null;
+        }
+
+        return $this->chair_type === $chair->getMorphClass()
+            && $this->chair_id === $chair->getKey();
     }
 
     /** @return HasMany<CouncilAgendaItem, $this> */

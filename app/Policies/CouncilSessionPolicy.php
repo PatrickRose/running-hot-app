@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
+use App\Models\Character;
 use App\Models\CouncilSession;
 use App\Models\User;
 use App\Services\CouncilService;
@@ -12,12 +13,13 @@ use App\Services\CouncilService;
  * Who may act at one sitting of the Council (rulebook 3.1).
  *
  * The Council is the CEOs' sub-game, so the seat is the authority: a CEO votes
- * for their own Corporation, and the Chair's powers belong to whichever
- * Corporation holds the Chair this turn rather than to a person. A seat Control
- * has given somebody outright - HM Government's - votes and does nothing else:
- * it never chairs, because the Chair rotates between the Corporations. Everything
- * else about the Council is public - the agenda is read out - so reading the
- * page needs no ability at all.
+ * for their own Corporation, and the Chair's powers belong to whoever holds the
+ * Chair this turn rather than to a person. That is usually a Corporation, whose
+ * CEO speaks for it. It can also be a seat Control has given somebody outright -
+ * HM Government's - because the rotation is an order Council Control announces
+ * (3.1.1) rather than a rule about who may be in it, and the game opens with the
+ * Government in the Chair. Everything else about the Council is public - the
+ * agenda is read out - so reading the page needs no ability at all.
  */
 class CouncilSessionPolicy
 {
@@ -43,18 +45,23 @@ class CouncilSessionPolicy
      * Chair this sitting: keep two of what Control hands over, rule on custom
      * agendas, amend resolutions, declare a vote secret, and resolve it.
      *
-     * Held by a Corporation rather than by a player, and read from the CEO seat
-     * that Corporation fields. A Corporation whose CEO seat is unclaimed has
-     * nobody who can chair, which is Control's cue to hand the Chair elsewhere
-     * for the turn.
+     * Held by a Corporation or by a seat, rather than by a player, so the
+     * question is whether this user holds the seat that is in the Chair. A
+     * Corporation's is read from the CEO seat it fields; a character's is the
+     * character itself. Either way a Chair nobody has claimed has nobody who
+     * can chair, which is Control's cue to hand it elsewhere for the turn.
      */
     public function chair(User $user, CouncilSession $session): bool
     {
-        if ($session->chair_corporation_id === null) {
+        if ($session->chair_id === null) {
             return false;
         }
 
-        return $this->holdsCeoSeat($user, $session, $session->chair_corporation_id);
+        if ($session->chair_type === (new Character)->getMorphClass()) {
+            return $this->holdsSeat($user, $session, $session->chair_id);
+        }
+
+        return $this->holdsCeoSeat($user, $session, $session->chair_id);
     }
 
     /**
@@ -74,6 +81,27 @@ class CouncilSessionPolicy
 
         return $game->isRunning()
             && app(CouncilService::class)->hasSeat($game, $user);
+    }
+
+    /**
+     * Whether this user holds the character that is in the Chair.
+     *
+     * The seat has to still be one: a bloc Control has taken away is not a
+     * Chair, whatever the sitting still has written on it.
+     */
+    private function holdsSeat(User $user, CouncilSession $session, int $characterId): bool
+    {
+        $game = $session->turn->game;
+
+        if ($game->status !== GameStatus::Running) {
+            return false;
+        }
+
+        return $game->characters()
+            ->whereKey($characterId)
+            ->where('user_id', $user->id)
+            ->whereNotNull('council_votes')
+            ->exists();
     }
 
     private function holdsCeoSeat(User $user, CouncilSession $session, ?int $corporationId): bool
