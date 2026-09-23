@@ -11,6 +11,7 @@ import {
     ResearchSuitCost,
     ResearchSuitIcon,
 } from '@/components/research-suit-cost';
+import { StockCertificateControl } from '@/components/stock-certificate-control';
 import { TechnologyForm } from '@/components/technology-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ import type {
     ProtectionCardRecipient,
     ProtectionCardSummary,
     ResearchSuitSummary,
+    StockCertificate,
     TechnologySummary,
     TechnologyTreeSummary,
 } from '@/types/game';
@@ -47,6 +49,7 @@ type Props = {
     equipment: EquipmentCardSummary[];
     equipmentHoldings: EquipmentHoldingGroup[];
     equipmentRecipients: EquipmentRecipient[];
+    stockCertificates: StockCertificate[];
     technologies: TechnologySummary[];
     researchSuits: ResearchSuitSummary[];
     technologyTrees: TechnologyTreeSummary[];
@@ -75,6 +78,7 @@ export default function ControlCards({
     equipment,
     equipmentHoldings,
     equipmentRecipients,
+    stockCertificates,
     technologies,
     researchSuits,
     technologyTrees,
@@ -269,6 +273,28 @@ export default function ControlCards({
                         <EquipmentHoldings
                             gameId={game.id}
                             holdings={equipmentHoldings}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Stock Certificates</CardTitle>
+                        <CardDescription>
+                            A Runner who gets into a Corporate Facility may
+                            spend an access on its own effect and choose a
+                            certificate (3.4.3); hand it to them here. Its
+                            holder cashes it in once or hands it on from their
+                            Equipment page, and what it pays is worked out from
+                            the Corporation&apos;s Income when it is cashed.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <StockCertificateControl
+                            gameId={game.id}
+                            certificates={stockCertificates}
+                            corporations={protectionCardRecipients}
+                            people={equipmentRecipients}
                         />
                     </CardContent>
                 </Card>

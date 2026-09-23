@@ -5,6 +5,7 @@ import { GameIcon } from '@/components/game-icon';
 import { GameStateNotice } from '@/components/game-state-notice';
 import { GiveCardDialog, peopleToGiveTo } from '@/components/give-card-dialog';
 import Heading from '@/components/heading';
+import { StockCertificateCard } from '@/components/stock-certificate-card';
 import {
     Card,
     CardContent,
@@ -19,12 +20,14 @@ import type {
     EquipmentHoldingGroup,
     EquipmentRecipient,
     GameSummary,
+    StockCertificate,
 } from '@/types/game';
 
 type Props = {
     game: GameSummary | null;
     holdings: EquipmentHoldingGroup[] | null;
     recipients: EquipmentRecipient[];
+    certificates: StockCertificate[];
     is_control: boolean;
 };
 
@@ -62,6 +65,7 @@ export default function Equipment({
     game,
     holdings,
     recipients,
+    certificates,
     is_control,
 }: Props) {
     if (game === null || holdings === null) {
@@ -113,6 +117,7 @@ export default function Equipment({
                             key={group.key}
                             group={group}
                             recipients={recipients}
+                            certificates={certificates}
                             showTeamHeading={is_control}
                         />
                     ))
@@ -125,10 +130,12 @@ export default function Equipment({
 function TeamHands({
     group,
     recipients,
+    certificates,
     showTeamHeading,
 }: {
     group: EquipmentHoldingGroup;
     recipients: EquipmentRecipient[];
+    certificates: StockCertificate[];
     showTeamHeading: boolean;
 }) {
     return (
@@ -150,6 +157,11 @@ function TeamHands({
                     key={member.character_id}
                     character={member}
                     recipients={recipients}
+                    certificates={certificates.filter(
+                        (certificate) =>
+                            certificate.holder_character_id ===
+                            member.character_id,
+                    )}
                 />
             ))}
         </section>
@@ -159,9 +171,11 @@ function TeamHands({
 function Hand({
     character,
     recipients,
+    certificates,
 }: {
     character: CharacterEquipment;
     recipients: EquipmentRecipient[];
+    certificates: StockCertificate[];
 }) {
     const held = character.cards.reduce(
         (total, card) => total + card.copies,
@@ -209,6 +223,25 @@ function Hand({
                         );
                     })
                 )}
+
+                {/* Not Equipment, but carried and handed on the same way,
+                    so it is read where the rest of a hand is (3.4.3). */}
+                {certificates.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">
+                            Stock Certificates
+                        </h3>
+                        <div className="flex flex-wrap gap-3">
+                            {certificates.map((certificate) => (
+                                <StockCertificateCard
+                                    key={certificate.id}
+                                    certificate={certificate}
+                                    recipients={recipients}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
             </CardContent>
         </Card>
     );

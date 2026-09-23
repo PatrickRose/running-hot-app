@@ -23,6 +23,7 @@ use App\Http\Controllers\Control\ResearchEquationController;
 use App\Http\Controllers\Control\ResearchSessionController;
 use App\Http\Controllers\Control\ShopController as ControlShopController;
 use App\Http\Controllers\Control\StatsController;
+use App\Http\Controllers\Control\StockCertificateController as ControlStockCertificateController;
 use App\Http\Controllers\Control\TechnologyHoldingController;
 use App\Http\Controllers\Control\TechnologyTypeController;
 use App\Http\Controllers\Control\TrackerController;
@@ -43,6 +44,7 @@ use App\Http\Controllers\ResearchTreeController;
 use App\Http\Controllers\RunBoardController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\ShopController;
+use App\Http\Controllers\StockCertificateController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -122,6 +124,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // wants to know which of them was rolling.
     Route::get('dice', [DiceRollController::class, 'index'])->name('dice');
     Route::post('dice', [DiceRollController::class, 'store'])->name('dice.store');
+
+    // A Stock Certificate taken out of a Corporate Facility (3.4.3). Its
+    // holder cashes it in once, or hands it on - which is how one is sold.
+    Route::post('stock-certificates/{certificate}/cash', [StockCertificateController::class, 'cashIn'])
+        ->name('stock-certificates.cash');
+    Route::post('stock-certificates/{certificate}/give', [StockCertificateController::class, 'give'])
+        ->name('stock-certificates.give');
 
     // The research sub-game (rulebook 3.2). None of these names a Corporation:
     // a player has exactly one, so the seat they hold decides which, and the
@@ -350,6 +359,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('equipment-holdings.give');
                 Route::patch('games/{game}/equipment-holdings', [EquipmentHoldingController::class, 'update'])
                     ->name('equipment-holdings.update');
+
+                // Stock Certificates (3.4.3): Control hands one to the Runner
+                // who chose it from a Corporate Facility, and takes back one
+                // handed out by mistake.
+                Route::post('games/{game}/stock-certificates', [ControlStockCertificateController::class, 'store'])
+                    ->name('stock-certificates.store');
+                Route::delete('games/{game}/stock-certificates/{certificate}', [ControlStockCertificateController::class, 'destroy'])
+                    ->name('stock-certificates.destroy');
 
                 // All three card lists to look at, and the two that are not edited
                 // beside the Facilities to change.

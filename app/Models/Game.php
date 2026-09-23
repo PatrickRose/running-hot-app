@@ -142,6 +142,16 @@ class Game extends Model
         return $this->hasMany(DiceRoll::class);
     }
 
+    /**
+     * Every Stock Certificate Control has handed out, cashed or not.
+     *
+     * @return HasMany<StockCertificate, $this>
+     */
+    public function stockCertificates(): HasMany
+    {
+        return $this->hasMany(StockCertificate::class);
+    }
+
     /** @return HasMany<TechnologyType, $this> */
     public function technologyTypes(): HasMany
     {

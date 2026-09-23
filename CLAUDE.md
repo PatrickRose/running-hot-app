@@ -277,6 +277,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Research payload shaping | `App\Support\ResearchPresenter` |
 | The research table on screen | `resources/js/components/research-table.tsx` |
 | A roll a player makes for Control to read, outside any run | `App\Actions\RollDice`, `App\Support\DiceRollPresenter`, `resources/js/pages/dice.tsx` |
+| Stock Certificates: handing out, handing on, cashing in | `App\Services\StockCertificateService`, `App\Enums\StockCertificateOption`, `App\Support\StockCertificatePresenter` |
 | Discord announcements | `App\Services\DiscordAnnouncer` |
 | Who Control is, per game | `App\Models\ControlMember`, `App\Actions\ClaimControlSeatsForUser` |
 | What a game's Discord server should look like | `App\Support\Discord\GuildBlueprint` |

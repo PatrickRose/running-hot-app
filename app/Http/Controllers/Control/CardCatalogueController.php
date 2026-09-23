@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Game;
 use App\Support\CardImage;
 use App\Support\GamePresenter;
+use App\Support\StockCertificatePresenter;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -29,7 +31,7 @@ use Inertia\Response;
  */
 class CardCatalogueController extends Controller
 {
-    public function index(Game $game, GamePresenter $presenter): Response
+    public function index(Request $request, Game $game, GamePresenter $presenter, StockCertificatePresenter $certificates): Response
     {
         return Inertia::render('control/games/cards', [
             'game' => $presenter->controlSummary($game),
@@ -45,6 +47,10 @@ class CardCatalogueController extends Controller
             // from another player and the card may be going to whoever passes
             // it on.
             'equipmentRecipients' => $presenter->equipmentRecipients($game),
+            // Every Stock Certificate in the game, cashed or not (3.4.3). The
+            // Corporations one can be a share of are protectionCardRecipients
+            // above, which is all of them.
+            'stockCertificates' => $certificates->forGame($game, $request->user()),
             'technologies' => $presenter->technologyTypes($game),
             'researchSuits' => $presenter->researchSuits(),
             // For the forms that add a card: which trees a technology may sit

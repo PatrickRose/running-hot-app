@@ -1636,3 +1636,31 @@ export type DiceSeat = {
     name: string;
     role_label: string;
 };
+
+/** One way of cashing a Stock Certificate in, priced against today's Income. */
+export type StockCertificateOptionQuote = {
+    value: 'half' | 'quarter';
+    label: string;
+    credits: number;
+    income_reduction: number;
+};
+
+/**
+ * A share in a Corporation's Income, taken out of one of its Corporate
+ * Facilities (rulebook 3.4.3) and cashed in once by whoever holds it.
+ */
+export type StockCertificate = {
+    id: number;
+    corporation: Faction & { id: number; income: number };
+    holder_character_id: number | null;
+    holder_name: string | null;
+    text: string;
+    options: StockCertificateOptionQuote[];
+    cashed: boolean;
+    cashed_as: string | null;
+    credits_paid: number | null;
+    cashed_by: string | null;
+    cashed_at: string | null;
+    can_cash: boolean;
+    can_give: boolean;
+};

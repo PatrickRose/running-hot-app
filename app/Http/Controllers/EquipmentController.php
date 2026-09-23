@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Game;
 use App\Support\GamePresenter;
+use App\Support\StockCertificatePresenter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,7 +38,7 @@ use Inertia\Response;
  */
 class EquipmentController extends Controller
 {
-    public function __invoke(Request $request, GamePresenter $presenter): Response
+    public function __invoke(Request $request, GamePresenter $presenter, StockCertificatePresenter $certificates): Response
     {
         $game = Game::current();
         $user = $request->user();
@@ -50,6 +51,10 @@ class EquipmentController extends Controller
             // hold a card is Control's call - a Runner squaring a debt with a
             // CEO is a trade the rulebook has nothing to say against.
             'recipients' => $game === null ? [] : $presenter->equipmentRecipients($game),
+            // The Stock Certificates in those same hands (3.4.3). Not a card
+            // on the Equipment list, but carried and handed on the same way,
+            // so it is read where the rest of a hand is.
+            'certificates' => $game === null ? [] : $certificates->forGame($game, $user),
             // So the page can say whose hands these are. Control is reading the
             // whole game and should be told so; a player is reading their own.
             'is_control' => $game !== null && $user !== null && $user->isControlFor($game),
