@@ -1,6 +1,5 @@
-import { Form } from '@inertiajs/react';
+import { Form, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { requisition as requisitionRoute } from '@/routes/corporations/facilities';
 import type {
     FacilityRequisition as FacilityRequisitionState,
+    PhaseSummary,
     RequisitionableFacilityType,
 } from '@/types/game';
 
@@ -71,7 +71,16 @@ export function FacilityRequisition({
     );
 
     const chosen = requisition.types.find((type) => String(type.id) === typeId);
-    const mayBuild = requisition.can_requisition && requisition.open;
+
+    // Read off the shared phase rather than the board, because the board is
+    // only fetched when the page is: somebody who opened it during Setup would
+    // otherwise go on being offered a Build button the server now refuses.
+    // The phase is an always prop the header polls, so this stays current.
+    const { phase } = usePage<{ phase: PhaseSummary | null }>().props;
+    const open = phase === null ? requisition.open : phase.type === 'setup';
+    const opensOnTurn =
+        phase === null ? requisition.opens_on_turn : phase.turn + 1;
+    const mayBuild = requisition.can_requisition && open;
 
     return (
         <Card>
@@ -84,8 +93,8 @@ export function FacilityRequisition({
                     list once your Corporation researches a technology that
                     unlocks them.{' '}
                     {requisition.can_requisition
-                        ? requisition.open
-                            ? `Anything you build now opens on turn ${requisition.opens_on_turn}.`
+                        ? open
+                            ? `Anything you build now opens on turn ${opensOnTurn}.`
                             : 'Requisitions reopen with the next Setup phase.'
                         : 'Only your CEO can build Facilities.'}
                     {requisition.build_discount > 0 &&
@@ -100,70 +109,99 @@ export function FacilityRequisition({
                         })}
                         options={{ preserveScroll: true }}
                         resetOnSuccess={['name']}
-                        className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+                        className="flex flex-col gap-3"
                     >
-                        {({ processing, errors }) => (
-                            <>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="requisition-type">
-                                        Type
-                                    </Label>
-                                    <select
-                                        id="requisition-type"
-                                        name="facility_type_id"
-                                        className={SELECT_CLASS}
-                                        value={typeId}
-                                        onChange={(event) =>
-                                            setTypeId(event.target.value)
-                                        }
-                                        required
-                                    >
-                                        {requisition.types.map((type) => (
-                                            <option
-                                                key={type.id}
-                                                value={type.id}
+                        {({ processing, errors }) => {
+                            // One line above the fields for every message the
+                            // form can meet, so nothing ever pushes a field
+                            // out of line with its neighbours: why the button
+                            // is off, or what the server refused.
+                            const message = !open
+                                ? 'Facilities may only be built during a Setup phase.'
+                                : (errors.facility_type_id ??
+                                  errors.name ??
+                                  errors.cost);
+
+                            return (
+                                <>
+                                    {message && (
+                                        <p
+                                            role="status"
+                                            className={
+                                                open
+                                                    ? 'text-sm text-red-600 dark:text-red-400'
+                                                    : 'text-sm text-muted-foreground'
+                                            }
+                                        >
+                                            {message}
+                                        </p>
+                                    )}
+
+                                    <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="requisition-type">
+                                                Type
+                                            </Label>
+                                            <select
+                                                id="requisition-type"
+                                                name="facility_type_id"
+                                                className={SELECT_CLASS}
+                                                value={typeId}
+                                                onChange={(event) =>
+                                                    setTypeId(
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                aria-invalid={
+                                                    errors.facility_type_id
+                                                        ? true
+                                                        : undefined
+                                                }
+                                                required
                                             >
-                                                {type.name} — {type.cost}{' '}
-                                                Credits
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <InputError
-                                        message={errors.facility_type_id}
-                                    />
-                                </div>
+                                                {requisition.types.map(
+                                                    (type) => (
+                                                        <option
+                                                            key={type.id}
+                                                            value={type.id}
+                                                        >
+                                                            {type.name} —{' '}
+                                                            {type.cost} Credits
+                                                        </option>
+                                                    ),
+                                                )}
+                                            </select>
+                                        </div>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="requisition-name">
-                                        Name
-                                    </Label>
-                                    <Input
-                                        id="requisition-name"
-                                        name="name"
-                                        required
-                                        placeholder="Attercliffe Yard"
-                                    />
-                                    <InputError message={errors.name} />
-                                </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="requisition-name">
+                                                Name
+                                            </Label>
+                                            <Input
+                                                id="requisition-name"
+                                                name="name"
+                                                required
+                                                placeholder="Attercliffe Yard"
+                                                aria-invalid={
+                                                    errors.name
+                                                        ? true
+                                                        : undefined
+                                                }
+                                            />
+                                        </div>
 
-                                <Button
-                                    type="submit"
-                                    disabled={processing || !mayBuild}
-                                >
-                                    {chosen
-                                        ? `Build for ${chosen.cost} Credits`
-                                        : 'Build'}
-                                </Button>
-
-                                {/* "Cannot afford" is reported against a
-                                    cost this form does not ask for, so it
-                                    is drawn here rather than lost. */}
-                                <InputError
-                                    className="sm:col-span-3"
-                                    message={errors.cost}
-                                />
-                            </>
-                        )}
+                                        <Button
+                                            type="submit"
+                                            disabled={processing || !mayBuild}
+                                        >
+                                            {chosen
+                                                ? `Build for ${chosen.cost} Credits`
+                                                : 'Build'}
+                                        </Button>
+                                    </div>
+                                </>
+                            );
+                        }}
                     </Form>
                 )}
 
