@@ -39,5 +39,10 @@ jobs:
 
       # Linting and static analysis run in their own workflow so a failure says
       # which check broke, rather than hiding inside a single job.
+      #
+      # Parallel because nearly every test creates a Game, which seeds the card
+      # lists, and there are over a thousand of them: one process spent five
+      # minutes on it. Paratest runs a worker per core, each with its own
+      # in-memory database.
       - name: Run tests
-        run: php artisan test
+        run: php artisan test --parallel

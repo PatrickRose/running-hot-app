@@ -33,15 +33,14 @@ class SeedAgendaCards
      */
     public function handle(Game $game): array
     {
+        $existing = $game->agendaCards()
+            ->whereNull('submitted_by_character_id')
+            ->pluck('title')
+            ->flip();
         $created = [];
 
         foreach (AgendaCardBlueprint::defaults() as $blueprint) {
-            $exists = $game->agendaCards()
-                ->whereNull('submitted_by_character_id')
-                ->where('title', $blueprint['title'])
-                ->exists();
-
-            if ($exists) {
+            if ($existing->has($blueprint['title'])) {
                 continue;
             }
 

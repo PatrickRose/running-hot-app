@@ -25,17 +25,15 @@ class SeedProtectionCards
      */
     public function handle(Game $game): array
     {
+        $existing = $game->protectionCardTypes()->pluck('code')->flip();
         $created = [];
 
         foreach (ProtectionCardBlueprint::defaults() as $attributes) {
-            $card = $game->protectionCardTypes()->firstOrCreate(
-                ['code' => $attributes['code']],
-                $attributes,
-            );
-
-            if ($card->wasRecentlyCreated) {
-                $created[] = $card;
+            if ($existing->has($attributes['code'])) {
+                continue;
             }
+
+            $created[] = $game->protectionCardTypes()->create($attributes);
         }
 
         return $created;
