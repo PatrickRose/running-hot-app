@@ -6,6 +6,7 @@ use App\Actions\CreateDefaultFacilities;
 use App\Actions\CreateDefaultRoster;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Control\StoreGameRequest;
+use App\Http\Requests\Control\UpdateGameBackgroundRequest;
 use App\Http\Requests\Control\UpdateGameWebhookRequest;
 use App\Models\Game;
 use App\Services\Discord\DiscordApi;
@@ -110,6 +111,13 @@ class GameController extends Controller
         $game->update($request->validated());
 
         return back()->with('status', 'Discord webhook updated.');
+    }
+
+    public function updateBackground(Game $game, UpdateGameBackgroundRequest $request): RedirectResponse
+    {
+        $game->update(['background_url' => $request->validated('background_url')]);
+
+        return back()->with('status', 'Background link updated.');
     }
 
     public function finish(Game $game, TurnEngine $engine): RedirectResponse

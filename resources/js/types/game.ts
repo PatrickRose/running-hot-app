@@ -80,6 +80,8 @@ export type GameSummary = {
     };
     phase: PhaseSummary | null;
     discord: GameDiscord;
+    /** The game's background reading, set by Control. Null when there is none. */
+    background_url: string | null;
     server_time: string;
 };
 

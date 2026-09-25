@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property int $council_recess_seconds
  * @property bool $auto_advance
  * @property string $discord_webhook_url
+ * @property string|null $background_url
  * @property string|null $discord_guild_id
  * @property string|null $discord_invite_url
  * @property DiscordProvisionStatus $discord_provision_status
@@ -39,7 +40,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'name', 'status', 'stability', 'civil_unrest',
     'setup_seconds', 'action_seconds', 'team_time_seconds', 'council_recess_seconds',
-    'auto_advance', 'discord_webhook_url',
+    'auto_advance', 'discord_webhook_url', 'background_url',
     'discord_guild_id', 'discord_invite_url',
     'discord_provision_status', 'discord_provision_message', 'discord_provisioned_at',
 ])]

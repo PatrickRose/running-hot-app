@@ -3,6 +3,7 @@ import { CharacterEmail } from '@/components/character-email';
 import { CharacterLogo } from '@/components/character-logo';
 import { ControlTeam } from '@/components/control-team';
 import { DiscordHandle } from '@/components/discord-handle';
+import { GameBackground } from '@/components/game-background';
 import { GameDiscordPanel } from '@/components/game-discord';
 import { GameWebhook } from '@/components/game-webhook';
 import Heading from '@/components/heading';
@@ -274,6 +275,23 @@ export default function ControlGameShow({
                         <GameWebhook
                             gameId={game.id}
                             url={game.discord_webhook_url}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Background reading</CardTitle>
+                        <CardDescription>
+                            Every player's sidebar links to the rulebook, and to
+                            this as well once it is set: the setting, the
+                            briefings, whatever this game is played from.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <GameBackground
+                            gameId={game.id}
+                            url={game.background_url}
                         />
                     </CardContent>
                 </Card>

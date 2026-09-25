@@ -106,6 +106,7 @@ class GamePresenter
             ],
             'phase' => $phase === null ? null : $this->phase($phase),
             'discord' => $this->discord($game),
+            'background_url' => $game->background_url,
             'server_time' => now()->toIso8601String(),
         ];
     }

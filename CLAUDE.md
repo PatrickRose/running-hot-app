@@ -297,6 +297,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Moving a stored technology between Facilities | `App\Http\Controllers\FacilityTechnologyController`, `App\Services\TechnologyService::place()` |
 | The drag-and-drop defence board | `resources/js/components/facility-defence-board.tsx` |
 | Auto-advance and its backstop | `App\Jobs\AdvancePhase`, `game:tick` |
+| The rulebook and the game's background link in the sidebar | `App\Http\Controllers\RulebookController`, `games.background_url`, `resources/js/components/app-sidebar.tsx` |
 
 ## Gotchas that have already cost time
 
