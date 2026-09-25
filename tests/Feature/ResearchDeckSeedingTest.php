@@ -192,7 +192,7 @@ class ResearchDeckSeedingTest extends TestCase
     public function test_a_restricted_card_that_names_no_suit_stops_the_seed(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('without naming the suit the other side must be');
+        $this->expectExceptionMessageIsOrContains('without naming the suit the other side must be');
 
         // Half a marking is worse on a card than none: "Restricted" with no
         // suit would check nothing at all and nothing would say why.
@@ -292,7 +292,7 @@ class ResearchDeckSeedingTest extends TestCase
     public function test_a_suit_named_major_that_does_not_exist_stops_the_seed(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('names a suit "spades" that does not exist');
+        $this->expectExceptionMessageIsOrContains('names a suit "spades" that does not exist');
 
         config(['running_hot.research.corporations' => [
             'Gordon' => ['major' => ['spades']],
@@ -411,7 +411,7 @@ class ResearchDeckSeedingTest extends TestCase
     public function test_a_marking_the_rules_do_not_have_stops_the_seed(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage("Gordon's research deck marks a card \"No Single\"");
+        $this->expectExceptionMessageIsOrContains("Gordon's research deck marks a card \"No Single\"");
 
         // A capital letter is the whole of the mistake, and writing the card
         // with no marking at all would be worse than refusing it: it would go
@@ -426,7 +426,7 @@ class ResearchDeckSeedingTest extends TestCase
     public function test_a_suit_the_game_does_not_have_stops_the_seed(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('names a suit "spades" that does not exist');
+        $this->expectExceptionMessageIsOrContains('names a suit "spades" that does not exist');
 
         $this->writeDecks([
             'values' => [],
@@ -438,7 +438,7 @@ class ResearchDeckSeedingTest extends TestCase
     public function test_a_card_cannot_be_wild_and_a_suit_at_once(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('both wild and leaf');
+        $this->expectExceptionMessageIsOrContains('both wild and leaf');
 
         $this->writeDecks([
             'values' => [],
@@ -450,7 +450,7 @@ class ResearchDeckSeedingTest extends TestCase
     public function test_a_card_with_no_value_stops_the_seed(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('names a card with no value');
+        $this->expectExceptionMessageIsOrContains('names a card with no value');
 
         $this->writeDecks([
             'values' => [],

@@ -83,7 +83,7 @@ class ProtectionCardHoldingTest extends TestCase
         $this->defence()->install($this->facility('First'), $card);
 
         $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('has no copies of Security team left to install');
+        $this->expectExceptionMessageIsOrContains('has no copies of Security team left to install');
 
         $this->defence()->install($this->facility('Second'), $card);
     }
