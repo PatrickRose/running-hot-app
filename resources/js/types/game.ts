@@ -609,6 +609,11 @@ export type CorporationFacilities = Faction & {
     cyber_slots: number;
     technology_capacity_per_facility: number;
     card_move_discount: number;
+    /**
+     * Credits off every Facility this Corporation builds — MCM's
+     * Construction Leader. Sent on Control's panel only.
+     */
+    facility_build_discount?: number;
     facilities: FacilitySummary[];
 };
 
@@ -661,8 +666,10 @@ export type RequisitionableFacilityType = {
     name: string;
     description: string | null;
     access_effect: string | null;
-    /** The type sheet's price, which is what a CEO pays. */
+    /** The type sheet's price. */
     build_cost: number;
+    /** What this Corporation pays: the sheet's price less its build discount. */
+    cost: number;
     physical_slots_granted: number;
     cyber_slots_granted: number;
     technology_capacity_granted: number;
@@ -682,6 +689,8 @@ export type RequisitionableFacilityType = {
 export type FacilityRequisition = {
     corporation_id: number;
     credits: number;
+    /** Credits off every build — MCM's Construction Leader, 0 for everyone else. */
+    build_discount: number;
     can_requisition: boolean;
     open: boolean;
     opens_on_turn: number;

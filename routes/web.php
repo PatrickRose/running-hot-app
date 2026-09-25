@@ -338,6 +338,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('facilities.store');
                 Route::post('games/{game}/facilities/publish-list', [FacilityController::class, 'publishList'])
                     ->name('facilities.publish-list');
+                // Credits off every Facility a Corporation builds: MCM's
+                // Construction Leader, and Control's to change.
+                Route::patch('games/{game}/corporations/{corporation}/build-discount', [FacilityController::class, 'updateBuildDiscount'])
+                    ->name('corporations.build-discount');
                 Route::patch('games/{game}/facilities/{facility}', [FacilityController::class, 'update'])
                     ->name('facilities.update');
                 Route::delete('games/{game}/facilities/{facility}', [FacilityController::class, 'destroy'])

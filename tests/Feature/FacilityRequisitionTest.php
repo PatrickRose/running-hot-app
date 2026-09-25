@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CreateDefaultRoster;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
 use App\Enums\PhaseType;
@@ -292,5 +293,98 @@ class FacilityRequisitionTest extends TestCase
         $this->assertSame(1, $this->corporation->facilities()->count());
         $this->assertSame(30, $this->corporation->fresh()->credits);
         $this->assertSame(0, $this->game->trackerAdjustments()->count());
+    }
+
+    public function test_a_corporation_with_a_build_discount_pays_less(): void
+    {
+        $this->corporation->update(['facility_build_discount' => 2]);
+        $ceo = $this->seat($this->corporation, CharacterRole::Ceo);
+
+        $this->requisition($ceo)->assertSessionHasNoErrors();
+
+        $this->assertSame(30 - ($this->security->build_cost - 2), $this->corporation->fresh()->credits);
+    }
+
+    public function test_the_sheet_quotes_the_discounted_price(): void
+    {
+        $this->corporation->update(['facility_build_discount' => 2]);
+
+        $sheet = $this->sheetFor($this->seat($this->corporation, CharacterRole::Security));
+        $line = collect($sheet['types'])->firstWhere('id', $this->security->id);
+
+        $this->assertSame(2, $sheet['build_discount']);
+        $this->assertSame($this->security->build_cost, $line['build_cost']);
+        $this->assertSame($this->security->build_cost - 2, $line['cost']);
+    }
+
+    public function test_a_discount_never_makes_a_build_pay_the_corporation(): void
+    {
+        $this->corporation->update(['facility_build_discount' => 100]);
+
+        $this->assertSame(0, $this->corporation->facilityBuildCost($this->security));
+    }
+
+    public function test_only_mcm_opens_the_game_with_construction_leaders_discount(): void
+    {
+        $game = Game::factory()->create();
+        app(CreateDefaultRoster::class)->handle($game);
+
+        $discounts = $game->corporations()->pluck('facility_build_discount', 'name');
+
+        $this->assertSame(2, (int) $discounts['McCullough Calibrated Mechanical']);
+        $this->assertSame([0], $discounts->except('McCullough Calibrated Mechanical')->map(fn ($discount): int => (int) $discount)->unique()->values()->all());
+    }
+
+    public function test_control_charges_the_discounted_price_when_the_cost_is_left_blank(): void
+    {
+        $this->corporation->update(['facility_build_discount' => 2]);
+
+        $this->actingAs(User::factory()->control()->create())
+            ->post("/control/games/{$this->game->id}/facilities", [
+                'corporation_id' => $this->corporation->id,
+                'facility_type_id' => $this->security->id,
+                'name' => 'Attercliffe Yard',
+                'mode' => 'requisition',
+                'cost' => '',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(30 - ($this->security->build_cost - 2), $this->corporation->fresh()->credits);
+    }
+
+    public function test_control_sets_a_corporations_build_discount(): void
+    {
+        $this->actingAs(User::factory()->control()->create())
+            ->patch("/control/games/{$this->game->id}/corporations/{$this->corporation->id}/build-discount", [
+                'facility_build_discount' => 3,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(3, $this->corporation->fresh()->facility_build_discount);
+    }
+
+    public function test_a_player_cannot_set_a_build_discount(): void
+    {
+        $ceo = $this->seat($this->corporation, CharacterRole::Ceo);
+
+        $this->actingAs($ceo)
+            ->patch("/control/games/{$this->game->id}/corporations/{$this->corporation->id}/build-discount", [
+                'facility_build_discount' => 3,
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(0, (int) $this->corporation->fresh()->facility_build_discount);
+    }
+
+    public function test_a_corporation_from_another_game_is_not_reachable(): void
+    {
+        $elsewhere = Corporation::factory()->for(Game::factory())->create();
+
+        $this->actingAs(User::factory()->control()->create())
+            ->patch("/control/games/{$this->game->id}/corporations/{$elsewhere->id}/build-discount", [
+                'facility_build_discount' => 3,
+            ])
+            ->assertNotFound();
     }
 }

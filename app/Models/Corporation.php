@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property int $political_will
  * @property int|null $council_chair_order
  * @property int $credits
+ * @property int $facility_build_discount
  * @property int $cog_points
  * @property int $brain_points
  * @property int $leaf_points
@@ -28,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'game_id', 'name', 'income', 'political_will', 'credits', 'council_chair_order',
+    'game_id', 'name', 'income', 'political_will', 'credits', 'facility_build_discount', 'council_chair_order',
     'cog_points', 'brain_points', 'leaf_points', 'maths_points',
 ])]
 class Corporation extends Model
@@ -52,6 +53,19 @@ class Corporation extends Model
     public function facilities(): HasMany
     {
         return $this->hasMany(Facility::class);
+    }
+
+    /**
+     * What this Corporation pays to build a Facility of this type (3.3.1).
+     *
+     * The type sheet's price less the Corporation's build discount, which is
+     * MCM's Construction Leader ("a discount of 2 credits when building a
+     * facility") and nought for everybody else. Never below nought: a
+     * discount is not a payment.
+     */
+    public function facilityBuildCost(FacilityType $type): int
+    {
+        return max(0, $type->build_cost - (int) $this->facility_build_discount);
     }
 
     /**

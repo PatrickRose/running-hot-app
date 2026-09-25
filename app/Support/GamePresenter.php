@@ -573,6 +573,7 @@ class GamePresenter
         return [
             'corporation_id' => $corporation->id,
             'credits' => $corporation->credits,
+            'build_discount' => (int) $corporation->facility_build_discount,
             'can_requisition' => app(CorporationPolicy::class)->requisition($user, $corporation),
             // The phase rule is RequisitionFacility's and it refuses outside
             // Setup whatever this says; this is only so the page can say why
@@ -590,6 +591,9 @@ class GamePresenter
                     'description' => $type->description,
                     'access_effect' => $type->access_effect,
                     'build_cost' => $type->build_cost,
+                    // What this Corporation actually pays, which is the
+                    // sheet's price unless it holds a build discount.
+                    'cost' => $corporation->facilityBuildCost($type),
                     'physical_slots_granted' => $type->physical_slots_granted,
                     'cyber_slots_granted' => $type->cyber_slots_granted,
                     'technology_capacity_granted' => $type->technology_capacity_granted,
@@ -1256,6 +1260,7 @@ class GamePresenter
                     'cyber_slots' => $totals['cyber_slots'],
                     'technology_capacity_per_facility' => $totals['technology_capacity'],
                     'card_move_discount' => $totals['card_move_discount'],
+                    'facility_build_discount' => (int) $corporation->facility_build_discount,
                     'facilities' => $corporation->facilities
                         ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $totals, $channelKeys))
                         ->all(),

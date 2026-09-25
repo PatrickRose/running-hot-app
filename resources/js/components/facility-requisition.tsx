@@ -85,6 +85,8 @@ export function FacilityRequisition({
                             ? `Anything you build now opens on turn ${requisition.opens_on_turn}.`
                             : 'Requisitions reopen with the next Setup phase.'
                         : 'Only your CEO can build Facilities.'}
+                    {requisition.build_discount > 0 &&
+                        ` Construction Leader takes ${requisition.build_discount} Credits off every build.`}
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
@@ -118,7 +120,7 @@ export function FacilityRequisition({
                                                 key={type.id}
                                                 value={type.id}
                                             >
-                                                {type.name} — {type.build_cost}{' '}
+                                                {type.name} — {type.cost}{' '}
                                                 Credits
                                             </option>
                                         ))}
@@ -146,7 +148,7 @@ export function FacilityRequisition({
                                     disabled={processing || !mayBuild}
                                 >
                                     {chosen
-                                        ? `Build for ${chosen.build_cost} Credits`
+                                        ? `Build for ${chosen.cost} Credits`
                                         : 'Build'}
                                 </Button>
 
@@ -172,12 +174,17 @@ export function FacilityRequisition({
                                 <p className="font-medium">{type.name}</p>
                                 <Badge
                                     variant={
-                                        type.build_cost > requisition.credits
+                                        type.cost > requisition.credits
                                             ? 'secondary'
                                             : 'outline'
                                     }
                                 >
-                                    {type.build_cost} Credits
+                                    {type.cost < type.build_cost && (
+                                        <span className="mr-1 text-muted-foreground line-through">
+                                            {type.build_cost}
+                                        </span>
+                                    )}
+                                    {type.cost} Credits
                                 </Badge>
                             </div>
                             {type.description && (
