@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\CreateDefaultFacilities;
 use App\Actions\CreateDefaultRoster;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
@@ -11,8 +12,11 @@ use App\Models\Corporation;
 use App\Models\Facility;
 use App\Models\FacilityType;
 use App\Models\Game;
+use App\Models\TechnologyHolding;
+use App\Models\TechnologyType;
 use App\Models\User;
 use App\Services\TurnEngine;
+use App\Support\BuildableFacilityTypes;
 use App\Support\FacilityTypeBlueprint;
 use App\Support\GamePresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -218,7 +222,8 @@ class FacilityRequisitionTest extends TestCase
             $sheet = $this->sheetFor($this->seat($this->corporation, $role));
 
             $this->assertNotNull($sheet);
-            $this->assertSame($this->game->facilityTypes()->count(), count($sheet['types']));
+            // Research, Corporate and Security: nothing has been researched.
+            $this->assertCount(3, $sheet['types']);
 
             $line = collect($sheet['types'])->firstWhere('id', $this->security->id);
             $this->assertSame($this->security->build_cost, $line['build_cost']);
@@ -386,5 +391,167 @@ class FacilityRequisitionTest extends TestCase
                 'facility_build_discount' => 3,
             ])
             ->assertNotFound();
+    }
+
+    /**
+     * A technology this Corporation holds, printed with the given effect.
+     */
+    private function holdTechnology(string $effect, bool $researched = true): TechnologyType
+    {
+        $technology = TechnologyType::factory()->for($this->game)->create([
+            'corporation_id' => $this->corporation->id,
+            'effect' => $effect,
+        ]);
+
+        $holding = TechnologyHolding::factory()->for($this->game)->for($this->corporation)->for($technology);
+
+        ($researched ? $holding : $holding->claimed())->create();
+
+        return $technology;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function sheetNames(User $user): array
+    {
+        return collect($this->sheetFor($user)['types'])->pluck('name')->sort()->values()->all();
+    }
+
+    private function type(string $key): FacilityType
+    {
+        return $this->game->facilityTypes()->where('key', $key)->sole();
+    }
+
+    public function test_a_corporation_that_has_researched_nothing_sees_only_the_three_basic_types(): void
+    {
+        $this->assertSame(
+            ['Corporate', 'Research', 'Security'],
+            $this->sheetNames($this->seat($this->corporation, CharacterRole::Ceo)),
+        );
+    }
+
+    public function test_a_technology_that_unlocks_a_type_puts_it_on_the_sheet(): void
+    {
+        $this->holdTechnology('Unlock: Factory facility. Unlock: Mini-factory facility');
+
+        $this->assertSame(
+            ['Corporate', 'Factory', 'Mini-factory', 'Research', 'Security'],
+            $this->sheetNames($this->seat($this->corporation, CharacterRole::Ceo)),
+        );
+    }
+
+    public function test_a_type_whose_own_name_ends_in_facility_is_still_unlocked(): void
+    {
+        $this->holdTechnology('Unlock: ID facility');
+
+        $this->assertContains('ID Facility', $this->sheetNames($this->seat($this->corporation, CharacterRole::Ceo)));
+    }
+
+    public function test_a_claimed_copy_unlocks_nothing(): void
+    {
+        $this->holdTechnology('Unlock: Arms facility', researched: false);
+
+        $this->assertNotContains('Arms', $this->sheetNames($this->seat($this->corporation, CharacterRole::Ceo)));
+    }
+
+    public function test_a_ceo_builds_a_type_their_technology_unlocks(): void
+    {
+        $this->holdTechnology('Unlock: Mini-factory facility');
+        $this->corporation->update(['credits' => 30]);
+        $ceo = $this->seat($this->corporation, CharacterRole::Ceo);
+
+        $this->requisition($ceo, overrides: ['facility_type_id' => $this->type(FacilityTypeBlueprint::MINI_FACTORY)->id])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $this->corporation->facilities()->count());
+    }
+
+    public function test_a_ceo_cannot_build_a_type_they_have_not_unlocked(): void
+    {
+        $ceo = $this->seat($this->corporation, CharacterRole::Ceo);
+
+        $this->requisition($ceo, overrides: ['facility_type_id' => $this->type(FacilityTypeBlueprint::ARMS)->id])
+            ->assertSessionHasErrors('facility_type_id');
+
+        $this->assertSame(0, $this->corporation->facilities()->count());
+        $this->assertSame(30, $this->corporation->fresh()->credits);
+    }
+
+    public function test_a_type_control_invents_is_on_nobodys_sheet_until_control_opens_it(): void
+    {
+        $control = User::factory()->control()->create();
+        $ceo = $this->seat($this->corporation, CharacterRole::Ceo);
+
+        $this->actingAs($control)
+            ->post("/control/games/{$this->game->id}/facility-types", ['name' => 'Fabrication', 'build_cost' => 6])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNotContains('Fabrication', $this->sheetNames($ceo));
+
+        $fabrication = $this->game->facilityTypes()->where('name', 'Fabrication')->sole();
+
+        $this->actingAs($control)
+            ->patch("/control/games/{$this->game->id}/facility-types/{$fabrication->id}", [
+                'name' => 'Fabrication',
+                'available_from_start' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertContains('Fabrication', $this->sheetNames($ceo));
+    }
+
+    public function test_control_still_builds_a_type_nobody_has_unlocked(): void
+    {
+        $this->actingAs(User::factory()->control()->create())
+            ->post("/control/games/{$this->game->id}/facilities", [
+                'corporation_id' => $this->corporation->id,
+                'facility_type_id' => $this->type(FacilityTypeBlueprint::ARMS)->id,
+                'name' => 'Attercliffe Yard',
+                'mode' => 'immediate',
+                'cost' => 0,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $this->corporation->facilities()->count());
+    }
+
+    public function test_mcm_opens_the_game_able_to_build_factories(): void
+    {
+        $game = Game::factory()->create(['status' => GameStatus::Running]);
+        app(CreateDefaultRoster::class)->handle($game);
+        app(CreateDefaultFacilities::class)->handle($game);
+
+        $mcm = $game->corporations()->where('name', 'McCullough Calibrated Mechanical')->sole();
+        $names = app(BuildableFacilityTypes::class)->for($mcm)->pluck('name')->all();
+
+        $this->assertContains('Factory', $names);
+        $this->assertContains('Mini-factory', $names);
+        $this->assertNotContains('Missile Network', $names);
+    }
+
+    public function test_every_facility_the_technology_list_unlocks_is_a_real_type(): void
+    {
+        $types = $this->game->facilityTypes()->get();
+        $unlocking = $this->game->technologyTypes()->where('effect', 'like', '%facility%')->get()
+            ->filter(fn (TechnologyType $technology): bool => preg_match('/Unlock:[^.]*facility/i', (string) $technology->effect) === 1);
+
+        $this->assertNotEmpty($unlocking);
+
+        foreach ($unlocking as $technology) {
+            $this->assertTrue(
+                $types->contains(fn (FacilityType $type): bool => $type->isUnlockedBy($technology)),
+                "{$technology->code} unlocks a Facility type the game does not have: {$technology->effect}",
+            );
+        }
+
+        // Every type that is not a starting one is unlocked by something, or
+        // no Corporation could ever build it.
+        foreach ($types->reject(fn (FacilityType $type): bool => $type->available_from_start) as $type) {
+            $this->assertTrue(
+                $unlocking->contains(fn (TechnologyType $technology): bool => $type->isUnlockedBy($technology)),
+                "No technology unlocks {$type->name}.",
+            );
+        }
     }
 }

@@ -53,7 +53,8 @@ function grants(type: RequisitionableFacilityType): string[] {
  * The type sheet, and the CEO's requisition slip (rulebook 3.3.1).
  *
  * Every Corporate seat reads the sheet, because what a Facility costs and does
- * is the whole Corporation's business. CEOs are the only ones allowed to build
+ * is the whole Corporation's business. It holds only what this Corporation may
+ * build: the three basic types, and whatever its technologies have unlocked. CEOs are the only ones allowed to build
  * Facilities, so only the CEO gets the form. The price is the type sheet's and is not asked for: naming another is
  * Control's override, and so is a build that opens at once.
  *
@@ -79,7 +80,9 @@ export function FacilityRequisition({
                 <CardDescription>
                     {requisition.credits} Credits to spend &middot; A
                     requisition is raised during the Setup phase and the
-                    Facility opens the Setup phase after.{' '}
+                    Facility opens the Setup phase after. Other types join this
+                    list once your Corporation researches a technology that
+                    unlocks them.{' '}
                     {requisition.can_requisition
                         ? requisition.open
                             ? `Anything you build now opens on turn ${requisition.opens_on_turn}.`

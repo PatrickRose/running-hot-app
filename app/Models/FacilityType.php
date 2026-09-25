@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * A kind of Facility a Corporation can build (rulebook 3.3.1).
@@ -26,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $description
  * @property string|null $access_effect
  * @property int $build_cost
+ * @property bool $available_from_start
  * @property int $physical_slots_granted
  * @property int $cyber_slots_granted
  * @property int $technology_capacity_granted
@@ -35,7 +37,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'game_id', 'key', 'name', 'description', 'access_effect', 'build_cost',
+    'game_id', 'key', 'name', 'description', 'access_effect', 'build_cost', 'available_from_start',
     'physical_slots_granted', 'cyber_slots_granted',
     'technology_capacity_granted', 'card_move_discount', 'grant_scaling',
 ])]
@@ -51,7 +53,32 @@ class FacilityType extends Model
     {
         return [
             'grant_scaling' => FacilityGrantScaling::class,
+            'available_from_start' => 'boolean',
         ];
+    }
+
+    /**
+     * Whether a technology's printed effect unlocks this type.
+     *
+     * Read off the words, as a split technology is read off its name: the card
+     * says "Unlock: Arms facility", and a technology Control writes mid-game
+     * unlocks a type by saying so in the same way. "ID facility" names the
+     * "ID Facility" type, so a trailing "Facility" on the type's own name is
+     * not part of what is matched.
+     */
+    public function isUnlockedBy(TechnologyType $technology): bool
+    {
+        preg_match_all('/Unlock:\s*([^.,;:]+?)\s+facility\b/i', (string) $technology->effect, $matches);
+
+        $name = Str::lower(trim((string) preg_replace('/\s+facility$/i', '', $this->name)));
+
+        foreach ($matches[1] as $unlocked) {
+            if (Str::lower(trim($unlocked)) === $name) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

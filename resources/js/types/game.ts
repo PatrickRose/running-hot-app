@@ -250,6 +250,12 @@ export type FacilityTypeSummary = {
     description: string | null;
     access_effect: string | null;
     build_cost: number;
+    /**
+     * Every Corporation may build it without researching it — Research,
+     * Security and Corporate. Other types go on a Corporation's list when a
+     * technology it holds says "Unlock: <type> facility".
+     */
+    available_from_start: boolean;
     /** Physical slots each Facility of this type adds. Security grants 1. */
     physical_slots_granted: number;
     /** Cyber slots each Facility of this type adds. Security grants 2. */

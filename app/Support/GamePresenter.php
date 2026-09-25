@@ -463,6 +463,7 @@ class GamePresenter
                 'description' => $type->description,
                 'access_effect' => $type->access_effect,
                 'build_cost' => $type->build_cost,
+                'available_from_start' => (bool) $type->available_from_start,
                 'physical_slots_granted' => $type->physical_slots_granted,
                 'cyber_slots_granted' => $type->cyber_slots_granted,
                 'technology_capacity_granted' => $type->technology_capacity_granted,
@@ -554,7 +555,9 @@ class GamePresenter
      *
      * Every Corporate seat gets the sheet, because what a Facility costs and
      * does is the whole Corporation's business - and until it was here, the
-     * only way to find out was to ask Control. CEOs are the only ones allowed
+     * only way to find out was to ask Control. It lists only the types this
+     * Corporation may build (BuildableFacilityTypes), so a type nobody has
+     * researched yet is not announced to anybody by appearing on it. CEOs are the only ones allowed
      * to build, so only the CEO gets the form: CorporationPolicy's line.
      *
      * The policy is asked directly rather than through the Gate, for the
@@ -581,10 +584,10 @@ class GamePresenter
             'open' => $game->status === GameStatus::Running
                 && $game->currentPhase()?->type === PhaseType::Setup,
             'opens_on_turn' => ($turnNumber ?? Facility::FIRST_TURN) + 1,
-            'types' => $game->facilityTypes()
-                ->orderBy('build_cost')
-                ->orderBy('name')
-                ->get()
+            // Only what this Corporation may build: the three every
+            // Corporation starts with and whatever its technologies unlock. A
+            // type it has not researched stays off the sheet entirely.
+            'types' => app(BuildableFacilityTypes::class)->for($corporation)
                 ->map(fn (FacilityType $type): array => [
                     'id' => $type->id,
                     'name' => $type->name,
