@@ -34,29 +34,29 @@ class SeedTechnologies
     public function handle(Game $game): array
     {
         $facilityTypes = $game->facilityTypes()->pluck('id', 'key');
+        $existing = $game->technologyTypes()->pluck('code')->flip();
         $created = 0;
 
         foreach (TechnologyBlueprint::defaults() as $attributes) {
+            if ($existing->has($attributes['code'])) {
+                continue;
+            }
+
             $requiredType = $attributes['requires_facility_type'];
             unset($attributes['requires_facility_type']);
 
-            $technology = $game->technologyTypes()->firstOrCreate(
-                ['code' => $attributes['code']],
-                [
-                    ...$attributes,
-                    // A type Control has renamed away leaves the requirement
-                    // unset rather than inventing one: a technology that can be
-                    // housed anywhere is a smaller problem than one pinned to a
-                    // Facility type the game does not have.
-                    'required_facility_type_id' => $requiredType === null
-                        ? null
-                        : $facilityTypes->get($requiredType),
-                ],
-            );
+            $game->technologyTypes()->create([
+                ...$attributes,
+                // A type Control has renamed away leaves the requirement
+                // unset rather than inventing one: a technology that can be
+                // housed anywhere is a smaller problem than one pinned to a
+                // Facility type the game does not have.
+                'required_facility_type_id' => $requiredType === null
+                    ? null
+                    : $facilityTypes->get($requiredType),
+            ]);
 
-            if ($technology->wasRecentlyCreated) {
-                $created++;
-            }
+            $created++;
         }
 
         return ['created' => $created, 'linked' => $this->linkToCorporations($game)];

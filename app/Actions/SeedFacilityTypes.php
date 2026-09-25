@@ -20,17 +20,15 @@ class SeedFacilityTypes
      */
     public function handle(Game $game): array
     {
+        $existing = $game->facilityTypes()->pluck('key')->flip();
         $created = [];
 
         foreach (FacilityTypeBlueprint::defaults() as $attributes) {
-            $type = $game->facilityTypes()->firstOrCreate(
-                ['key' => $attributes['key']],
-                $attributes,
-            );
-
-            if ($type->wasRecentlyCreated) {
-                $created[] = $type;
+            if ($existing->has($attributes['key'])) {
+                continue;
             }
+
+            $created[] = $game->facilityTypes()->create($attributes);
         }
 
         return $created;

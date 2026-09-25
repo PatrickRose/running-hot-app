@@ -20,17 +20,15 @@ class SeedEquipmentCards
      */
     public function handle(Game $game): array
     {
+        $existing = $game->equipmentCardTypes()->pluck('code')->flip();
         $created = [];
 
         foreach (EquipmentCardBlueprint::defaults() as $attributes) {
-            $card = $game->equipmentCardTypes()->firstOrCreate(
-                ['code' => $attributes['code']],
-                $attributes,
-            );
-
-            if ($card->wasRecentlyCreated) {
-                $created[] = $card;
+            if ($existing->has($attributes['code'])) {
+                continue;
             }
+
+            $created[] = $game->equipmentCardTypes()->create($attributes);
         }
 
         return $created;
