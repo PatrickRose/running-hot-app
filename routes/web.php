@@ -37,6 +37,7 @@ use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\EquipmentTransferController;
 use App\Http\Controllers\FacilityBoardController;
 use App\Http\Controllers\FacilityDefenceController;
+use App\Http\Controllers\FacilityRequisitionController;
 use App\Http\Controllers\FacilityTechnologyController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ResearchBoardController;
@@ -86,6 +87,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Players' own view of the Facilities: the public list everyone may see,
     // plus their own Corporation's defences in full.
     Route::get('facilities', FacilityBoardController::class)->name('facilities');
+
+    // A CEO building for their own Corporation (3.3.1), at the type
+    // sheet's price. Control's panel keeps the overrides: any price, and now.
+    Route::post('corporations/{corporation}/facilities', [FacilityRequisitionController::class, 'store'])
+        ->name('corporations.facilities.requisition');
 
     // Security arranging their own Facilities. Guarded by the FacilityPolicy
     // rather than by a role middleware, because the question is not "is this a

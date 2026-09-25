@@ -15,8 +15,8 @@ use Inertia\Response;
  * Corporate player to see what they are defending. Until now the only Facility
  * view was Control's, so a Security player could not read their own stacks.
  *
- * Read-only. Security still tells Control what to install and where to Direct
- * Security, exactly as they would hand over a requisition slip at the table.
+ * Read-only itself: the writes are Security's own routes for the stacks and
+ * the CEO's for a requisition, and this page is where both are drawn.
  */
 class FacilityBoardController extends Controller
 {

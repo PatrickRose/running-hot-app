@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { CardFace } from '@/components/card-face';
 import { FacilityDefenceBoard } from '@/components/facility-defence-board';
+import { FacilityRequisition } from '@/components/facility-requisition';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameIcon } from '@/components/game-icon';
 import { GameStateNotice } from '@/components/game-state-notice';
@@ -258,6 +259,10 @@ export default function Facilities({ game, board }: Props) {
                             )}
                         </CardContent>
                     </Card>
+                )}
+
+                {board.requisition && (
+                    <FacilityRequisition requisition={board.requisition} />
                 )}
 
                 <Card>

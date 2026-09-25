@@ -8,7 +8,8 @@ use App\Models\Corporation;
 use App\Models\User;
 
 /**
- * Who may play a Corporation's research game (rulebook 3.2).
+ * Who may spend a Corporation's resources on its behalf: its research game
+ * (rulebook 3.2) and its building programme (3.3.1).
  *
  * The Research seat, and nobody else. That is narrower than the Facility board,
  * where every Corporate seat at least reads the stacks: this is not a matter of
@@ -52,6 +53,29 @@ class CorporationPolicy
             ->where('user_id', $user->id)
             ->where('corporation_id', $corporation->id)
             ->where('role', CharacterRole::Research)
+            ->exists();
+    }
+
+    /**
+     * Build a new Facility, paying the type sheet's price (3.3.1).
+     *
+     * CEOs are the only ones allowed to build Facilities. One seat rather than
+     * several for the reason the research game is one seat: Credits two people
+     * can commit to a build are Credits neither can plan with.
+     *
+     * The phase is the action's question rather than this one's, because
+     * Control is held to it too unless it builds at once.
+     */
+    public function requisition(User $user, Corporation $corporation): bool
+    {
+        if ($corporation->game->status !== GameStatus::Running) {
+            return false;
+        }
+
+        return $corporation->game->characters()
+            ->where('user_id', $user->id)
+            ->where('corporation_id', $corporation->id)
+            ->where('role', CharacterRole::Ceo)
             ->exists();
     }
 }

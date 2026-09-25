@@ -27,11 +27,13 @@ use Inertia\Response;
 /**
  * Facility Defence from Control's side (rulebook 3.3).
  *
- * Every write lives here rather than on a player-facing route: Security tells
- * Control what they are doing, exactly as they do at the table with a
- * requisition slip and a meeple. The rules are still enforced - a full stack is
- * refused, a reorder is charged - and Control overrides by moving Credits or
- * editing the Facility rather than by the application looking the other way.
+ * Players have routes of their own for most of this now - Security arranges
+ * their stacks and a CEO requisitions a build at /facilities - and these are
+ * Control's versions of the same acts, with the overrides only Control has: a
+ * build at any price, nought included, and one that opens at once. The rules
+ * are still enforced - a full stack is refused, a reorder is charged - and
+ * Control overrides by moving Credits or editing the Facility rather than by
+ * the application looking the other way.
  */
 class FacilityController extends Controller
 {
@@ -91,16 +93,11 @@ class FacilityController extends Controller
         /** @var Corporation $corporation */
         $corporation = $game->corporations()->findOrFail((int) $corporationId);
 
-        if ($corporation->facilities()->where('name', $name)->exists()) {
-            throw ValidationException::withMessages([
-                'name' => $corporation->name.' already has a Facility called that.',
-            ]);
-        }
-
         // The type sheet's price unless Control names another: MCM's
         // Construction Leader technology is a discount on exactly this, and a
-        // game giving a Facility away sets zero.
-        $cost = $request->has('cost')
+        // game giving a Facility away sets zero. A blank box is "no other",
+        // which is why this asks filled() rather than has().
+        $cost = $request->filled('cost')
             ? (int) $request->integer('cost')
             : $type->build_cost;
 

@@ -172,7 +172,10 @@ export default function ControlFacilities({
                         <CardDescription>
                             A requisition is raised during Setup and opens next
                             turn. Build now is the override, and is how a game's
-                            starting Facilities go in.
+                            starting Facilities go in. Leave the cost blank to
+                            charge the type sheet's price, or put 0 to build it
+                            free. CEOs can requisition their own at the sheet's
+                            price from the Facilities page.
                             <br />
                             Choosing nobody builds a Plot Facility: yours rather
                             than a Corporation's, for the Runners to run
@@ -238,7 +241,8 @@ export default function ControlFacilities({
                                                     key={type.id}
                                                     value={type.id}
                                                 >
-                                                    {type.name}
+                                                    {type.name} —{' '}
+                                                    {type.build_cost} Credits
                                                 </option>
                                             ))}
                                         </select>
@@ -264,12 +268,15 @@ export default function ControlFacilities({
                                         <Label htmlFor="facility-cost">
                                             Build cost
                                         </Label>
+                                        {/* Blank charges the type
+                                            sheet's price; 0 builds it free.
+                                            Players always pay the sheet. */}
                                         <Input
                                             id="facility-cost"
                                             name="cost"
                                             type="number"
                                             min={0}
-                                            defaultValue={0}
+                                            placeholder="Type sheet price"
                                         />
                                         <InputError message={errors.cost} />
                                     </div>

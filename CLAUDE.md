@@ -247,6 +247,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | The shop's list, its stock, and what a purchase moves | `App\Services\ShopService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
+| A CEO requisitioning their own Facility, and the type sheet players read | `App\Http\Controllers\FacilityRequisitionController`, `CorporationPolicy::requisition`, `resources/js/components/facility-requisition.tsx` |
 | A Facility Control builds for the Runners to hit | `Facility::isPlotFacility()`, `RequisitionFacility::buildForControl()` |
 | A game's starting Facility types | `App\Support\FacilityTypeBlueprint`, `App\Actions\SeedFacilityTypes` |
 | The game's agenda deck | `App\Support\AgendaCardBlueprint`, `App\Actions\SeedAgendaCards` |
@@ -681,6 +682,8 @@ Two traps in there. **Physical and cyber slots are asymmetric** — the type she
 **Slots and storage are derived, never stored.** Both move the moment a Security or Corporate Facility opens. Facilities still building do not count: they are not yours until they open.
 
 **A Facility stores the turn it opens**, not a "building" flag. A requisition raised during turn N's Setup opens during turn N+1's, so the clock moving is all it takes, and Control brings one forward by editing the number.
+
+**A CEO builds their own Facilities; Control keeps the overrides.** Every Corporate seat reads the type sheet on `/facilities` — prices, what each type grants, and what a Runner gets for accessing one — because it is the whole Corporation's business, and before it was there the only way to learn a price was to ask Control. CEOs are the only ones allowed to build Facilities (`CorporationPolicy::requisition`) — a ruling, not a sign-off step: there is no requisition slip for Security to raise — and the player route pays the type sheet's price with no cost field at all: it opens next turn, during Setup only, and the refusals are `RequisitionFacility`'s, shared with Control's panel. Control's form keeps both overrides — a blank cost is the sheet's price, 0 is free, any other number is a ruling (Construction Leader is one) — and Build now. The name clash check lives in the action for the same reason.
 
 **Position 1 is the card Runners meet first.** Installing puts the new card there and pushes the rest back, which is what "outermost" means in 3.3.4. The physical and cyber stacks are numbered independently and `FacilityDefenceService` keeps each dense at 1..n; nothing else may write a position.
 

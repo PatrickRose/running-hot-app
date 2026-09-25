@@ -651,6 +651,41 @@ export type FacilityBoard = {
      */
     plot: (Faction & { facilities: PublicFacility[] }) | null;
     own: CorporationFacilities | null;
+    /** The type sheet and the build form. Null for a viewer in no Corporation. */
+    requisition: FacilityRequisition | null;
+};
+
+/** One line of the type sheet as a Corporation's players read it (3.3.1). */
+export type RequisitionableFacilityType = {
+    id: number;
+    name: string;
+    description: string | null;
+    access_effect: string | null;
+    /** The type sheet's price, which is what a CEO pays. */
+    build_cost: number;
+    physical_slots_granted: number;
+    cyber_slots_granted: number;
+    technology_capacity_granted: number;
+    card_move_discount: number;
+    grant_scaling_label: string;
+    /** How many of this type the viewer's Corporation already has. */
+    owned: number;
+};
+
+/**
+ * What a Corporation may build, and whether this viewer may build it.
+ *
+ * Every Corporate seat reads the sheet; only the CEO has `can_requisition`.
+ * `open` is true during a running game's Setup phase, which is the only time a
+ * requisition is taken — the server refuses one otherwise whatever this says.
+ */
+export type FacilityRequisition = {
+    corporation_id: number;
+    credits: number;
+    can_requisition: boolean;
+    open: boolean;
+    opens_on_turn: number;
+    types: RequisitionableFacilityType[];
 };
 
 /**
