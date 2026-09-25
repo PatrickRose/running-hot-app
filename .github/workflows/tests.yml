@@ -10,19 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  shard:
-    name: tests (shard ${{ matrix.shard }} of 4)
+  ci:
     runs-on: ubuntu-latest
-
-    # Nearly every test creates a Game, which seeds the card lists, so the
-    # suite costs a fraction of a second a test and there are over a thousand
-    # of them. One runner spent six minutes on it; four split the files
-    # between them and finish in about a quarter of that, since each only
-    # pays the half minute of setup on top.
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout code
@@ -51,26 +40,9 @@ jobs:
       # Linting and static analysis run in their own workflow so a failure says
       # which check broke, rather than hiding inside a single job.
       #
-      # Every test file lands in exactly one shard: sorted by path and dealt
-      # round-robin, so the split is the same on every run and a failure can
-      # be reproduced locally from the file list its shard printed. An empty
-      # list is refused, because `php artisan test` given no paths runs the
-      # whole suite and the shard would quietly become the old single job.
+      # Parallel because nearly every test creates a Game, which seeds the card
+      # lists, and there are over a thousand of them: one process spent five
+      # minutes on it. Paratest runs a worker per core, each with its own
+      # in-memory database.
       - name: Run tests
-        run: |
-          find tests/Unit tests/Feature -name '*Test.php' | LC_ALL=C sort \
-            | awk -v shard=${{ matrix.shard }} 'NR % 4 == shard - 1' > shard.txt
-          cat shard.txt
-          test -s shard.txt
-          php artisan test $(cat shard.txt)
-
-  # The one check to require. It keeps the name the single job had, so branch
-  # protection naming "ci" still works, and it fails unless every shard passed.
-  ci:
-    needs: shard
-    if: always()
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Every shard passed
-        run: test "${{ needs.shard.result }}" = success
+        run: php artisan test --parallel
