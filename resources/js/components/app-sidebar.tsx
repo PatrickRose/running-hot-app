@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     Backpack,
+    BookOpen,
     Building2,
     Layers,
     Crosshair,
@@ -8,10 +9,12 @@ import {
     FlaskConical,
     Gavel,
     LayoutGrid,
+    ScrollText,
     ShoppingCart,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { AppearanceToggle } from '@/components/appearance-toggle';
+import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -31,6 +34,7 @@ import {
     equipment,
     facilities,
     research,
+    rulebook,
     runs,
     shop,
 } from '@/routes';
@@ -100,12 +104,25 @@ export function AppSidebar() {
     // App\Support\Navigation. Undefined on a partial reload, which is not
     // "none": the client keeps the list it already had, so fall back to
     // drawing everything rather than blanking the sidebar mid-poll.
-    const { nav } = usePage().props;
+    const { nav, reference } = usePage().props;
 
     const items =
         nav === undefined
             ? mainNavItems
             : mainNavItems.filter((item) => nav.includes(item.section));
+
+    // The reading, which is everybody's whatever seat they hold. Both open in
+    // a new tab, so a player checking a rule mid-run does not lose the page
+    // they were working from. The background link is Control's to set per
+    // game and is simply absent until it has been.
+    const backgroundUrl = reference?.background_url ?? null;
+
+    const referenceItems: NavItem[] = [
+        { title: 'Rulebook', href: rulebook(), icon: BookOpen },
+        ...(backgroundUrl === null
+            ? []
+            : [{ title: 'Background', href: backgroundUrl, icon: ScrollText }]),
+    ];
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -123,6 +140,7 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={items} />
+                <NavFooter items={referenceItems} className="mt-auto" />
             </SidebarContent>
 
             <SidebarFooter>

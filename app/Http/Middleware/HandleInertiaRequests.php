@@ -111,6 +111,13 @@ class HandleInertiaRequests extends Middleware
                 Game::current(),
                 $request->user(),
             ),
+            // The reading a player reaches for mid-game: the rulebook, which
+            // is the same PDF for every game and so has a route, and the
+            // background link Control sets per game. A plain closure for the
+            // reason the nav is one - it only changes when Control edits it.
+            'reference' => fn (): array => [
+                'background_url' => $request->user() === null ? null : Game::current()?->background_url,
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

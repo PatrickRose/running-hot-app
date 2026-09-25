@@ -42,6 +42,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ResearchBoardController;
 use App\Http\Controllers\ResearchTableController;
 use App\Http\Controllers\ResearchTreeController;
+use App\Http\Controllers\RulebookController;
 use App\Http\Controllers\RunBoardController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\ShopController;
@@ -76,6 +77,11 @@ Route::post('claim', [CharacterClaimController::class, 'store'])->name('claim.st
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+    // The rulebook itself, for whichever page a player is on when a rule
+    // comes up. The game's background reading is a link Control sets per
+    // game, so it has no route of its own.
+    Route::get('rulebook', RulebookController::class)->name('rulebook');
 
     // Players' own view of the Facilities: the public list everyone may see,
     // plus their own Corporation's defences in full.
@@ -282,6 +288,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 Route::post('games/{game}/finish', [GameController::class, 'finish'])->name('games.finish');
                 Route::post('games/{game}/webhook', [GameController::class, 'updateWebhook'])->name('games.webhook');
+                Route::post('games/{game}/background', [GameController::class, 'updateBackground'])->name('games.background');
 
                 Route::post('games/{game}/discord', [DiscordGuildController::class, 'update'])->name('games.discord');
                 Route::get('games/{game}/discord/connect', [DiscordGuildController::class, 'connect'])
