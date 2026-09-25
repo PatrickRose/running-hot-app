@@ -40,6 +40,10 @@ class StoreFacilityTypeRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:2000'],
             'access_effect' => ['nullable', 'string', 'max:2000'],
             'build_cost' => ['sometimes', 'integer', 'min:0', 'max:1000'],
+            // Every Corporation may build it without researching it. Off for
+            // a type Control invents, which is researched (3.3.1, footnote 9)
+            // until Control says otherwise.
+            'available_from_start' => ['sometimes', 'boolean'],
 
             // Left to Control rather than inferred from the name: a type they
             // invent has to be able to grant slots, storage or a discount too.

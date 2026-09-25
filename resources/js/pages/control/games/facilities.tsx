@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { buildDiscount } from '@/routes/control/corporations';
 import { publishList, store } from '@/routes/control/facilities';
 import { index, show } from '@/routes/control/games';
 import type {
@@ -172,7 +173,11 @@ export default function ControlFacilities({
                         <CardDescription>
                             A requisition is raised during Setup and opens next
                             turn. Build now is the override, and is how a game's
-                            starting Facilities go in.
+                            starting Facilities go in. Leave the cost blank to
+                            charge what the Corporation would pay itself (the
+                            type sheet's price, less any build discount), or put
+                            0 to build it free. CEOs can build their own at that
+                            same price from the Facilities page.
                             <br />
                             Choosing nobody builds a Plot Facility: yours rather
                             than a Corporation's, for the Runners to run
@@ -238,7 +243,8 @@ export default function ControlFacilities({
                                                     key={type.id}
                                                     value={type.id}
                                                 >
-                                                    {type.name}
+                                                    {type.name} —{' '}
+                                                    {type.build_cost} Credits
                                                 </option>
                                             ))}
                                         </select>
@@ -264,12 +270,15 @@ export default function ControlFacilities({
                                         <Label htmlFor="facility-cost">
                                             Build cost
                                         </Label>
+                                        {/* Blank charges the type
+                                            sheet's price; 0 builds it free.
+                                            Players always pay the sheet. */}
                                         <Input
                                             id="facility-cost"
                                             name="cost"
                                             type="number"
                                             min={0}
-                                            defaultValue={0}
+                                            placeholder="Type sheet price"
                                         />
                                         <InputError message={errors.cost} />
                                     </div>
@@ -330,6 +339,55 @@ export default function ControlFacilities({
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4">
+                            {/* MCM's Construction Leader is the 2 seeded
+                                here. Keyed on the value so a poll that
+                                brings a new one back redraws the box. */}
+                            <Form
+                                key={corporation.facility_build_discount}
+                                {...buildDiscount.form({
+                                    game: game.id,
+                                    corporation: corporation.id,
+                                })}
+                                options={{ preserveScroll: true }}
+                                className="flex flex-wrap items-end gap-2"
+                            >
+                                {({ processing, errors }) => (
+                                    <>
+                                        <div className="grid gap-2">
+                                            <Label
+                                                htmlFor={`build-discount-${corporation.id}`}
+                                            >
+                                                Credits off every Facility built
+                                            </Label>
+                                            <Input
+                                                id={`build-discount-${corporation.id}`}
+                                                name="facility_build_discount"
+                                                type="number"
+                                                min={0}
+                                                className="w-28"
+                                                defaultValue={
+                                                    corporation.facility_build_discount ??
+                                                    0
+                                                }
+                                            />
+                                        </div>
+                                        <Button
+                                            type="submit"
+                                            variant="outline"
+                                            disabled={processing}
+                                        >
+                                            Save
+                                        </Button>
+                                        <InputError
+                                            className="w-full"
+                                            message={
+                                                errors.facility_build_discount
+                                            }
+                                        />
+                                    </>
+                                )}
+                            </Form>
+
                             {corporation.facilities.map((facility) => (
                                 <FacilityPanel
                                     key={facility.id}

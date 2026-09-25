@@ -200,6 +200,9 @@ return [
         ],
         [
             'name' => 'McCullough Calibrated Mechanical',
+            // Construction Leader (RMR015/RMR016): 2 Credits off every
+            // Facility MCM builds. Control edits it on the Facilities panel.
+            'facility_build_discount' => 2,
             'facilities' => [
                 ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Attercliffe Laboratories'],
                 ['type' => FacilityTypeBlueprint::RESEARCH, 'name' => 'Darnall Test Range'],

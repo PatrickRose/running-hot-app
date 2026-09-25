@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Actions\PublishFacilityList;
 use App\Enums\CharacterRole;
 use App\Enums\GameStatus;
+use App\Enums\PhaseType;
 use App\Enums\ProtectionKind;
 use App\Enums\ResearchSuit;
 use App\Enums\Tracker;
@@ -26,6 +27,7 @@ use App\Models\TechnologyHolding;
 use App\Models\TechnologyType;
 use App\Models\Turn;
 use App\Models\User;
+use App\Policies\CorporationPolicy;
 use App\Services\Discord\DiscordApi;
 use App\Services\FacilityDefenceService;
 use App\Services\TechnologyService;
@@ -461,6 +463,7 @@ class GamePresenter
                 'description' => $type->description,
                 'access_effect' => $type->access_effect,
                 'build_cost' => $type->build_cost,
+                'available_from_start' => (bool) $type->available_from_start,
                 'physical_slots_granted' => $type->physical_slots_granted,
                 'cyber_slots_granted' => $type->cyber_slots_granted,
                 'technology_capacity_granted' => $type->technology_capacity_granted,
@@ -540,6 +543,67 @@ class GamePresenter
             'own' => $own === null
                 ? null
                 : $this->ownDefences($own, $mayDefend, $turn, $turnNumber, $defence),
+            'requisition' => $own === null || $user === null
+                ? null
+                : $this->requisition($game, $own, $user, $turnNumber),
+        ];
+    }
+
+    /**
+     * The type sheet as a Corporation's players read it, and whether this one
+     * may build (rulebook 3.3.1).
+     *
+     * Every Corporate seat gets the sheet, because what a Facility costs and
+     * does is the whole Corporation's business - and until it was here, the
+     * only way to find out was to ask Control. It lists only the types this
+     * Corporation may build (BuildableFacilityTypes), so a type nobody has
+     * researched yet is not announced to anybody by appearing on it. CEOs are the only ones allowed
+     * to build, so only the CEO gets the form: CorporationPolicy's line.
+     *
+     * The policy is asked directly rather than through the Gate, for the
+     * reason CouncilPresenter asks it directly: the Gate hands Control every
+     * ability, and Control has its own panel with its own overrides on it.
+     *
+     * @return array<string, mixed>
+     */
+    private function requisition(Game $game, Corporation $corporation, User $user, ?int $turnNumber): array
+    {
+        $owned = $corporation->facilities()
+            ->selectRaw('facility_type_id, count(*) as aggregate')
+            ->groupBy('facility_type_id')
+            ->pluck('aggregate', 'facility_type_id');
+
+        return [
+            'corporation_id' => $corporation->id,
+            'credits' => $corporation->credits,
+            'build_discount' => (int) $corporation->facility_build_discount,
+            'can_requisition' => app(CorporationPolicy::class)->requisition($user, $corporation),
+            // The phase rule is RequisitionFacility's and it refuses outside
+            // Setup whatever this says; this is only so the page can say why
+            // before somebody fills the form in.
+            'open' => $game->status === GameStatus::Running
+                && $game->currentPhase()?->type === PhaseType::Setup,
+            'opens_on_turn' => ($turnNumber ?? Facility::FIRST_TURN) + 1,
+            // Only what this Corporation may build: the three every
+            // Corporation starts with and whatever its technologies unlock. A
+            // type it has not researched stays off the sheet entirely.
+            'types' => app(BuildableFacilityTypes::class)->for($corporation)
+                ->map(fn (FacilityType $type): array => [
+                    'id' => $type->id,
+                    'name' => $type->name,
+                    'description' => $type->description,
+                    'access_effect' => $type->access_effect,
+                    'build_cost' => $type->build_cost,
+                    // What this Corporation actually pays, which is the
+                    // sheet's price unless it holds a build discount.
+                    'cost' => $corporation->facilityBuildCost($type),
+                    'physical_slots_granted' => $type->physical_slots_granted,
+                    'cyber_slots_granted' => $type->cyber_slots_granted,
+                    'technology_capacity_granted' => $type->technology_capacity_granted,
+                    'card_move_discount' => $type->card_move_discount,
+                    'grant_scaling_label' => $type->grant_scaling->label(),
+                    'owned' => (int) ($owned[$type->id] ?? 0),
+                ])->all(),
         ];
     }
 
@@ -1199,6 +1263,7 @@ class GamePresenter
                     'cyber_slots' => $totals['cyber_slots'],
                     'technology_capacity_per_facility' => $totals['technology_capacity'],
                     'card_move_discount' => $totals['card_move_discount'],
+                    'facility_build_discount' => (int) $corporation->facility_build_discount,
                     'facilities' => $corporation->facilities
                         ->map(fn (Facility $facility): array => $this->facility($facility, $turnNumber, $totals, $channelKeys))
                         ->all(),

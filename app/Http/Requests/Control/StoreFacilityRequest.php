@@ -33,7 +33,8 @@ class StoreFacilityRequest extends FormRequest
                 Rule::exists('facility_types', 'id')->where('game_id', $game->id),
             ],
             'name' => ['required', 'string', 'max:255'],
-            'cost' => ['sometimes', 'integer', 'min:0', 'max:1000'],
+            // Blank is the type sheet's price; nought is free.
+            'cost' => ['nullable', 'integer', 'min:0', 'max:1000'],
 
             // "requisition" is the rule as written: raised during Setup, opens
             // next turn. "immediate" is the Control override, and is how a

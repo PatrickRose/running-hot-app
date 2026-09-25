@@ -16,19 +16,21 @@ use Illuminate\Validation\ValidationException;
 /**
  * Build a Facility (rulebook 3.3.1).
  *
- * During the Setup Phase, Security takes a requisition slip to their CEO, who
- * signs off and provides the Credits. Facility Control starts the build and the
- * Facility becomes available during the next Setup Phase - so what this records
- * is the turn it opens, not a flag somebody has to flip later.
+ * During the Setup Phase a CEO - the only seat allowed to build Facilities -
+ * spends their Corporation's Credits on one, and it becomes available during
+ * the next Setup Phase. So what this records is the turn it opens, not a flag
+ * somebody has to flip later.
  *
- * The build cost is passed in rather than derived. The rulebook says the CEO
- * provides "the required Credits" without saying what they are, so it is
- * Control's number to set, and a game that gives Facilities away sets zero.
+ * The build cost is passed in rather than derived here, because two callers
+ * name it differently. A CEO requisitioning from /facilities pays the type
+ * sheet's price and nothing else; Control names any price it likes, nought
+ * included, because MCM's Construction Leader is a discount on exactly this and
+ * a game that gives Facilities away sets zero.
  *
  * A Plot Facility goes through {@see buildForControl()} instead, and it is a
  * separate method rather than a null Corporation on this one because none of
- * what makes this a requisition applies to it: nobody raises the slip, nobody
- * signs it and nobody pays for it.
+ * what makes this a requisition applies to it: no CEO builds it and nobody
+ * pays for it.
  */
 class RequisitionFacility
 {
@@ -62,6 +64,16 @@ class RequisitionFacility
 
         // Available during the next Setup phase, which is the next turn.
         $availableFrom = $immediate ? $currentTurn : $currentTurn + 1;
+
+        // By hand rather than left to the unique key, so that a clash reads as
+        // a refusal against the name box instead of a database error - and
+        // here rather than in a controller, because a CEO and Control both
+        // reach it and neither route should carry its own copy of the rule.
+        if ($corporation->facilities()->where('name', $name)->exists()) {
+            throw ValidationException::withMessages([
+                'name' => $corporation->name.' already has a Facility called that.',
+            ]);
+        }
 
         if ($cost > 0 && $corporation->credits < $cost) {
             throw ValidationException::withMessages([

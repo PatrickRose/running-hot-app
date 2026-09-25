@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { destroy, store } from '@/routes/control/facility-types';
+import { destroy, store, update } from '@/routes/control/facility-types';
 import type { FacilityTypeSummary } from '@/types/game';
 
 const SELECT_CLASS =
@@ -46,6 +46,9 @@ export function FacilityTypeCatalogue({
                             </th>
                             <th className="py-2 pr-4 text-right font-medium">
                                 Built
+                            </th>
+                            <th className="py-2 pr-4 font-medium">
+                                Who can build
                             </th>
                             <th className="py-2 font-medium" />
                         </tr>
@@ -104,6 +107,38 @@ export function FacilityTypeCatalogue({
                                 <td className="py-2 pr-4 text-right font-mono tabular-nums">
                                     {type.facility_count}
                                 </td>
+                                <td className="py-2 pr-4">
+                                    {/* Everyone, or only a Corporation whose
+                                        technology unlocks it. Control builds
+                                        any type either way. */}
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        aria-label={
+                                            type.available_from_start
+                                                ? `Make ${type.name} need researching`
+                                                : `Let every Corporation build ${type.name}`
+                                        }
+                                        onClick={() =>
+                                            router.patch(
+                                                update.url({
+                                                    game: gameId,
+                                                    facilityType: type.id,
+                                                }),
+                                                {
+                                                    name: type.name,
+                                                    available_from_start:
+                                                        !type.available_from_start,
+                                                },
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        {type.available_from_start
+                                            ? 'Everyone'
+                                            : 'Once researched'}
+                                    </Button>
+                                </td>
                                 <td className="py-2 text-right">
                                     {type.in_use ? (
                                         <Badge variant="outline">In use</Badge>
@@ -130,7 +165,7 @@ export function FacilityTypeCatalogue({
                         {types.length === 0 && (
                             <tr>
                                 <td
-                                    colSpan={7}
+                                    colSpan={8}
                                     className="py-4 text-muted-foreground"
                                 >
                                     No Facility types yet.
