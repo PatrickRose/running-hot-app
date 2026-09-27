@@ -1370,8 +1370,8 @@ function SecurityDesk({ run }: { run: RunView }) {
             {!card.settled && (
                 <div className="flex flex-col gap-2">
                     <p className="text-sm">
-                        {card.activation_cost === null
-                            ? 'Switch it on.'
+                        {(card.activation_cost ?? 0) === 0
+                            ? 'Switching it on costs nothing.'
                             : `Switching it on costs ${card.activation_cost}.`}
                     </p>
                     <PaymentSlider

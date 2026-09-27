@@ -711,7 +711,7 @@ class RunEngine
 
         /** @var FacilityProtectionCard $card */
         $card = $cursor->card;
-        $cost = ActivationCost::for($card->kind, $this->activeCyberCards($run));
+        $cost = $this->activationCost($run, $card);
 
         $payment ??= new SecurityPayment(0, 0);
 
@@ -2860,6 +2860,19 @@ class RunEngine
             ->concat($cards->where('kind', ProtectionKind::Cyber))
             ->values()
             ->all();
+    }
+
+    /**
+     * What switching this card on would cost Security right now.
+     *
+     * Public because the run screen has to quote it *before* Security decides:
+     * a cyber card's price is half of what the Activate control says, and the
+     * Alerts slider runs to it. Quoted here rather than again in the presenter,
+     * so the number shown and the number charged are the same sum.
+     */
+    public function activationCost(Run $run, FacilityProtectionCard $card): int
+    {
+        return ActivationCost::for($card->kind, $this->activeCyberCards($run));
     }
 
     /**
