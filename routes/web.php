@@ -32,6 +32,7 @@ use App\Http\Controllers\Control\TrackerController;
 use App\Http\Controllers\CouncilBallotController;
 use App\Http\Controllers\CouncilChairController;
 use App\Http\Controllers\CouncilController;
+use App\Http\Controllers\CreditTransferController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiceRollController;
 use App\Http\Controllers\EquipmentController;
@@ -137,6 +138,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // exchange is settled at the table, as a research point trade is.
     Route::post('equipment/give', EquipmentTransferController::class)
         ->name('equipment.give');
+
+    // One player paying another: a Runner or Freelancer out of their own
+    // Credits, a CEO out of their Corporation's. Only the Credits move.
+    Route::post('credits/give', CreditTransferController::class)
+        ->name('credits.give');
 
     // A pool of d6s and d8s, rolled on the server and shared with Control. The
     // seat is named in the request because a player may hold two, and Control
