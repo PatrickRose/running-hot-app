@@ -185,6 +185,21 @@ class PhaseSchedulingTest extends TestCase
             && str_contains((string) $request['content'], 'Setup phase has begun'));
     }
 
+    public function test_the_announcement_tags_everyone_as_the_running_hot_logo(): void
+    {
+        Http::fake();
+
+        $game = Game::factory()->create([
+            'discord_webhook_url' => 'https://discord.com/api/webhooks/1/abc',
+        ]);
+
+        app(TurnEngine::class)->start($game);
+
+        Http::assertSent(fn (Request $request): bool => str_starts_with((string) $request['content'], '@everyone ')
+            && $request['allowed_mentions'] === ['parse' => ['everyone']]
+            && $request['avatar_url'] === url('images/running-hot.webp'));
+    }
+
     public function test_each_game_announces_to_its_own_channel(): void
     {
         Http::fake();

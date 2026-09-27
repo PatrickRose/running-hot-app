@@ -28,6 +28,7 @@ class SendDiscordAnnouncement implements ShouldQueue
         public string $webhookUrl,
         public string $content,
         public array $embeds = [],
+        public ?string $avatarUrl = null,
     ) {}
 
     public function handle(): void
@@ -35,6 +36,12 @@ class SendDiscordAnnouncement implements ShouldQueue
         $payload = array_filter([
             'content' => $this->content,
             'embeds' => $this->embeds !== [] ? $this->embeds : null,
+            // Discord fetches the avatar itself, so a dev server it cannot
+            // reach simply posts with the webhook's own picture instead.
+            'avatar_url' => $this->avatarUrl,
+            // Only @everyone is allowed to ping: a character name that happens
+            // to look like a role or user mention must not notify anybody.
+            'allowed_mentions' => ['parse' => ['everyone']],
         ], fn ($value) => $value !== null);
 
         try {
