@@ -1431,6 +1431,47 @@ export type RunView = {
     log: RunEventView[];
 };
 
+/**
+ * A run that has ended, as Control's run history reads it.
+ *
+ * Runners are listed as they set out, without their Wounds or Tags: those are
+ * what the character carries now, not what they carried on that run.
+ */
+export type RunHistoryEntry = {
+    id: number;
+    status: 'succeeded' | 'failed';
+    status_label: string;
+    facility: {
+        id: number;
+        name: string;
+        facility_type: string;
+        corporation: Faction;
+        /** Built by Control for the Runners, owned by no Corporation. */
+        is_plot: boolean;
+    };
+    alerts: number;
+    cards_passed: number;
+    active_cards_passed: number;
+    ignored_end_the_run: number;
+    started_at: string | null;
+    ended_at: string | null;
+    runners: {
+        character_id: number;
+        name: string;
+        is_leader: boolean;
+        gang: Faction | null;
+        left: boolean;
+        left_reason: string | null;
+    }[];
+    accesses: RunAccessTaken[];
+    log: RunEventView[];
+};
+
+export type RunHistoryTurn = {
+    number: number;
+    runs: RunHistoryEntry[];
+};
+
 /** One Equipment card, as a run describes it (rulebook 3.4.1). */
 export type RunEquipmentCard = {
     card_type_id: number;

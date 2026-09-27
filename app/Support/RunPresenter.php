@@ -95,20 +95,7 @@ class RunPresenter
 
         return [
             'taken' => $spent
-                ->map(fn (RunAccess $access): array => [
-                    'id' => $access->id,
-                    'character_id' => $access->character_id,
-                    'character' => $access->character->name,
-                    'kind' => $access->kind->value,
-                    'kind_label' => $access->kind->label(),
-                    'action' => $access->action?->value,
-                    'action_label' => $access->action?->label(),
-                    'technology' => $access->technologyHolding?->technologyType->name,
-                    'successes' => $access->successes,
-                    'outcome' => $access->outcome,
-                    'discount_percent' => $access->discount_percent,
-                    'credits' => $access->credits,
-                ])
+                ->map(fn (RunAccess $access): array => $this->accessTaken($access))
                 ->all(),
 
             // Who still has one, so the page can offer it to them rather than
@@ -142,6 +129,29 @@ class RunPresenter
                 ])
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * One access a Runner spent, as both the run screen and the history read it.
+     *
+     * @return array<string, mixed>
+     */
+    private function accessTaken(RunAccess $access): array
+    {
+        return [
+            'id' => $access->id,
+            'character_id' => $access->character_id,
+            'character' => $access->character->name,
+            'kind' => $access->kind->value,
+            'kind_label' => $access->kind->label(),
+            'action' => $access->action?->value,
+            'action_label' => $access->action?->label(),
+            'technology' => $access->technologyHolding?->technologyType->name,
+            'successes' => $access->successes,
+            'outcome' => $access->outcome,
+            'discount_percent' => $access->discount_percent,
+            'credits' => $access->credits,
         ];
     }
 
@@ -961,6 +971,114 @@ class RunPresenter
                 ])
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * Every run in the game that has ended, for Control, newest turn first.
+     *
+     * The run screen is this turn's and nothing else, so a run from turn 3 was
+     * unreachable by turn 5 - and "who hit Attercliffe Yard, and did they get
+     * in?" is exactly what Control is asked three turns later. Every turn is
+     * here, the current one included once its runs are over, because a run
+     * that ended ten minutes ago is as much history as one from last night.
+     *
+     * Control has no secrets kept from it, so the log is the privileged one,
+     * kit and all. Runners are read as they set out - the leader is whoever
+     * held it at the end - and deliberately without their Wounds or Tags,
+     * which are what the character carries now rather than what they carried
+     * on that run.
+     *
+     * @return array<int, array{number: int, runs: array<int, array<string, mixed>>}>
+     */
+    public function history(Game $game): array
+    {
+        $runs = Run::query()
+            ->where('game_id', $game->id)
+            ->whereIn('status', [RunStatus::Succeeded, RunStatus::Failed])
+            ->with([
+                'turn',
+                'facility.corporation',
+                'facility.facilityType',
+                'participants.character.gang',
+                'events.character',
+                'events.card.cardType',
+                'diceRolls',
+                'accesses.character',
+                'accesses.technologyHolding.technologyType',
+            ])
+            ->get();
+
+        return $runs
+            // One comparator over a tuple rather than sortBy() given an array,
+            // which reads its closures as comparators and has sorted by
+            // nothing here before. Newest turn first; within a turn, by
+            // Facility and then the order the groups went in.
+            ->sort(fn (Run $a, Run $b): int => [
+                -$a->turn->number,
+                $a->facility_id,
+                $a->order_index ?? PHP_INT_MAX,
+                $a->id,
+            ] <=> [
+                -$b->turn->number,
+                $b->facility_id,
+                $b->order_index ?? PHP_INT_MAX,
+                $b->id,
+            ])
+            ->groupBy(fn (Run $run): int => $run->turn->number)
+            ->map(fn (mixed $turn, int $number): array => [
+                'number' => $number,
+                'runs' => $turn
+                    ->map(fn (Run $run): array => $this->historic($run))
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One ended run, as the history reads it.
+     *
+     * @return array<string, mixed>
+     */
+    private function historic(Run $run): array
+    {
+        return [
+            'id' => $run->id,
+            'status' => $run->status->value,
+            'status_label' => $run->status->label(),
+            'facility' => [
+                'id' => $run->facility->id,
+                'name' => $run->facility->name,
+                'facility_type' => $run->facility->facilityType->name,
+                'corporation' => FactionBadge::for($run->facility->ownerName()),
+                'is_plot' => $run->facility->isPlotFacility(),
+            ],
+            'alerts' => $run->alerts,
+            'cards_passed' => $run->cards_passed,
+            'active_cards_passed' => $run->active_cards_passed,
+            'ignored_end_the_run' => $run->ignored_end_the_run,
+            'started_at' => $run->started_at?->toIso8601String(),
+            'ended_at' => $run->ended_at?->toIso8601String(),
+            'runners' => $run->participants
+                ->map(fn (RunParticipant $participant): array => [
+                    'character_id' => $participant->character_id,
+                    'name' => $participant->character->name,
+                    'is_leader' => $participant->character_id === $run->run_leader_character_id,
+                    'gang' => $participant->character->gang === null
+                        ? null
+                        : FactionBadge::for($participant->character->gang->name),
+                    'left' => ! $participant->isActive(),
+                    'left_reason' => $participant->left_reason?->label(),
+                ])
+                ->values()
+                ->all(),
+            'accesses' => $run->accesses
+                ->map(fn (RunAccess $access): array => $this->accessTaken($access))
+                ->values()
+                ->all(),
+            'log' => $this->log($run, privileged: true, seesKit: true),
         ];
     }
 

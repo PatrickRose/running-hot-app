@@ -263,6 +263,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | What each side of a run may see | `App\Support\RunPresenter` |
 | Who may do what on a run | `App\Policies\RunPolicy` |
 | The run screen players work from | `App\Http\Controllers\RunController`, `resources/js/pages/runs.tsx` |
+| Every ended run from every turn, for Control | `RunPresenter::history()`, `App\Http\Controllers\Control\RunHistoryController`, `resources/js/pages/control/games/runs.tsx` |
 | Run arithmetic: ordering, alerts, strength, dice | `App\Support\Runs\*` |
 | What a successful run takes out of a Facility | `App\Enums\RunAccessKind`, `TechnologyAccessAction`, `App\Support\Runs\AccessCheck` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |

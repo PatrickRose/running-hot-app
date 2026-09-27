@@ -49,6 +49,7 @@ import type {
     RunCard,
     RunConsequenceEffect,
     RunEquipmentCard,
+    RunEventView,
     RunHand,
     RunParticipantView,
     RunUndecidedAccess,
@@ -309,7 +310,7 @@ export function RunPanel({ run }: { run: RunView }) {
                         {run.status === 'succeeded' && <AccessDesk run={run} />}
 
                         <Party run={run} active={active} />
-                        <RunLog run={run} />
+                        <RunLog log={run.log} />
                     </CardContent>
                 </CollapsibleContent>
             </Collapsible>
@@ -2513,21 +2514,21 @@ function Party({
  * are here rather than a verdict for the same reason: a player who can see six
  * d8s that came up 1,2,2,3,4,4 will accept losing the check.
  */
-function RunLog({ run }: { run: RunView }) {
+export function RunLog({ log }: { log: RunEventView[] }) {
     const [open, setOpen] = useState(false);
-    const lines = open ? run.log : run.log.slice(-4);
+    const lines = open ? log : log.slice(-4);
 
     return (
         <section className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-2">
                 <h3 className="font-medium">What happened</h3>
-                {run.log.length > 4 && (
+                {log.length > 4 && (
                     <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setOpen((was) => !was)}
                     >
-                        {open ? 'Show the last few' : `All ${run.log.length}`}
+                        {open ? 'Show the last few' : `All ${log.length}`}
                     </Button>
                 )}
             </div>
@@ -2556,7 +2557,7 @@ function RunLog({ run }: { run: RunView }) {
                         )}
                     </li>
                 ))}
-                {run.log.length === 0 && (
+                {log.length === 0 && (
                     <li className="text-sm text-muted-foreground">
                         Nothing yet.
                     </li>

@@ -22,6 +22,7 @@ use App\Http\Controllers\Control\ResearchCardController;
 use App\Http\Controllers\Control\ResearchController;
 use App\Http\Controllers\Control\ResearchEquationController;
 use App\Http\Controllers\Control\ResearchSessionController;
+use App\Http\Controllers\Control\RunHistoryController;
 use App\Http\Controllers\Control\ShopController as ControlShopController;
 use App\Http\Controllers\Control\StatsController;
 use App\Http\Controllers\Control\StockCertificateController as ControlStockCertificateController;
@@ -323,6 +324,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 // What players have rolled for Control to read.
                 Route::get('games/{game}/dice', [ControlDiceRollController::class, 'index'])
                     ->name('dice.index');
+
+                // Every run that has ended, from every turn. The run screen only
+                // ever shows this one, and Control is asked about the others.
+                Route::get('games/{game}/runs', [RunHistoryController::class, 'index'])
+                    ->name('runs.index');
 
                 Route::post('games/{game}/trackers', [TrackerController::class, 'store'])->name('trackers.store');
                 Route::post('games/{game}/characters/{character}/remove-tag', [TrackerController::class, 'removeTag'])
