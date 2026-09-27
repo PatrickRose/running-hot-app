@@ -15,6 +15,7 @@ use App\Models\Character;
 use App\Models\ControlMember;
 use App\Models\Corporation;
 use App\Models\Facility;
+use App\Models\FacilityCardActivation;
 use App\Models\FacilityProtectionCard;
 use App\Models\FacilityType;
 use App\Models\Game;
@@ -867,6 +868,45 @@ class PlayersDriveRunsTest extends TestCase
 
         $this->assertTrue($runnersLog->every(fn (string $line): bool => ! str_contains($line, 'Roboscorpion')));
         $this->assertTrue($securityLog->contains(fn (string $line): bool => str_contains($line, 'Roboscorpion')));
+    }
+
+    /**
+     * A cyber card costs the cyber cards already Active, and Alerts are
+     * temporary Credits that pay for it - so Security has to be told the price
+     * before deciding, or there is nothing for the Alerts to be put against and
+     * the whole cost falls on the budget.
+     */
+    public function test_security_may_pay_for_a_cyber_activation_with_alerts(): void
+    {
+        [, $leader] = $this->runner();
+        $security = $this->seat(CharacterRole::Security);
+
+        // Two cyber cards: the second is already on this turn, which is what
+        // puts a price of 1 on the first.
+        $this->card(ProtectionKind::Cyber, 2);
+        $warmed = $this->facility->protectionCards()->where('position', 2)->sole();
+        FacilityCardActivation::factory()->active()->create([
+            'turn_id' => $this->turn->id,
+            'facility_protection_card_id' => $warmed->id,
+        ]);
+
+        $run = $this->begun($leader);
+        $run->forceFill(['alerts' => $run->alerts + 3])->save();
+        $alertsBefore = $run->refresh()->alertsAvailable();
+
+        $this->assertSame(1, $this->boardFor($security)['defending'][0]['card']['activation_cost']);
+
+        $this->actingAs($security)
+            ->post(route('runs.activate', $run), [
+                'activating' => true,
+                'alerts_to_spend' => 1,
+                'budget_to_spend' => 0,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue(app(RunEngine::class)->cursor($run->refresh())->cardIsActive());
+        $this->assertSame($alertsBefore - 1, $run->alertsAvailable());
+        $this->assertSame(0, $this->facility->stateForTurn($this->turn)->security_budget_spent);
     }
 
     /**

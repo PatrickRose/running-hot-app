@@ -790,7 +790,13 @@ class RunPresenter
             'settled' => $cursor->activationSettled(),
             'boosts' => $activation === null ? 0 : $activation->boosts,
             'next_boost_cost' => $activation === null ? 1 : $activation->nextBoostCost(),
-            'activation_cost' => $activation?->activation_cost,
+            // What it cost once settled, and what it would cost until then:
+            // an unsettled cyber card has no activation row yet, and a null
+            // here hid the Alerts slider and sent every activation to the
+            // budget whatever Security wanted to spend.
+            'activation_cost' => $activation === null
+                ? $this->engine->activationCost($run, $card)
+                : $activation->activation_cost,
 
             // What the card gains before its printed strength is even named,
             // so Security can see the bonuses while typing the number off the
