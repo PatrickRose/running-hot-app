@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { AppearanceToggle } from '@/components/appearance-toggle';
+import { NavControl } from '@/components/nav-control';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -140,6 +141,7 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={items} />
+                <NavControl />
                 <NavFooter items={referenceItems} className="mt-auto" />
             </SidebarContent>
 

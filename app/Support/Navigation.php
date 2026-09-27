@@ -131,4 +131,30 @@ class Navigation
             $seats->isNotEmpty() ? 'dice' : null,
         ]));
     }
+
+    /**
+     * What the sidebar's Control group links to, or null for somebody who is
+     * Control of nothing.
+     *
+     * Every Control page names a game, so the group needs one to point at. It
+     * is the game the viewer is reading - the one in the URL on a Control page,
+     * the current one everywhere else - and only if they are Control *of* it:
+     * a seat on Saturday's game is no key to Sunday's panel. Control of some
+     * other game still gets the group, holding only the list of games, since
+     * that is where their own seat is reached from.
+     *
+     * @return array{game: array{id: int, name: string}|null}|null
+     */
+    public function controlFor(?Game $game, ?User $user): ?array
+    {
+        if ($user === null || ! $user->isControl()) {
+            return null;
+        }
+
+        return [
+            'game' => $game !== null && $user->isControlFor($game)
+                ? ['id' => $game->id, 'name' => $game->name]
+                : null,
+        ];
+    }
 }

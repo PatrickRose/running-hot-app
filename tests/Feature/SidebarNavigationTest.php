@@ -220,4 +220,55 @@ class SidebarNavigationTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('nav', ['dashboard', 'facilities', 'runs', 'equipment', 'cards', 'shop', 'dice']));
     }
+
+    public function test_a_player_is_not_offered_the_control_pages(): void
+    {
+        $user = $this->seat(CharacterRole::Runner);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertInertia(fn ($page) => $page->where('control', null));
+    }
+
+    public function test_control_is_offered_the_control_pages_of_the_game_it_runs(): void
+    {
+        $user = User::factory()->create();
+        ControlMember::factory()->create(['game_id' => $this->game->id, 'user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertInertia(fn ($page) => $page
+                ->where('control.game.id', $this->game->id)
+                ->where('control.game.name', $this->game->name));
+    }
+
+    /**
+     * On a Control page the links follow the game in the URL, so Control
+     * setting up next week's game is not sent back to tonight's.
+     */
+    public function test_the_control_links_follow_the_game_being_read(): void
+    {
+        $user = User::factory()->create();
+        ControlMember::factory()->create(['game_id' => $this->game->id, 'user_id' => $user->id]);
+
+        $next = Game::factory()->create(['status' => GameStatus::Draft]);
+        ControlMember::factory()->create(['game_id' => $next->id, 'user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->get(route('control.dice.index', $next))
+            ->assertInertia(fn ($page) => $page->where('control.game.id', $next->id));
+    }
+
+    /**
+     * A seat on one game's Control team is no key to another's panel, so the
+     * group holds only the list of games.
+     */
+    public function test_control_of_another_game_is_offered_only_the_list_of_games(): void
+    {
+        $user = User::factory()->create();
+        $other = Game::factory()->create(['status' => GameStatus::Draft]);
+        ControlMember::factory()->create(['game_id' => $other->id, 'user_id' => $user->id]);
+
+        $this->assertSame(['game' => null], app(Navigation::class)->controlFor($this->game, $user));
+    }
 }

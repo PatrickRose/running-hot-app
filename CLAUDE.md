@@ -2182,6 +2182,15 @@ and the query never runs on a poll. `undefined` therefore means "a poll did not
 re-send it" rather than "none", so the sidebar falls back to drawing everything
 rather than blanking itself mid-poll.
 
+**Control's pages are a second, expandable group underneath**, drawn by
+`NavControl` off a shared `control` prop that `Navigation::controlFor()`
+answers: null for somebody who is Control of nothing, otherwise the game the
+links point at. That is the game in the URL on a Control page and
+`Game::current()` everywhere else, and only if the viewer is Control *of* it —
+Control of some other game gets the group holding just the list of games. The
+entry itself links to the game's Control panel so it still works with the
+sidebar collapsed to icons, where the sub-list cannot be drawn.
+
 Dashboard and Facilities are everybody's — the Facility list is posted in a
 Discord channel the whole game reads, and a Runner picks their target off it.
 Everything else follows the seat: Runs and Shop to both sides, Research to any
