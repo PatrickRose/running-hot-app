@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Actions\SeedResearchDecks;
 use App\Enums\EquationSide;
+use App\Enums\FacilityGrantScaling;
 use App\Enums\ResearchEquationStatus;
 use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
@@ -59,11 +60,32 @@ class ResearchTableService
     ) {}
 
     /**
-     * Cards a Corporation holds between turns (rulebook 3.2.1).
+     * Cards a Corporation with no Research Facility holds between turns
+     * (rulebook 3.2.1).
      */
     public function handSize(): int
     {
         return max(0, (int) config('running_hot.research.hand_size', 5));
+    }
+
+    /**
+     * Cards this Corporation holds between turns.
+     *
+     * The Research Facility's own effect: "your hand size is increased by one.
+     * You receive an additional card at 2, 3, 5, 8 etc Facilities." Only the
+     * open ones count, as with every other Facility effect - one still being
+     * built is not yours yet.
+     */
+    public function handSizeFor(Corporation $corporation): int
+    {
+        $turn = $corporation->game->currentTurn();
+
+        $researchFacilities = $corporation->facilities()
+            ->availableOnTurn($turn?->number)
+            ->whereHas('facilityType', fn ($query) => $query->where('key', FacilityTypeBlueprint::RESEARCH))
+            ->count();
+
+        return $this->handSize() + FacilityGrantScaling::Thresholds->total(1, $researchFacilities);
     }
 
     /**
@@ -690,7 +712,7 @@ class ResearchTableService
     private function drawUp(ResearchSession $session, Corporation $corporation): bool
     {
         $held = $corporation->researchCards()->inZone(ResearchZone::Hand)->count();
-        $wanted = $this->handSize() - $held;
+        $wanted = $this->handSizeFor($corporation) - $held;
 
         if ($wanted <= 0) {
             return true;

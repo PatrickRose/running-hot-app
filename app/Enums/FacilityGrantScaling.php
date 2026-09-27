@@ -18,16 +18,31 @@ enum FacilityGrantScaling: string
     case Thresholds = 'thresholds';
 
     /**
-     * The counts at which a stepping effect grows.
+     * The first count at which a stepping effect grows.
      *
-     * The briefings give 2, 3, 5 and 8 and then say "etc", which continues the
-     * Fibonacci run those four are the start of. 13 and 21 are that reading
-     * rather than anything written down, and a game reaching thirteen Factories
-     * has bigger questions than this list.
-     *
-     * @var array<int, int>
+     * The briefings give 2, 3, 5 and 8 and then say "etc". The gaps between
+     * them are 1, 2, 3, so the run carries on growing by one more each step -
+     * 12, 17, 23 - which is 2 plus the triangular numbers. It is the designer's
+     * ruling rather than a reading: those four are also the start of the
+     * Fibonacci run, and 13 is where the two part company.
      */
-    public const THRESHOLDS = [2, 3, 5, 8, 13, 21];
+    public const FIRST_THRESHOLD = 2;
+
+    /**
+     * The counts at which a stepping effect grows, up to and including $count.
+     *
+     * @return array<int, int>
+     */
+    public static function thresholdsUpTo(int $count): array
+    {
+        $thresholds = [];
+
+        for ($step = 0, $threshold = self::FIRST_THRESHOLD; $threshold <= $count; $threshold += ++$step) {
+            $thresholds[] = $threshold;
+        }
+
+        return $thresholds;
+    }
 
     public function label(): string
     {
@@ -49,10 +64,7 @@ enum FacilityGrantScaling: string
 
         return match ($this) {
             self::PerFacility => $base * $count,
-            self::Thresholds => $base + count(array_filter(
-                self::THRESHOLDS,
-                fn (int $threshold): bool => $count >= $threshold,
-            )),
+            self::Thresholds => $base + count(self::thresholdsUpTo($count)),
         };
     }
 }

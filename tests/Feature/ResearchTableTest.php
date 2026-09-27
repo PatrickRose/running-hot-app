@@ -10,6 +10,8 @@ use App\Enums\ResearchSuit;
 use App\Enums\ResearchZone;
 use App\Enums\Tracker;
 use App\Models\Corporation;
+use App\Models\Facility;
+use App\Models\FacilityType;
 use App\Models\Game;
 use App\Models\ResearchCard;
 use App\Models\ResearchEquation;
@@ -19,6 +21,7 @@ use App\Models\TrackerAdjustment;
 use App\Services\ResearchTableService;
 use App\Services\TurnEngine;
 use App\Support\CardMarking;
+use App\Support\FacilityTypeBlueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -86,6 +89,40 @@ class ResearchTableTest extends TestCase
         // Twelve cards each, five of them dealt out.
         $this->assertSame(7, $this->table()->deckCount($this->game, $this->gordon));
         $this->assertSame(6, $this->table()->deckCount($this->game, null));
+    }
+
+    public function test_research_facilities_raise_the_hand_size_in_steps(): void
+    {
+        $this->assertSame(5, $this->table()->handSizeFor($this->gordon));
+
+        // "Increased by one ... an additional card at 2, 3, 5, 8 etc".
+        $this->researchFacilities($this->gordon, 1);
+        $this->assertSame(6, $this->table()->handSizeFor($this->gordon));
+
+        $this->researchFacilities($this->gordon, 2);
+        $this->assertSame(8, $this->table()->handSizeFor($this->gordon));
+
+        $this->researchFacilities($this->gordon, 1);
+        $this->assertSame(8, $this->table()->handSizeFor($this->gordon));
+
+        $this->assertSame(5, $this->table()->handSizeFor($this->ant));
+    }
+
+    public function test_a_research_facility_still_building_does_not_raise_the_hand_size(): void
+    {
+        $this->researchFacilities($this->gordon, 1, buildingUntilTurn: 2);
+
+        $this->assertSame(5, $this->table()->handSizeFor($this->gordon));
+    }
+
+    public function test_dealing_draws_each_corporation_up_to_its_own_hand_size(): void
+    {
+        $this->researchFacilities($this->gordon, 2);
+
+        $this->table()->openSession($this->game);
+
+        $this->assertCount(7, $this->table()->hand($this->gordon));
+        $this->assertCount(5, $this->table()->hand($this->ant));
     }
 
     public function test_the_action_phase_deals_a_sitting_of_its_own(): void
@@ -555,5 +592,18 @@ class ResearchTableTest extends TestCase
             ->orderBy('order')
             ->firstOrFail()
             ->corporation;
+    }
+
+    private function researchFacilities(Corporation $corporation, int $count, int $buildingUntilTurn = Facility::FIRST_TURN): void
+    {
+        /** @var FacilityType $type */
+        $type = $this->game->facilityTypes()->where('key', FacilityTypeBlueprint::RESEARCH)->sole();
+
+        Facility::factory()
+            ->count($count)
+            ->for($corporation)
+            ->for($type)
+            ->buildingUntilTurn($buildingUntilTurn)
+            ->create();
     }
 }

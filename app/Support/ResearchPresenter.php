@@ -63,7 +63,7 @@ class ResearchPresenter
         return [
             'turn' => $game->currentTurn()?->number,
             'suits' => $this->suits(),
-            'hand_size' => $this->table->handSize(),
+            'hand_size' => $own === null ? $this->table->handSize() : $this->table->handSizeFor($own),
             'pool_size' => $this->table->poolSize(),
             // Public: who is at the table, in what order, and whose turn it is.
             'session' => $session === null ? null : $this->session($session, $game, $own),
