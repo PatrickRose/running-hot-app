@@ -1,4 +1,4 @@
-import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { Head, Link, router, usePage, usePoll } from '@inertiajs/react';
 import { useState } from 'react';
 import { CharacterLogo } from '@/components/character-logo';
 import { CharacterStatsForm } from '@/components/character-stats-form';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { removeTag } from '@/routes/control/characters';
 import { index, show } from '@/routes/control/games';
+import { index as logIndex } from '@/routes/control/log';
 import type {
     CharacterSubject,
     GameSummary,
@@ -463,7 +464,13 @@ export default function ControlGameStats({
                         <CardDescription>
                             The last {adjustments.length} tracker movements.
                             This is how Control answers "why did that number
-                            change?" three turns later.
+                            change?" three turns later.{' '}
+                            <Link
+                                href={logIndex(game.id)}
+                                className="underline underline-offset-4"
+                            >
+                                See the full log
+                            </Link>
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="overflow-x-auto">

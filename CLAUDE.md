@@ -244,6 +244,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 |---|---|
 | Phase transitions, pause/resume/extend | `App\Services\TurnEngine` |
 | Tracker writes and the audit ledger | `App\Services\TrackerService` |
+| The whole ledger, paged and filtered, for Control | `App\Support\GameLogPresenter`, `App\Http\Controllers\Control\GameLogController`, `resources/js/pages/control/games/log.tsx` |
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | The shop's list, its stock, and what a purchase moves | `App\Services\ShopService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
