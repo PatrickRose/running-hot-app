@@ -40,7 +40,7 @@ class EquipmentController extends Controller
 {
     public function __invoke(Request $request, GamePresenter $presenter, StockCertificatePresenter $certificates): Response
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
         $user = $request->user();
 
         return Inertia::render('equipment', [

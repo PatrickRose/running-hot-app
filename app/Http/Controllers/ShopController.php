@@ -33,7 +33,7 @@ class ShopController extends Controller
 
     public function index(Request $request, GamePresenter $game, ShopPresenter $shop): Response
     {
-        $current = Game::current();
+        $current = Game::current($request->user());
 
         return Inertia::render('shop', [
             'game' => $current === null ? null : $game->summary($current),

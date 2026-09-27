@@ -30,7 +30,7 @@ trait ResolvesResearchCorporation
      */
     protected function researchGame(): ?Game
     {
-        return Game::current();
+        return Game::current($this->user());
     }
 
     protected function researchCorporation(): ?Corporation

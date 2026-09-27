@@ -83,12 +83,14 @@ class PlayerCardListTest extends TestCase
                 ->has('cards.equipment.0.effect'));
     }
 
-    public function test_somebody_holding_no_seat_may_still_read_it(): void
+    public function test_somebody_holding_no_seat_is_shown_no_game(): void
     {
         $this->actingAs(User::factory()->create())
             ->get(route('cards'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->has('cards.protection'));
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('game', null)
+                ->where('cards', null));
     }
 
     public function test_it_reads_the_same_before_the_game_starts(): void

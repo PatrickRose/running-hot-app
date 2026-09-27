@@ -21,7 +21,7 @@ class RunBoardController extends Controller
 {
     public function __invoke(Request $request, GamePresenter $game, RunPresenter $runs): Response
     {
-        $current = Game::current();
+        $current = Game::current($request->user());
 
         return Inertia::render('runs', [
             'game' => $current === null ? null : $game->summary($current),

@@ -1306,7 +1306,7 @@ Three card families, all real data from the game's own card sheet, all seeded pe
 
 **The artwork directory is read once per request, not once per card.** Three hundred cards against four extensions is the better part of a thousand `stat` calls a page, and worst on a checkout with no artwork at all. `CardImage` lists the directory once and answers from memory, which also makes lower-case file names resolve and lets a `webp` supersede a `png` by extension rather than by directory order. Tests that write artwork must call `CardImage::flush()` — `TestCase` does it for every test — and must never write over a real code: the game's artwork is committed, so a test cleaning up after itself would delete it. One did.
 
-**Every player reads the Protection Card and Equipment lists at `/cards`**, and that is the designer's ruling. The shop still keeps the Protection Card *counter* to the Corporate seats, but the printed list is not what 3.4.2 keeps Secret: which cards stand in which Facility is, and so is how many. So `GamePresenter::publicCardList()` sends the cards as printed and leaves off `installed_count` — copies standing across the game's Facilities is reconnaissance by arithmetic — and Control's `notes`. Technologies are not on it at all: a tech tree is its Corporation's, on `/research`. It is in the sidebar for anybody signed in, a seat or no seat, as the Facility list is.
+**Every player reads the Protection Card and Equipment lists at `/cards`**, and that is the designer's ruling. The shop still keeps the Protection Card *counter* to the Corporate seats, but the printed list is not what 3.4.2 keeps Secret: which cards stand in which Facility is, and so is how many. So `GamePresenter::publicCardList()` sends the cards as printed and leaves off `installed_count` — copies standing across the game's Facilities is reconnaissance by arithmetic — and Control's `notes`. Technologies are not on it at all: a tech tree is its Corporation's, on `/research`. It is in the sidebar for anybody holding a seat in the game, as the Facility list is; somebody in no game is shown none (see *A game off the clock*).
 
 **Owning copies is modelled; buying them is not.** `protection_card_holdings` is a count per Corporation per card, and it is what caps how far a card stretches: one copy per Facility, so four copies of Security Team defend four Facilities and no more. `FacilityDefenceService::install()` is the only place a copy leaves a hand and `remove()` the only place one comes back — a copy in a Facility is a row in `facility_protection_cards`, so the hand plus the installed copies is still the briefing's count. Installing with none left is refused; Control raises the count first.
 
@@ -2284,6 +2284,16 @@ Saturday's game up mid-session would pull tonight's out from under the table it
 is being played on. Past that it is simply the newest game, which is the one
 coming rather than the one gone — a Draft over last night's Finished, because
 what a player wants before a session is the game they are about to play.
+
+**And only among the games the reader is in.** `Game::current($user)` looks
+only at games where they have claimed a character or hold a Control seat, so
+somebody signed in to nothing - their seat is in next month's game, or they are
+on no roster at all - gets no game rather than whichever one is newest, with
+its clock in their header. Account-wide Control is in every game; nobody signed
+in is in none. That reaches every page hanging off the lookup, the shared
+`phase`, `standing`, `nav` and `reference` props included, and `/cards` with
+them: the card list is still readable by any seat, but not by somebody holding
+none.
 
 **A seat is a fact about the roster; acting is a question about the clock.**
 `CouncilService::hasSeat()` used to answer no for a game that was not running,

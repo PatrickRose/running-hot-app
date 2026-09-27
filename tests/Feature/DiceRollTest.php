@@ -129,11 +129,17 @@ class DiceRollTest extends TestCase
             ->assertSessionHasErrors('character_id');
     }
 
+    /**
+     * A game somebody is not in is not theirs to find, so there is nothing to
+     * roll in at all rather than a seat they are refused.
+     */
     public function test_somebody_holding_no_seat_cannot_roll(): void
     {
         $this->actingAs(User::factory()->create())
             ->post('/dice', ['d6' => 1, 'd8' => 0])
-            ->assertForbidden();
+            ->assertNotFound();
+
+        $this->assertSame(0, DiceRoll::query()->count());
     }
 
     /**

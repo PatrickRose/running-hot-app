@@ -28,7 +28,7 @@ class ResearchBoardController extends Controller
         GamePresenter $games,
         ResearchPresenter $research,
     ): Response {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         return Inertia::render('research', [
             'game' => $game === null ? null : $games->summary($game),

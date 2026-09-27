@@ -30,7 +30,7 @@ class DiceRollController extends Controller
 {
     public function index(Request $request, GamePresenter $games, DiceRollPresenter $rolls): Response
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         /** @var User $user */
         $user = $request->user();
@@ -47,7 +47,7 @@ class DiceRollController extends Controller
 
     public function store(Request $request, RollDice $roller): RedirectResponse
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         abort_if($game === null, 404);
 
