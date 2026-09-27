@@ -1461,22 +1461,11 @@ class GamePresenter
     public function recentAdjustments(Game $game, int $limit = 40): array
     {
         return $game->trackerAdjustments()
-            ->with('actor:id,name', 'subject')
+            ->with('actor:id,name', 'subject', 'phase.turn')
             ->latest('id')
             ->limit($limit)
             ->get()
-            ->map(fn ($adjustment): array => [
-                'id' => $adjustment->id,
-                'tracker' => $adjustment->tracker->value,
-                'tracker_label' => $adjustment->tracker->label(),
-                'subject' => $adjustment->subject?->getAttribute('name') ?? 'Procatorion',
-                'value_before' => $adjustment->value_before,
-                'value_after' => $adjustment->value_after,
-                'delta' => $adjustment->delta,
-                'reason' => $adjustment->reason,
-                'automated' => $adjustment->automated,
-                'actor' => $adjustment->actor?->name,
-                'at' => $adjustment->created_at?->toIso8601String(),
-            ])->all();
+            ->map(fn ($adjustment): array => GameLogPresenter::row($adjustment))
+            ->all();
     }
 }

@@ -228,7 +228,37 @@ export type TrackerAdjustment = {
     reason: string | null;
     automated: boolean;
     actor: string | null;
+    /** The turn and phase the movement happened in, when a phase was running. */
+    turn: number | null;
+    phase: string | null;
     at: string | null;
+};
+
+/** One page of the tracker ledger, as Laravel's length-aware paginator sends it. */
+export type TrackerAdjustmentPage = {
+    data: TrackerAdjustment[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+    prev_page_url: string | null;
+    next_page_url: string | null;
+};
+
+export type GameLogFilters = {
+    tracker: string | null;
+    subject: string | null;
+    turn: number | null;
+};
+
+export type GameLogOption = { value: string; label: string };
+
+export type GameLogOptions = {
+    trackers: GameLogOption[];
+    subjects: GameLogOption[];
+    turns: number[];
 };
 
 export type ProtectionKind = 'physical' | 'cyber';

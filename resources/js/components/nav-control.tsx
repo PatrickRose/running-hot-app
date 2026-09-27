@@ -23,6 +23,7 @@ import { index as councilIndex } from '@/routes/control/council';
 import { index as diceIndex } from '@/routes/control/dice';
 import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { index as gamesIndex, show } from '@/routes/control/games';
+import { index as logIndex } from '@/routes/control/log';
 import { index as researchIndex } from '@/routes/control/research';
 import { index as runsIndex } from '@/routes/control/runs';
 import { index as shopIndex } from '@/routes/control/shop';
@@ -59,6 +60,7 @@ export function NavControl() {
             : [
                   { title: 'Game panel', href: show(game.id) },
                   { title: 'Stats', href: statsIndex(game.id) },
+                  { title: 'Game log', href: logIndex(game.id) },
                   { title: 'Facilities', href: facilitiesIndex(game.id) },
                   { title: 'Run history', href: runsIndex(game.id) },
                   { title: 'Card lists', href: cardsIndex(game.id) },

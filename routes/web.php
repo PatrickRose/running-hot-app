@@ -15,6 +15,7 @@ use App\Http\Controllers\Control\EquipmentHoldingController;
 use App\Http\Controllers\Control\FacilityController;
 use App\Http\Controllers\Control\FacilityTypeController;
 use App\Http\Controllers\Control\GameController;
+use App\Http\Controllers\Control\GameLogController;
 use App\Http\Controllers\Control\PhaseController;
 use App\Http\Controllers\Control\ProtectionCardHoldingController;
 use App\Http\Controllers\Control\ProtectionCardTypeController;
@@ -326,6 +327,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 // stats on a character sheet are edited nowhere else.
                 Route::get('games/{game}/stats', [StatsController::class, 'index'])
                     ->name('stats.index');
+
+                // The whole tracker ledger. Stats carries the last forty; the
+                // question it answers is usually about something older.
+                Route::get('games/{game}/log', [GameLogController::class, 'index'])
+                    ->name('log.index');
 
                 // What players have rolled for Control to read.
                 Route::get('games/{game}/dice', [ControlDiceRollController::class, 'index'])
