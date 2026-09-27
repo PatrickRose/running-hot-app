@@ -31,6 +31,8 @@ class StatsController extends Controller
             'game' => $presenter->controlSummary($game),
             'trackers' => $presenter->trackers($game),
             'adjustments' => $presenter->recentAdjustments($game),
+            // Every purse in the game, for Control moving Credits between two.
+            'creditRecipients' => $presenter->creditRecipients($game),
         ]);
     }
 }

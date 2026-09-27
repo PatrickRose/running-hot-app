@@ -40,6 +40,9 @@ class RequisitionFacility
      * @param  bool  $immediate  Control override: open the Facility now rather
      *                           than next turn, and skip the phase check. This
      *                           is how a game's starting Facilities are put in.
+     * @param  string|null  $reason  What the ledger says the Credits went on,
+     *                               when it was not the Corporation's own
+     *                               requisition.
      */
     public function handle(
         Corporation $corporation,
@@ -48,6 +51,7 @@ class RequisitionFacility
         int $cost = 0,
         ?User $actor = null,
         bool $immediate = false,
+        ?string $reason = null,
     ): Facility {
         $game = $corporation->game;
 
@@ -89,6 +93,7 @@ class RequisitionFacility
             $cost,
             $actor,
             $availableFrom,
+            $reason,
         ): Facility {
             $facility = $this->create($game, $corporation, $facilityType, $name, $availableFrom);
 
@@ -97,7 +102,65 @@ class RequisitionFacility
                     $corporation,
                     Tracker::CorporationCredits,
                     -$cost,
-                    sprintf('Requisitioned %s (%s)', $name, $facilityType->name),
+                    $reason ?? sprintf('Requisitioned %s (%s)', $name, $facilityType->name),
+                    $actor,
+                );
+            }
+
+            return $facility;
+        });
+    }
+
+    /**
+     * One Corporation building a Facility for another.
+     *
+     * MCM's Construction Leader lets it build for other Corporations, and the
+     * rulebook prices none of it: what the owner is charged and what the
+     * builder is paid are both Control's to name, so neither is derived here.
+     * The two are independent rather than one paying the other - the owner's
+     * charge goes where every build cost goes, and the builder's fee is a
+     * payment on top of it. The Facility is the owner's in every respect; the
+     * builder only appears in the ledger.
+     */
+    public function buildOnBehalf(
+        Corporation $builder,
+        Corporation $owner,
+        FacilityType $facilityType,
+        string $name,
+        int $charge,
+        int $fee,
+        ?User $actor = null,
+        bool $immediate = false,
+    ): Facility {
+        if ($builder->is($owner)) {
+            throw ValidationException::withMessages([
+                'builder_corporation_id' => sprintf('%s would be building for itself - use Build a Facility instead.', $owner->name),
+            ]);
+        }
+
+        if ($builder->game_id !== $owner->game_id) {
+            throw ValidationException::withMessages([
+                'builder_corporation_id' => sprintf('%s is in a different game.', $builder->name),
+            ]);
+        }
+
+        return DB::transaction(function () use ($builder, $owner, $facilityType, $name, $charge, $fee, $actor, $immediate): Facility {
+            $facility = $this->handle(
+                $owner,
+                $facilityType,
+                $name,
+                $charge,
+                $actor,
+                $immediate,
+                sprintf('%s built %s (%s)', $builder->name, $name, $facilityType->name),
+            );
+
+            if ($fee > 0) {
+                $this->trackers->adjust(
+                    $builder,
+                    Tracker::CorporationCredits,
+                    $fee,
+                    sprintf('Built %s (%s) for %s', $name, $facilityType->name, $owner->name),
                     $actor,
                 );
             }

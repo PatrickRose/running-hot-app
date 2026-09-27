@@ -29,6 +29,10 @@ use Illuminate\Validation\ValidationException;
  *
  * Both movements go through TrackerService, each naming the other side, so the
  * ledger reads the trade from either end.
+ *
+ * Control moves Credits too - a fine, a theft the story calls for, a payment
+ * phoned in - and {@see move()} is that: the same two ledgered halves, between
+ * any two purses, with nobody's seat standing behind the payer.
  */
 class CreditService
 {
@@ -63,11 +67,64 @@ class CreditService
             ]);
         }
 
+        $this->transfer(
+            $payer,
+            $to,
+            $amount,
+            $actor,
+            sprintf('Gave %d to %s', $amount, $to->name),
+            sprintf('Given %d by %s', $amount, $payer->name),
+        );
+    }
+
+    /**
+     * Control taking Credits out of one purse and putting them in another.
+     *
+     * Nobody's seat is spending here, so either side may be any purse in the
+     * game - a Corporation, or a character carrying Credits of their own - and
+     * the refusals are the ones that would make the ledger lie: a purse that
+     * is not one, the same purse twice, or Credits that are not there. A
+     * ruling that wants a purse overdrawn is the raw tracker controls' job.
+     */
+    public function move(
+        Character|Corporation $from,
+        Character|Corporation $to,
+        int $amount,
+        ?User $actor = null,
+        ?string $reason = null,
+    ): void {
+        if ($from instanceof Character && ! $from->role->carriesOwnTrackers()) {
+            throw ValidationException::withMessages([
+                'from_id' => $this->noPurseMessage($from),
+            ]);
+        }
+
+        $suffix = $reason === null || $reason === '' ? '' : ': '.$reason;
+
+        $this->transfer(
+            $from,
+            $to,
+            $amount,
+            $actor,
+            sprintf('Control moved %d to %s%s', $amount, $to->name, $suffix),
+            sprintf('Control moved %d from %s%s', $amount, $from->name, $suffix),
+        );
+    }
+
+    /**
+     * Both halves of a payment, and every refusal they share.
+     */
+    private function transfer(
+        Character|Corporation $payer,
+        Character|Corporation $to,
+        int $amount,
+        ?User $actor,
+        string $payerReason,
+        string $payeeReason,
+    ): void {
         if ($to instanceof Character && ! $to->role->carriesOwnTrackers()) {
             throw ValidationException::withMessages([
-                'to_id' => $to->corporation === null
-                    ? sprintf('%s carries no Credits.', $to->name)
-                    : sprintf('%s spends %s\'s Credits - pay the Corporation instead.', $to->name, $to->corporation->name),
+                'to_id' => $this->noPurseMessage($to),
             ]);
         }
 
@@ -89,7 +146,7 @@ class CreditService
             ]);
         }
 
-        DB::transaction(function () use ($payer, $to, $amount, $actor): void {
+        DB::transaction(function () use ($payer, $to, $amount, $actor, $payerReason, $payeeReason): void {
             // Read under the lock rather than off the model: a purse loaded
             // before the last write would let the same Credits be given twice,
             // and Credits have no floor to stop them going negative.
@@ -106,22 +163,16 @@ class CreditService
                 ]);
             }
 
-            $this->trackers->adjust(
-                $payer,
-                $this->trackerFor($payer),
-                -$amount,
-                sprintf('Gave %d to %s', $amount, $to->name),
-                $actor,
-            );
-
-            $this->trackers->adjust(
-                $to,
-                $this->trackerFor($to),
-                $amount,
-                sprintf('Given %d by %s', $amount, $payer->name),
-                $actor,
-            );
+            $this->trackers->adjust($payer, $this->trackerFor($payer), -$amount, $payerReason, $actor);
+            $this->trackers->adjust($to, $this->trackerFor($to), $amount, $payeeReason, $actor);
         });
+    }
+
+    private function noPurseMessage(Character $character): string
+    {
+        return $character->corporation === null
+            ? sprintf('%s carries no Credits.', $character->name)
+            : sprintf('%s spends %s\'s Credits - pay the Corporation instead.', $character->name, $character->corporation->name);
     }
 
     private function trackerFor(Character|Corporation $purse): Tracker
