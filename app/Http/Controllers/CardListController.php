@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Game;
 use App\Support\CardImage;
 use App\Support\GamePresenter;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,9 +24,9 @@ use Inertia\Response;
  */
 class CardListController extends Controller
 {
-    public function __invoke(GamePresenter $presenter): Response
+    public function __invoke(Request $request, GamePresenter $presenter): Response
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         return Inertia::render('cards', [
             'game' => $game === null ? null : $presenter->summary($game),

@@ -29,7 +29,7 @@ class EquipmentTransferController extends Controller
 {
     public function __invoke(Request $request, EquipmentService $equipment): RedirectResponse
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         abort_if($game === null, 404);
 

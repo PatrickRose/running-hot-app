@@ -20,7 +20,7 @@ class DashboardController extends Controller
      */
     public function __invoke(Request $request, GamePresenter $presenter): Response
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         $characters = $game === null ? [] : Character::query()
             ->where('game_id', $game->id)

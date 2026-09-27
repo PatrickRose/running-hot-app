@@ -22,7 +22,7 @@ class FacilityBoardController extends Controller
 {
     public function __invoke(Request $request, GamePresenter $presenter): Response
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         return Inertia::render('facilities', [
             'game' => $game === null ? null : $presenter->summary($game),

@@ -32,7 +32,7 @@ class CouncilController extends Controller
         CouncilPresenter $council,
         CouncilService $seats,
     ): Response {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         $user = $request->user();
 

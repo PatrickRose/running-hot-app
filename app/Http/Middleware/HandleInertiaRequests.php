@@ -82,8 +82,8 @@ class HandleInertiaRequests extends Middleware
             // would be filtered straight out of that response. An always prop
             // ignores the filter, so every poll any page already makes keeps
             // the clock honest for free.
-            'phase' => Inertia::always(function (): ?array {
-                $game = Game::current();
+            'phase' => Inertia::always(function () use ($request): ?array {
+                $game = Game::current($request->user());
                 $phase = $game?->currentPhase();
 
                 return $phase === null ? null : $this->games->phase($phase);
@@ -97,7 +97,7 @@ class HandleInertiaRequests extends Middleware
             // not drawing them, because a stale number reads as a current one.
             // An always prop rides every poll any page already makes.
             'standing' => Inertia::always(function () use ($request): ?array {
-                $game = Game::current();
+                $game = Game::current($request->user());
 
                 return $game === null ? null : $this->games->standing($game, $request->user());
             }),
@@ -108,7 +108,7 @@ class HandleInertiaRequests extends Middleware
             // changes when Control seats somebody, and the next full visit
             // picks that up. It also means the query never runs on a poll.
             'nav' => fn (): array => $this->navigation->sectionsFor(
-                Game::current(),
+                Game::current($request->user()),
                 $request->user(),
             ),
             // The reading a player reaches for mid-game: the rulebook, which
@@ -116,7 +116,7 @@ class HandleInertiaRequests extends Middleware
             // background link Control sets per game. A plain closure for the
             // reason the nav is one - it only changes when Control edits it.
             'reference' => fn (): array => [
-                'background_url' => $request->user() === null ? null : Game::current()?->background_url,
+                'background_url' => $request->user() === null ? null : Game::current($request->user())?->background_url,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

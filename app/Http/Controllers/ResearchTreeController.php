@@ -135,7 +135,7 @@ class ResearchTreeController extends Controller
      */
     private function corporationFor(Request $request): Corporation
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         abort_if($game === null, 404);
 

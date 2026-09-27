@@ -84,7 +84,7 @@ class ResearchTableController extends Controller
      */
     private function tableFor(Request $request): array
     {
-        $game = Game::current();
+        $game = Game::current($request->user());
 
         abort_if($game === null, 404);
 

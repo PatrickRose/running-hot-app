@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\GameStatus;
+use App\Models\Character;
 use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -109,12 +110,15 @@ class ReferenceReadingTest extends TestCase
 
     public function test_every_page_shares_the_current_games_background_link(): void
     {
-        Game::factory()->create([
+        $game = Game::factory()->create([
             'status' => GameStatus::Running,
             'background_url' => 'https://docs.example.com/procatorion-briefing',
         ]);
 
-        $this->actingAs(User::factory()->create())
+        $player = User::factory()->create();
+        Character::factory()->create(['game_id' => $game->id, 'user_id' => $player->id]);
+
+        $this->actingAs($player)
             ->get(route('dashboard'))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('reference.background_url', 'https://docs.example.com/procatorion-briefing'));

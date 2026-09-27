@@ -941,7 +941,9 @@ class PlayersDriveRunsTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->get(route('runs'))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('board.can_submit', false));
+            ->assertInertia(fn ($page) => $page
+                ->where('game', null)
+                ->where('board', null));
     }
 
     /**

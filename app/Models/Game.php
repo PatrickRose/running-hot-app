@@ -11,6 +11,7 @@ use App\Enums\DiscordProvisionStatus;
 use App\Enums\GameStatus;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -276,11 +277,28 @@ class Game extends Model
      * Saturday's game up mid-session cannot pull tonight's out from under the
      * table it is being played on. Past that it is the newest game, which is
      * the one coming rather than the one gone.
+     *
+     * And only among the games this person is in: a character they have
+     * claimed or a seat on the Control team. Somebody signed in to nothing -
+     * a player whose seat is in next month's game, or no game at all - was
+     * otherwise handed whichever game was newest, clock and all, and read it
+     * as their own. Account-wide Control is in every game, so it sees them
+     * all; nobody signed in is in none.
      */
-    public static function current(): ?self
+    public static function current(?User $user): ?self
     {
+        if ($user === null) {
+            return null;
+        }
+
         /** @var self|null */
         return self::query()
+            ->when(
+                ! $user->isControlEverywhere(),
+                fn (Builder $query) => $query->where(fn (Builder $query) => $query
+                    ->whereHas('characters', fn (Builder $query) => $query->where('user_id', $user->id))
+                    ->orWhereHas('controlMembers', fn (Builder $query) => $query->where('user_id', $user->id))),
+            )
             ->orderByRaw('case when status = ? then 0 else 1 end', [GameStatus::Running->value])
             ->latest('id')
             ->first();

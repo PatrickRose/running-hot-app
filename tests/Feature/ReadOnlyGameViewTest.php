@@ -96,25 +96,59 @@ class ReadOnlyGameViewTest extends TestCase
 
     public function test_a_running_game_wins_however_new_the_draft_beside_it_is(): void
     {
+        $user = User::factory()->create(['is_control' => true]);
         $running = Game::factory()->create(['status' => GameStatus::Running]);
         $next = Game::factory()->create(['status' => GameStatus::Draft]);
 
         $this->assertGreaterThan($running->id, $next->id);
-        $this->assertSame($running->id, Game::current()?->id);
+        $this->assertSame($running->id, Game::current($user)?->id);
     }
 
     public function test_the_newest_game_answers_when_none_is_running(): void
     {
+        $user = User::factory()->create(['is_control' => true]);
         $finished = Game::factory()->create(['status' => GameStatus::Finished]);
         $next = Game::factory()->create(['status' => GameStatus::Draft]);
 
-        $this->assertNotSame($finished->id, Game::current()?->id);
-        $this->assertSame($next->id, Game::current()?->id);
+        $this->assertNotSame($finished->id, Game::current($user)?->id);
+        $this->assertSame($next->id, Game::current($user)?->id);
     }
 
     public function test_no_game_at_all_is_still_nothing(): void
     {
-        $this->assertNull(Game::current());
+        $this->assertNull(Game::current(User::factory()->create(['is_control' => true])));
+    }
+
+    public function test_only_the_games_somebody_is_in_answer_for_them(): void
+    {
+        $theirs = Game::factory()->create(['status' => GameStatus::Finished]);
+        Game::factory()->create(['status' => GameStatus::Running]);
+        Game::factory()->create(['status' => GameStatus::Draft]);
+
+        $player = User::factory()->create();
+        Character::factory()->for($theirs)->create(['user_id' => $player->id]);
+
+        $organiser = User::factory()->create();
+        $theirs->controlMembers()->create(['discord_username' => 'organiser', 'user_id' => $organiser->id]);
+
+        $this->assertSame($theirs->id, Game::current($player)?->id);
+        $this->assertSame($theirs->id, Game::current($organiser)?->id);
+        $this->assertNull(Game::current(User::factory()->create()));
+        $this->assertNull(Game::current(null));
+    }
+
+    public function test_the_dashboard_shows_no_clock_for_a_game_somebody_is_not_in(): void
+    {
+        $game = Game::factory()->create(['status' => GameStatus::Running]);
+        app(TurnEngine::class)->start($game);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('game', null)
+                ->where('phase', null)
+                ->where('standing', null));
     }
 
     #[DataProvider('offTheClock')]

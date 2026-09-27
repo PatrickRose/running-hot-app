@@ -436,7 +436,10 @@ class ControlPanelTest extends TestCase
             'The shared summary is what every player-facing page sends.',
         );
 
-        $this->actingAs(User::factory()->create())
+        $player = User::factory()->create();
+        Character::factory()->create(['game_id' => $game->id, 'user_id' => $player->id]);
+
+        $this->actingAs($player)
             ->get('/dashboard')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
