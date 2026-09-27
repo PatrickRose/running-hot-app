@@ -24,6 +24,7 @@ import { index as facilitiesIndex } from '@/routes/control/facilities';
 import { finish, index } from '@/routes/control/games';
 import { advance, extend, pause, resume, start } from '@/routes/control/phase';
 import { index as researchIndex } from '@/routes/control/research';
+import { index as runsIndex } from '@/routes/control/runs';
 import { index as shopIndex } from '@/routes/control/shop';
 import { index as statsIndex } from '@/routes/control/stats';
 import type {
@@ -135,6 +136,14 @@ export default function ControlGameShow({
                             }
                         >
                             Dice rolls
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                router.get(runsIndex.url({ game: game.id }))
+                            }
+                        >
+                            Run history
                         </Button>
                         <Button
                             variant="ghost"

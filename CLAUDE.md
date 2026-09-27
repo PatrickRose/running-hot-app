@@ -263,6 +263,7 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | What each side of a run may see | `App\Support\RunPresenter` |
 | Who may do what on a run | `App\Policies\RunPolicy` |
 | The run screen players work from | `App\Http\Controllers\RunController`, `resources/js/pages/runs.tsx` |
+| Every ended run from every turn, for Control | `RunPresenter::history()`, `App\Http\Controllers\Control\RunHistoryController`, `resources/js/pages/control/games/runs.tsx` |
 | Run arithmetic: ordering, alerts, strength, dice | `App\Support\Runs\*` |
 | What a successful run takes out of a Facility | `App\Enums\RunAccessKind`, `TechnologyAccessAction`, `App\Support\Runs\AccessCheck` |
 | Team Time income and wound recovery | `App\Actions\ApplyTeamTimeUpkeep` |
@@ -2180,6 +2181,16 @@ Control seats somebody, a partial reload leaves the client holding what it had,
 and the query never runs on a poll. `undefined` therefore means "a poll did not
 re-send it" rather than "none", so the sidebar falls back to drawing everything
 rather than blanking itself mid-poll.
+
+**Control's pages are a second, expandable group underneath**, drawn by
+`NavControl` off a shared `control` prop that `Navigation::controlFor()`
+answers: null for somebody who is Control of nothing, otherwise the game the
+links point at. That is the game in the URL on a Control page and
+`Game::current()` everywhere else, and only if the viewer is Control *of* it —
+Control of some other game gets the group holding just the list of games. The
+entry itself only opens and shuts the list, whose first link is the Control
+panel; collapsed to icons, where the list cannot be drawn, clicking it widens
+the sidebar and opens the list.
 
 Dashboard and Facilities are everybody's — the Facility list is posted in a
 Discord channel the whole game reads, and a Runner picks their target off it.

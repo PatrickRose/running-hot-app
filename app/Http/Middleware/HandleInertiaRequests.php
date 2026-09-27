@@ -111,6 +111,16 @@ class HandleInertiaRequests extends Middleware
                 Game::current($request->user()),
                 $request->user(),
             ),
+            // Control's own pages, for the sidebar's Control group. A plain
+            // closure for the reason the nav is one. The game in the URL wins
+            // over the current one, so Control reading next week's panel is
+            // offered next week's pages rather than tonight's.
+            'control' => fn (): ?array => $this->navigation->controlFor(
+                $request->route('game') instanceof Game
+                    ? $request->route('game')
+                    : Game::current($request->user()),
+                $request->user(),
+            ),
             // The reading a player reaches for mid-game: the rulebook, which
             // is the same PDF for every game and so has a route, and the
             // background link Control sets per game. A plain closure for the
