@@ -56,7 +56,7 @@ const SELECT_CLASS =
 type Props = {
     game: GameSummary;
     council: CouncilBoard;
-    control: CouncilControlBoard;
+    board: CouncilControlBoard;
 };
 
 /**
@@ -71,7 +71,7 @@ type Props = {
  * The sitting itself is the same component players see, because Control's view
  * of a vote is the Chair's view: every breakdown, secret or not.
  */
-export default function ControlCouncil({ game, council, control }: Props) {
+export default function ControlCouncil({ game, council, board }: Props) {
     const session = council.session;
 
     return (
@@ -114,7 +114,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                     <CardContent className="flex flex-col gap-4">
                         <InTheChair
                             chair={session?.chair ?? null}
-                            nextChair={control.next_chair}
+                            nextChair={board.next_chair}
                             hasSat={session !== null}
                         />
 
@@ -128,7 +128,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             </p>
                         )}
 
-                        <Rotation gameId={game.id} control={control} />
+                        <Rotation gameId={game.id} control={board} />
 
                         {session && <Recess gameId={game.id} />}
                     </CardContent>
@@ -152,7 +152,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                     )}
                 </section>
 
-                {control.with_control.length > 0 && (
+                {board.with_control.length > 0 && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Waiting on your remarks</CardTitle>
@@ -163,7 +163,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4">
-                            {control.with_control.map((card) => (
+                            {board.with_control.map((card) => (
                                 <Annotate
                                     key={card.id}
                                     gameId={game.id}
@@ -174,7 +174,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                     </Card>
                 )}
 
-                {control.amendments.length > 0 && (
+                {board.amendments.length > 0 && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Amendments to sign off</CardTitle>
@@ -185,7 +185,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-3">
-                            {control.amendments.map((amendment) => (
+                            {board.amendments.map((amendment) => (
                                 <div
                                     key={amendment.id}
                                     className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"
@@ -263,17 +263,17 @@ export default function ControlCouncil({ game, council, control }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">
-                        {control.seats.length === 0 ? (
+                        {board.seats.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 No Corporations, so no seats.
                             </p>
                         ) : (
-                            control.seats.map((seat) => (
+                            board.seats.map((seat) => (
                                 <Seat
                                     key={seat.corporation_id}
                                     gameId={game.id}
                                     seat={seat}
-                                    defaultPenalty={control.absence_penalty}
+                                    defaultPenalty={board.absence_penalty}
                                 />
                             ))
                         )}
@@ -295,12 +295,12 @@ export default function ControlCouncil({ game, council, control }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">
-                        {control.own_seats.length === 0 ? (
+                        {board.own_seats.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 Only the Corporations are at the Council.
                             </p>
                         ) : (
-                            control.own_seats.map((seat) => (
+                            board.own_seats.map((seat) => (
                                 <OwnSeat
                                     key={seat.id}
                                     gameId={game.id}
@@ -311,7 +311,7 @@ export default function ControlCouncil({ game, council, control }: Props) {
 
                         <SeatSomebody
                             gameId={game.id}
-                            seatable={control.seatable}
+                            seatable={board.seatable}
                         />
                     </CardContent>
                 </Card>
@@ -330,20 +330,20 @@ export default function ControlCouncil({ game, council, control }: Props) {
                             <DeckPicker
                                 gameId={game.id}
                                 session={session}
-                                deck={control.deck}
+                                deck={board.deck}
                                 hand={council.hand}
                             />
                         )}
 
                         <DeckComposer gameId={game.id} />
 
-                        {control.deck.length === 0 ? (
+                        {board.deck.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 Nothing is left in the deck. Everything has been
                                 handed over, voted on, or taken out.
                             </p>
                         ) : (
-                            control.deck.map((card) => (
+                            board.deck.map((card) => (
                                 <div
                                     key={card.id}
                                     className="rounded-md border p-3"
