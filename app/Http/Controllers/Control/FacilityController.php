@@ -6,6 +6,7 @@ use App\Actions\ProvisionFacilityChannels;
 use App\Actions\PublishFacilityList;
 use App\Actions\RequisitionFacility;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Control\BuildFacilityOnBehalfRequest;
 use App\Http\Requests\Control\InstallProtectionCardRequest;
 use App\Http\Requests\Control\ReorderProtectionCardsRequest;
 use App\Http\Requests\Control\StoreFacilityRequest;
@@ -38,6 +39,12 @@ use Inertia\Response;
  */
 class FacilityController extends Controller
 {
+    /**
+     * What a builder is paid for a Facility built on another's behalf, when
+     * Control names nothing else.
+     */
+    public const int DEFAULT_BUILDER_FEE = 1;
+
     public function __construct(
         private readonly FacilityDefenceService $defence,
         private readonly RequisitionFacility $requisition,
@@ -117,6 +124,58 @@ class FacilityController extends Controller
             $facility->isAvailableOnTurn($game->currentTurn()?->number)
                 ? 'is open'
                 : 'is building, and opens on turn '.$facility->available_from_turn,
+        ));
+    }
+
+    /**
+     * Build a Facility for one Corporation on another's behalf.
+     *
+     * MCM's Construction Leader, which builds for other Corporations. The
+     * owner is charged the type sheet's price less the builder's own discount
+     * unless Control names another, and the builder is paid a Credit unless
+     * Control names another - the rulebook prices neither, so both are
+     * defaults rather than rules.
+     */
+    public function storeOnBehalf(Game $game, BuildFacilityOnBehalfRequest $request): RedirectResponse
+    {
+        /** @var FacilityType $type */
+        $type = $game->facilityTypes()->findOrFail($request->integer('facility_type_id'));
+
+        /** @var Corporation $builder */
+        $builder = $game->corporations()->findOrFail($request->integer('builder_corporation_id'));
+
+        /** @var Corporation $owner */
+        $owner = $game->corporations()->findOrFail($request->integer('corporation_id'));
+
+        $charge = $request->filled('cost')
+            ? (int) $request->integer('cost')
+            : $builder->facilityBuildCost($type);
+
+        $fee = $request->filled('fee')
+            ? (int) $request->integer('fee')
+            : self::DEFAULT_BUILDER_FEE;
+
+        $facility = $this->requisition->buildOnBehalf(
+            $builder,
+            $owner,
+            $type,
+            $request->string('name')->toString(),
+            $charge,
+            $fee,
+            $request->user(),
+            immediate: $request->string('mode')->toString() === 'immediate',
+        );
+
+        return back()->with('status', sprintf(
+            '%s built %s for %s (charged %d, paid %d). It %s.',
+            $builder->name,
+            $facility->name,
+            $owner->name,
+            $charge,
+            $fee,
+            $facility->isAvailableOnTurn($game->currentTurn()?->number)
+                ? 'is open'
+                : 'opens on turn '.$facility->available_from_turn,
         ));
     }
 

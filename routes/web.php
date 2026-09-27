@@ -8,6 +8,7 @@ use App\Http\Controllers\Control\CardCatalogueController;
 use App\Http\Controllers\Control\CharacterController;
 use App\Http\Controllers\Control\ControlMemberController;
 use App\Http\Controllers\Control\CouncilController as ControlCouncilController;
+use App\Http\Controllers\Control\CreditTransferController as ControlCreditTransferController;
 use App\Http\Controllers\Control\DiceRollController as ControlDiceRollController;
 use App\Http\Controllers\Control\DiscordGuildController;
 use App\Http\Controllers\Control\EquipmentCardTypeController;
@@ -343,6 +344,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('runs.index');
 
                 Route::post('games/{game}/trackers', [TrackerController::class, 'store'])->name('trackers.store');
+                // Credits taken from one purse and handed to another, both
+                // halves ledgered. Any purse in the game, on Control's say-so.
+                Route::post('games/{game}/credits/move', ControlCreditTransferController::class)
+                    ->name('credits.move');
                 Route::post('games/{game}/characters/{character}/remove-tag', [TrackerController::class, 'removeTag'])
                     ->name('characters.remove-tag');
                 Route::patch('games/{game}/characters/{character}/stats', [CharacterController::class, 'updateStats'])
@@ -354,6 +359,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     ->name('facilities.index');
                 Route::post('games/{game}/facilities', [FacilityController::class, 'store'])
                     ->name('facilities.store');
+                // One Corporation building for another: MCM's Construction
+                // Leader. The owner is charged, the builder is paid.
+                Route::post('games/{game}/facilities/on-behalf', [FacilityController::class, 'storeOnBehalf'])
+                    ->name('facilities.on-behalf');
                 Route::post('games/{game}/facilities/publish-list', [FacilityController::class, 'publishList'])
                     ->name('facilities.publish-list');
                 // Credits off every Facility a Corporation builds: MCM's

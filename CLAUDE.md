@@ -248,6 +248,8 @@ Players are either **Corporate** (CEO, Security, Research) grouped into Corporat
 | Facility slots, card stacks, reorder and removal costs | `App\Services\FacilityDefenceService` |
 | The shop's list, its stock, and what a purchase moves | `App\Services\ShopService` |
 | Building a Facility, and the turn's delay | `App\Actions\RequisitionFacility` |
+| One Corporation building for another (Construction Leader): owner charged, builder paid | `RequisitionFacility::buildOnBehalf()`, `Control\FacilityController::storeOnBehalf`, `resources/js/components/build-on-behalf-form.tsx` |
+| Control moving Credits from any purse to any other | `App\Services\CreditService::move()`, `App\Http\Controllers\Control\CreditTransferController`, `resources/js/components/move-credits-dialog.tsx` |
 | A CEO requisitioning their own Facility, and the type sheet players read | `App\Http\Controllers\FacilityRequisitionController`, `CorporationPolicy::requisition`, `resources/js/components/facility-requisition.tsx` |
 | Which Facility types a Corporation may build | `App\Support\BuildableFacilityTypes`, `FacilityType::isUnlockedBy()`, `facility_types.available_from_start` |
 | A Facility Control builds for the Runners to hit | `Facility::isPlotFacility()`, `RequisitionFacility::buildForControl()` |

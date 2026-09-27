@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { CharacterLogo } from '@/components/character-logo';
 import { CharacterStatsForm } from '@/components/character-stats-form';
 import { FactionBadge } from '@/components/faction-badge';
+import type { CreditRecipient } from '@/components/give-credits-dialog';
 import Heading from '@/components/heading';
+import { MoveCreditsDialog } from '@/components/move-credits-dialog';
 import { SubjectTrackerTable } from '@/components/subject-tracker-table';
 import { TrackerValue } from '@/components/tracker-value';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +31,8 @@ type Props = {
     game: GameSummary;
     trackers: GameTrackers;
     adjustments: TrackerAdjustment[];
+    /** Every purse in the game: the Corporations, and anybody carrying Credits. */
+    creditRecipients: CreditRecipient[];
 };
 
 const CORPORATION_TRACKERS: Array<[string, string]> = [
@@ -63,11 +67,14 @@ export default function ControlGameStats({
     game,
     trackers,
     adjustments,
+    creditRecipients,
 }: Props) {
     // Control is not the only person moving these numbers — upkeep pays Income
     // in, a Run takes Wounds out, a scored equation pays Research Points — so
     // keep the page fresh without anyone having to reload during a live game.
-    usePoll(5000, { only: ['game', 'trackers', 'adjustments'] });
+    usePoll(5000, {
+        only: ['game', 'trackers', 'adjustments', 'creditRecipients'],
+    });
 
     const { props } = usePage<{ errors: Record<string, string> }>();
     const phase = game.phase;
@@ -96,12 +103,20 @@ export default function ControlGameStats({
                         title="Stats"
                         description={`${game.name} · every tracker in the game, and the four printed stats on each character sheet.`}
                     />
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.get(show.url({ game: game.id }))}
-                    >
-                        Back to the panel
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <MoveCreditsDialog
+                            gameId={game.id}
+                            purses={creditRecipients}
+                        />
+                        <Button
+                            variant="ghost"
+                            onClick={() =>
+                                router.get(show.url({ game: game.id }))
+                            }
+                        >
+                            Back to the panel
+                        </Button>
+                    </div>
                 </div>
 
                 {props.errors?.tags && (

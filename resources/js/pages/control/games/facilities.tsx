@@ -1,4 +1,5 @@
 import { Form, Head, router, usePoll } from '@inertiajs/react';
+import { BuildOnBehalfForm } from '@/components/build-on-behalf-form';
 import { FacilityPanel } from '@/components/facility-panel';
 import { FacilityTypeCatalogue } from '@/components/facility-type-catalogue';
 import { FactionBadge } from '@/components/faction-badge';
@@ -311,6 +312,28 @@ export default function ControlFacilities({
                                 </>
                             )}
                         </Form>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Build for another Corporation</CardTitle>
+                        <CardDescription>
+                            MCM's Construction Leader builds Facilities for
+                            other Corporations. The Facility is the owner's; the
+                            owner is charged and the builder is paid, both
+                            written to the ledger. The charge starts at the type
+                            sheet's price less the builder's build discount, and
+                            the builder's fee at 1 — change either before
+                            building.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <BuildOnBehalfForm
+                            gameId={game.id}
+                            corporations={facilities}
+                            facilityTypes={facilityTypes}
+                        />
                     </CardContent>
                 </Card>
 
