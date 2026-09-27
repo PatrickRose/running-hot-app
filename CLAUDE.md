@@ -2188,8 +2188,9 @@ answers: null for somebody who is Control of nothing, otherwise the game the
 links point at. That is the game in the URL on a Control page and
 `Game::current()` everywhere else, and only if the viewer is Control *of* it —
 Control of some other game gets the group holding just the list of games. The
-entry itself links to the game's Control panel so it still works with the
-sidebar collapsed to icons, where the sub-list cannot be drawn.
+entry itself only opens and shuts the list, whose first link is the Control
+panel; collapsed to icons, where the list cannot be drawn, clicking it widens
+the sidebar and opens the list.
 
 Dashboard and Facilities are everybody's — the Facility list is posted in a
 Discord channel the whole game reads, and a Runner picks their target off it.

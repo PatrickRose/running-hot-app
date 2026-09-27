@@ -10,12 +10,12 @@ import {
     SidebarGroup,
     SidebarGroupLabel,
     SidebarMenu,
-    SidebarMenuAction,
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarMenuSub,
     SidebarMenuSubButton,
     SidebarMenuSubItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { index as cardsIndex } from '@/routes/control/cards';
@@ -34,13 +34,14 @@ import type { NavItem } from '@/types';
  *
  * Drawn only for somebody who is Control of something — the server says who,
  * through the shared `control` prop, and which game the links point at. The
- * entry itself goes to that game's Control panel, so it still works with the
- * sidebar collapsed to icons, where the sub-list cannot be shown; the chevron
- * beside it opens the rest.
+ * entry itself only opens and shuts the list, and the Control panel is the
+ * list's first link. With the sidebar collapsed to icons, where the list cannot
+ * be shown, clicking it widens the sidebar and opens the list instead.
  */
 export function NavControl() {
     const { control } = usePage().props;
     const { isCurrentUrl, isCurrentOrParentUrl } = useCurrentUrl();
+    const sidebar = useSidebar();
 
     // Opens on a Control page, so the page you are on is visible in the list.
     // Read once rather than followed, so closing it by hand sticks.
@@ -51,7 +52,6 @@ export function NavControl() {
     }
 
     const game = control.game;
-    const home = game === null ? gamesIndex() : show(game.id);
 
     const pages: NavItem[] =
         game === null
@@ -74,32 +74,46 @@ export function NavControl() {
         <SidebarGroup className="px-2 py-0">
             <SidebarGroupLabel>Control</SidebarGroupLabel>
             <SidebarMenu>
-                <Collapsible asChild open={open} onOpenChange={setOpen}>
+                <Collapsible
+                    asChild
+                    open={open}
+                    onOpenChange={(opening) => {
+                        // Collapsed to icons, the sub-list cannot be drawn, so
+                        // a click widens the sidebar and opens the list rather
+                        // than toggling something nobody can see.
+                        if (
+                            sidebar.state === 'collapsed' &&
+                            !sidebar.isMobile
+                        ) {
+                            sidebar.setOpen(true);
+                            setOpen(true);
+
+                            return;
+                        }
+
+                        setOpen(opening);
+                    }}
+                >
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isCurrentUrl(home)}
-                            tooltip={{
-                                children:
-                                    game === null
-                                        ? 'Control'
-                                        : `Control — ${game.name}`,
-                            }}
-                        >
-                            <Link href={home} prefetch>
+                        <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                                tooltip={{
+                                    children:
+                                        game === null
+                                            ? 'Control'
+                                            : `Control — ${game.name}`,
+                                }}
+                                className="group/control"
+                            >
                                 <ShieldCheck />
-                                <span>
+                                <span className="truncate">
                                     {game === null ? 'Control' : game.name}
                                 </span>
-                            </Link>
-                        </SidebarMenuButton>
-                        <CollapsibleTrigger asChild>
-                            <SidebarMenuAction className="data-[state=open]:rotate-90">
-                                <ChevronRight />
-                                <span className="sr-only">
-                                    {open ? 'Hide' : 'Show'} Control pages
-                                </span>
-                            </SidebarMenuAction>
+                                <ChevronRight
+                                    aria-hidden
+                                    className="ml-auto transition-transform group-data-[state=open]/control:rotate-90"
+                                />
+                            </SidebarMenuButton>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                             <SidebarMenuSub>
