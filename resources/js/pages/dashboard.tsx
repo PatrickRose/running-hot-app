@@ -2,6 +2,8 @@ import { Head, Link, usePoll } from '@inertiajs/react';
 import { CharacterLogo } from '@/components/character-logo';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameStateNotice } from '@/components/game-state-notice';
+import { GiveCreditsDialog } from '@/components/give-credits-dialog';
+import type { CreditRecipient } from '@/components/give-credits-dialog';
 import Heading from '@/components/heading';
 import { PhaseClock } from '@/components/phase-clock';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +20,8 @@ import type { Faction, GameSummary } from '@/types/game';
 
 type PlayerCharacter = {
     id: number;
+    /** What this seat pays out of: its own Credits, or a CEO's Corporation's. */
+    purse: { name: string; credits: number } | null;
     name: string;
     role_label: string;
     team: string | null;
@@ -37,6 +41,7 @@ type PlayerCharacter = {
         | (Faction & {
               income: number;
               political_will: number;
+              credits: number;
           })
         | null;
 };
@@ -75,6 +80,7 @@ type DiscordJoin = {
 type Props = {
     game: GameSummary | null;
     characters: PlayerCharacter[];
+    creditRecipients: CreditRecipient[];
     isControl: boolean;
     discordJoin: DiscordJoin | null;
 };
@@ -82,6 +88,7 @@ type Props = {
 export default function Dashboard({
     game,
     characters,
+    creditRecipients,
     isControl,
     discordJoin,
 }: Props) {
@@ -175,13 +182,23 @@ export default function Dashboard({
                 {characters.map((character) => (
                     <Card key={character.id}>
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
+                            <CardTitle className="flex flex-wrap items-center gap-2">
                                 {character.name}
                                 {character.incapacitated && (
                                     <Badge variant="destructive">
                                         Incapacitated
                                     </Badge>
                                 )}
+                                {character.purse &&
+                                    game?.status === 'running' && (
+                                        <span className="ml-auto">
+                                            <GiveCreditsDialog
+                                                fromCharacterId={character.id}
+                                                purse={character.purse}
+                                                recipients={creditRecipients}
+                                            />
+                                        </span>
+                                    )}
                             </CardTitle>
                             <CardDescription>
                                 <CharacterTeam character={character} />
@@ -213,6 +230,10 @@ export default function Dashboard({
                             )}
                             {character.corporation && (
                                 <>
+                                    <Stat
+                                        label="Corporation credits"
+                                        value={character.corporation.credits}
+                                    />
                                     <Stat
                                         label="Income"
                                         value={character.corporation.income}

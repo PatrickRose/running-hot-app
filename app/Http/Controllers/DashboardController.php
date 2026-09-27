@@ -6,6 +6,7 @@ use App\Enums\DiscordSyncStatus;
 use App\Models\Character;
 use App\Models\DiscordMemberSync;
 use App\Models\Game;
+use App\Services\CreditService;
 use App\Support\FactionBadge;
 use App\Support\GamePresenter;
 use App\Support\LogoImage;
@@ -18,7 +19,7 @@ class DashboardController extends Controller
     /**
      * The player's view: the clock, and their own trackers.
      */
-    public function __invoke(Request $request, GamePresenter $presenter): Response
+    public function __invoke(Request $request, GamePresenter $presenter, CreditService $credits): Response
     {
         $game = Game::current($request->user());
 
@@ -29,12 +30,18 @@ class DashboardController extends Controller
             // rather than a column of its own.
             ->with([
                 'gang' => fn ($query) => $query->select('id', 'name')->withSum('characters', 'notoriety'),
-                'corporation:id,name,income,political_will',
+                'corporation:id,game_id,name,income,political_will,credits',
             ])
             ->orderBy('name')
             ->get()
             ->map(fn (Character $character): array => [
                 'id' => $character->id,
+                // What this seat pays out of, and so whether it may pay anybody:
+                // their own Credits, their Corporation's for a CEO, or none.
+                'purse' => ($purse = $credits->purseFor($character)) === null ? null : [
+                    'name' => $purse->name,
+                    'credits' => $purse->credits,
+                ],
                 'name' => $character->name,
                 // Set only for a character that is an organisation rather than
                 // a person; see GamePresenter::trackers().
@@ -59,12 +66,14 @@ class DashboardController extends Controller
                     ...FactionBadge::for($character->corporation->name),
                     'income' => $character->corporation->income,
                     'political_will' => $character->corporation->political_will,
+                    'credits' => $character->corporation->credits,
                 ],
             ])->all();
 
         return Inertia::render('dashboard', [
             'game' => $game === null ? null : $presenter->summary($game),
             'characters' => $characters,
+            'creditRecipients' => $game === null ? [] : $presenter->creditRecipients($game),
             'isControl' => (bool) $request->user()?->isControl(),
             'discordJoin' => $this->discordJoinPrompt($request, $game),
         ]);

@@ -1013,6 +1013,46 @@ class GamePresenter
     }
 
     /**
+     * Everybody Credits can be paid to: every Corporation, and every character
+     * carrying a purse of their own. A Corporate seat spends its Corporation's
+     * Credits rather than its own, so paying the CEO means paying the
+     * Corporation, and the Press and HM Government carry none at all.
+     *
+     * @return array<int, array{type: string, id: int, name: string, hint: string}>
+     */
+    public function creditRecipients(Game $game): array
+    {
+        $corporations = $game->corporations()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Corporation $corporation): array => [
+                'type' => 'corporation',
+                'id' => $corporation->id,
+                'name' => $corporation->name,
+                'hint' => 'Corporation',
+            ]);
+
+        $people = $game->characters()
+            ->with('gang')
+            ->whereIn('role', array_map(
+                fn (CharacterRole $role): string => $role->value,
+                array_filter(CharacterRole::cases(), fn (CharacterRole $role): bool => $role->carriesOwnTrackers()),
+            ))
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Character $character): array => [
+                'type' => 'character',
+                'id' => $character->id,
+                'name' => $character->name,
+                'hint' => $character->gang === null
+                    ? $character->role->label()
+                    : sprintf('%s — %s', $character->role->label(), $character->gang->name),
+            ]);
+
+        return [...$corporations, ...$people];
+    }
+
+    /**
      * The Corporations a Protection Card can be given to, which is all of them.
      *
      * `equipmentRecipients` one table along: 3.3.3 puts the card list in the

@@ -65,4 +65,22 @@ class CharacterPolicy
 
         return $character->user_id === $user->id;
     }
+
+    /**
+     * Pay somebody out of the purse this seat spends.
+     *
+     * `giveEquipment`'s reasoning again, for the same reasons: the seat has to
+     * be yours, the game has to be running, and there is no phase clock,
+     * because a deal struck in a Discord channel is paid when it is struck.
+     * Whether this seat has a purse to give out of at all is
+     * App\Services\CreditService's, since that is still a refusal for Control.
+     */
+    public function giveCredits(User $user, Character $character): bool
+    {
+        if (! $character->game->isRunning()) {
+            return false;
+        }
+
+        return $character->user_id === $user->id;
+    }
 }
