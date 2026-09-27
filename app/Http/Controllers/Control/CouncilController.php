@@ -47,7 +47,7 @@ class CouncilController extends Controller
         return Inertia::render('control/games/council', [
             'game' => $games->controlSummary($game),
             'council' => $council->forPlayer($game, $request->user()),
-            'control' => $council->forControl($game),
+            'board' => $council->forControl($game),
         ]);
     }
 
