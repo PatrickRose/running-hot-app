@@ -89,6 +89,11 @@ class DiscordAnnouncer
             return;
         }
 
-        SendDiscordAnnouncement::dispatch($game->discord_webhook_url, $content);
+        // Every announcement is about the clock, and the clock is everybody's.
+        SendDiscordAnnouncement::dispatch(
+            $game->discord_webhook_url,
+            '@everyone '.$content,
+            avatarUrl: url('images/running-hot.webp'),
+        );
     }
 }
