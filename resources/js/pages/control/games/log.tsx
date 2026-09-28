@@ -1,5 +1,4 @@
-import { Head, Link, router, usePoll } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +9,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { index, show } from '@/routes/control/games';
 import { index as logIndex } from '@/routes/control/log';
 import type {
@@ -48,24 +48,14 @@ export default function ControlGameLog({
     options,
 }: Props) {
     const onFirstPage = adjustments.current_page === 1;
-    const { start, stop } = usePoll(
-        5000,
-        { only: ['adjustments', 'options'] },
-        { autoStart: false },
-    );
 
     // Followed rather than read once: paging keeps this component mounted, so
     // the poll has to stop when Control leaves the first page and resume when
-    // they come back to it.
-    useEffect(() => {
-        if (onFirstPage) {
-            start();
-        } else {
-            stop();
-        }
-
-        return stop;
-    }, [onFirstPage, start, stop]);
+    // they come back to it. Nothing moves the ledger of a game off the clock
+    // either, bar Control's own edits, which arrive by visit.
+    useLivePoll(onFirstPage && game.status === 'running', 5000, {
+        only: ['game', 'adjustments', 'options'],
+    });
 
     const filtered =
         filters.tracker !== null ||

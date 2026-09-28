@@ -1,4 +1,4 @@
-import { Head, usePoll } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { RunPanel } from '@/components/run-panel';
@@ -9,6 +9,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import type { GameSummary, RunBoard } from '@/types/game';
 
 type Props = {
@@ -37,7 +38,7 @@ export default function Runs({ game, board }: Props) {
     // table poll at. Half-filled controls survive it: the panels are keyed by
     // run id and every input is local state, so a partial reload re-renders
     // around a strength that has been typed and not yet rolled.
-    usePoll(5000, { only: ['game', 'board'] });
+    useLivePoll(game?.status === 'running', 5000, { only: ['game', 'board'] });
 
     if (game === null || board === null) {
         return (

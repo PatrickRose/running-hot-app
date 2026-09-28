@@ -1,4 +1,4 @@
-import { Head, Link, router, usePage, usePoll } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { CharacterLogo } from '@/components/character-logo';
 import { CharacterStatsForm } from '@/components/character-stats-form';
@@ -17,6 +17,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { removeTag } from '@/routes/control/characters';
 import { index, show } from '@/routes/control/games';
 import { index as logIndex } from '@/routes/control/log';
@@ -72,7 +73,7 @@ export default function ControlGameStats({
     // Control is not the only person moving these numbers — upkeep pays Income
     // in, a Run takes Wounds out, a scored equation pays Research Points — so
     // keep the page fresh without anyone having to reload during a live game.
-    usePoll(5000, {
+    useLivePoll(game.status === 'running', 5000, {
         only: ['game', 'trackers', 'adjustments', 'creditRecipients'],
     });
 

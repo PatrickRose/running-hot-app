@@ -1,8 +1,9 @@
-import { usePage, usePoll } from '@inertiajs/react';
+import { usePage } from '@inertiajs/react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PhaseClock } from '@/components/phase-clock';
 import { PlayerStandingStrip } from '@/components/player-standing';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
 import type { PhaseSummary, PlayerStanding } from '@/types/game';
 
@@ -23,7 +24,11 @@ export function AppSidebarHeader({
     // page whose own poll is fetching a board. The standing rides along without
     // being named for the same reason: an always prop ignores the filter, so
     // Credits re-anchor on every poll any page already makes.
-    usePoll(5000, { only: ['phase'] });
+    //
+    // Only while a phase is on the clock, which is exactly while the game is
+    // running: a Draft or Finished game has no phase to count down, and a tab
+    // left open on one would otherwise keep the deployment awake for nothing.
+    useLivePoll(phase !== null, 5000, { only: ['phase'] });
 
     return (
         // Sticky, because "how long is left" and "what can I afford" are the

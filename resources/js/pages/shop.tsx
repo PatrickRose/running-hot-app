@@ -1,7 +1,8 @@
-import { Head, usePoll } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
 import { ShopCounter } from '@/components/shop-counter';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { dashboard } from '@/routes';
 import type { GameSummary, ShopBoard } from '@/types/game';
 
@@ -25,7 +26,7 @@ type Props = {
  * served" is not a rule you can play to against a stale page.
  */
 export default function Shop({ game, shop }: Props) {
-    usePoll(5000, { only: ['game', 'shop'] });
+    useLivePoll(game?.status === 'running', 5000, { only: ['game', 'shop'] });
 
     if (game === null || shop === null) {
         return (
