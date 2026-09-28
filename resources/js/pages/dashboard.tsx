@@ -1,4 +1,4 @@
-import { Head, Link, usePoll } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { CharacterLogo } from '@/components/character-logo';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameStateNotice } from '@/components/game-state-notice';
@@ -14,6 +14,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { dashboard, facilities } from '@/routes';
 import { index } from '@/routes/control/games';
 import type { Faction, GameSummary } from '@/types/game';
@@ -92,7 +93,9 @@ export default function Dashboard({
     isControl,
     discordJoin,
 }: Props) {
-    usePoll(5000, { only: ['game', 'characters'] });
+    useLivePoll(game?.status === 'running', 5000, {
+        only: ['game', 'characters'],
+    });
 
     return (
         <>

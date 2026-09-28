@@ -1,4 +1,4 @@
-import { Form, Head, router, usePoll } from '@inertiajs/react';
+import { Form, Head, router } from '@inertiajs/react';
 import { BuildOnBehalfForm } from '@/components/build-on-behalf-form';
 import { FacilityPanel } from '@/components/facility-panel';
 import { FacilityTypeCatalogue } from '@/components/facility-type-catalogue';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { buildDiscount } from '@/routes/control/corporations';
 import { publishList, store } from '@/routes/control/facilities';
 import { index, show } from '@/routes/control/games';
@@ -55,7 +56,7 @@ export default function ControlFacilities({
 }: Props) {
     // Security is placing cards while Control watches, and the clock moving is
     // what opens a Facility, so this page has to stay live like the panel does.
-    usePoll(5000, {
+    useLivePoll(game.status === 'running', 5000, {
         only: [
             'game',
             'facilities',

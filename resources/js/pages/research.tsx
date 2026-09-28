@@ -1,4 +1,4 @@
-import { Head, usePoll } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { FactionBadge } from '@/components/faction-badge';
 import { GameStateNotice } from '@/components/game-state-notice';
 import Heading from '@/components/heading';
@@ -16,6 +16,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { dashboard } from '@/routes';
 import type { GameSummary, ResearchBoard } from '@/types/game';
 
@@ -51,7 +52,9 @@ export default function Research({ game, research }: Props) {
     // card id, so a partial reload re-renders around them; a card another
     // player has since spent simply drops out of the tray it was in, which is
     // what has happened to it.
-    usePoll(5000, { only: ['game', 'research'] });
+    useLivePoll(game?.status === 'running', 5000, {
+        only: ['game', 'research'],
+    });
 
     if (game === null || research === null) {
         return (

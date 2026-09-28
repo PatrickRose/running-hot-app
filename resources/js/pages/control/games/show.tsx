@@ -1,4 +1,4 @@
-import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { CharacterEmail } from '@/components/character-email';
 import { CharacterLogo } from '@/components/character-logo';
 import { ControlTeam } from '@/components/control-team';
@@ -17,6 +17,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { index as cardsIndex } from '@/routes/control/cards';
 import { index as councilIndex } from '@/routes/control/council';
 import { index as diceIndex } from '@/routes/control/dice';
@@ -53,10 +54,16 @@ export default function ControlGameShow({
 }: Props) {
     // Control is not the only person moving these numbers, so keep the panel
     // fresh without anyone having to reload during a live game. Provisioning
-    // runs on the queue, so this poll is also how its progress arrives.
-    usePoll(5000, {
-        only: ['game', 'trackers', 'controlMembers', 'discordSyncs'],
-    });
+    // runs on the queue, so this poll is also how its progress arrives - and
+    // it is usually done before the game starts, so it keeps the poll alive on
+    // its own while it is under way.
+    useLivePoll(
+        game.status === 'running' || game.discord.provision_in_progress,
+        5000,
+        {
+            only: ['game', 'trackers', 'controlMembers', 'discordSyncs'],
+        },
+    );
 
     const { props } = usePage<{ errors: Record<string, string> }>();
     const phase = game.phase;

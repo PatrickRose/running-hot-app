@@ -1,4 +1,4 @@
-import { Head, router, usePoll } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { CardFace } from '@/components/card-face';
 import { GameIcon } from '@/components/game-icon';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { index } from '@/routes/control/games';
 import { buy, destroy, refund, stock } from '@/routes/control/shop';
 import { isProtectionCard } from '@/types/game';
@@ -53,7 +54,7 @@ type Props = {
  * the holding raised on the card page, both of which already exist.
  */
 export default function ControlShop({ game, shop }: Props) {
-    usePoll(5000, { only: ['game', 'shop'] });
+    useLivePoll(game.status === 'running', 5000, { only: ['game', 'shop'] });
 
     return (
         <>

@@ -1,7 +1,8 @@
-import { Head, router, usePoll } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { DiceRollGrid } from '@/components/dice-roll-result';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { show } from '@/routes/control/games';
 import type { ControlGameSummary, DiceRoll } from '@/types/game';
 
@@ -18,7 +19,9 @@ type Props = {
  * ruling moves numbers through the tracker controls like any other.
  */
 export default function ControlDice({ game, rolls }: Props) {
-    usePoll(5000, { only: ['rolls'] });
+    useLivePoll(game.status === 'running', 5000, {
+        only: ['game', 'rolls'],
+    });
 
     return (
         <>
